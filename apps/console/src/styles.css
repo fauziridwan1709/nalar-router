@@ -126,3 +126,5 @@ ol.trace li.tr-refusal::before { background: var(--warn); }
 ol.trace .tt { color: var(--muted); min-width: 64px; text-align: right; }
 details.profile summary { cursor: pointer; }
 details.profile table { margin-top: 4px; }
+.controls > * { flex-shrink: 0; }
+.controls textarea { min-height: 92px; }
