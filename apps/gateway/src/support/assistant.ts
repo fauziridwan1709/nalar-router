@@ -19,6 +19,7 @@ import { estimateTokens } from "../tokens.js";
 import { buildSupportMessages, type PromptVersion } from "./prompt.js";
 import { SupportOutputParser } from "./parser.js";
 import { voteShareFor, type RetrievalResult } from "./retrieval.js";
+import { buildSlots, fillablePlaceholders, PlaceholderRenderer, type SlotValue } from "./placeholders.js";
 import type { EventSink } from "../http/sink.js";
 import type { FinalRecord } from "../metering.js";
 
@@ -32,10 +33,14 @@ export interface SupportInput {
   model?: string;
   promptVersion: PromptVersion;
   includeReasoning?: boolean;
+  /** "fill" (default): resolve {{…}} slots before streaming; "raw": stream the model's text untouched */
+  placeholders?: "fill" | "raw";
 }
 
 export interface Prepared {
   includeReasoning: boolean;
+  /** null = raw mode */
+  slots: Map<string, SlotValue> | null;
   retrieval: RetrievalResult;
   plan: RoutePlan;
   messages: ReturnType<typeof buildSupportMessages>;
@@ -52,9 +57,15 @@ export function prepareSupport(gw: Gateway, tenant: Tenant, input: SupportInput)
     gw.config.routing,
   );
   const contextHits = retrieval.hits.slice(0, input.promptVersion === "v1" ? 2 : gw.config.support.contextK);
-  const messages = buildSupportMessages(input.promptVersion, input.message, contextHits, gw.intents);
+  const slots = buildSlots(input.message, tenant.profile ?? {});
+  const fillable = fillablePlaceholders(contextHits.map((h) => h.entry.answer), slots);
+  const messages = buildSupportMessages(input.promptVersion, input.message, contextHits, gw.intents, fillable);
   const estimatedPromptTokens = messages.reduce((n, m) => n + estimateTokens(m.content) + 4, 2);
-  return { retrieval, plan, messages, estimatedPromptTokens, includeReasoning: !!input.includeReasoning };
+  return {
+    retrieval, plan, messages, estimatedPromptTokens,
+    includeReasoning: !!input.includeReasoning,
+    slots: input.placeholders === "raw" ? null : slots,
+  };
 }
 
 export function confidenceOf(r: RetrievalResult, intent: string, modelConfidence: number) {
@@ -136,6 +147,8 @@ export async function runSupport(
     onAttemptEnd: (a) => sink.emit("attempt", { ...a, status: a.outcome }),
     consume: async (text, actx) => {
       const parser = new SupportOutputParser(validIntents);
+      // fresh per attempt: a discarded attempt's partial slot state must not leak into the next one
+      const renderer = p.slots ? new PlaceholderRenderer(p.slots) : null;
       let decided: { intent: string; conf: ReturnType<typeof confidenceOf>; modelConfidence: number } | null = null;
       let committed = false;
       const decide = () => {
@@ -154,7 +167,8 @@ export async function runSupport(
         }
         decided = { intent: h.intent, conf, modelConfidence: h.modelConfidence };
       };
-      const emitAnswer = (s: string) => {
+      const emitAnswer = (raw: string) => {
+        const s = renderer ? renderer.push(raw) : raw;
         if (!s) return;
         if (!committed) {
           if (!s.trim()) return; // don't commit on whitespace
@@ -184,6 +198,24 @@ export async function runSupport(
       const tail = parser.end();
       if (!decided) decide();
       emitAnswer(tail);
+      if (renderer) {
+        const rest = renderer.flush();
+        if (rest) {
+          if (!committed) emitAnswer(rest);
+          else {
+            answerChars += rest.length;
+            sink.emit("token", { text: rest });
+          }
+        }
+        const filled = renderer.report();
+        if (filled.length) {
+          sink.emit("step", {
+            name: "placeholders_rendered",
+            detail: filled.map((f) => `{{${f.name}}} → "${f.value}" (${f.source})`).join("; "),
+            slots: filled,
+          });
+        }
+      }
       if (!committed) throw new BackendError("unusable_output", "model returned a header but an empty answer");
     },
   });

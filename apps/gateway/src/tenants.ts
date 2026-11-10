@@ -10,6 +10,7 @@ export interface Tenant {
   tokenQuota: number;
   requestQuota: number;
   quotaResetAt: number;
+  profile: Record<string, string>;
 }
 
 function rowToTenant(r: any): Tenant {
@@ -21,6 +22,7 @@ function rowToTenant(r: any): Tenant {
     tokenQuota: r.token_quota,
     requestQuota: r.request_quota,
     quotaResetAt: r.quota_reset_at,
+    profile: r.profile ? JSON.parse(r.profile) : {},
   };
 }
 

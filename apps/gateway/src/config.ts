@@ -84,7 +84,7 @@ export const config = {
     maxAnswerTokens: 800, // gpt-oss reasoning tokens count against max_tokens
     /** extra completion budget when the caller asks to see reasoning (thinking models spend it before answering) */
     reasoningExtraTokens: 1200,
-    defaultPromptVersion: (env.SUPPORT_PROMPT_VERSION ?? "v2") as "v1" | "v2",
+    defaultPromptVersion: (env.SUPPORT_PROMPT_VERSION ?? "v3") as "v1" | "v2" | "v3",
   },
 
   backends: [

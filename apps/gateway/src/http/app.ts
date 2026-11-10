@@ -25,7 +25,8 @@ const SupportBody = z
   .object({
     message: z.string().trim().min(1, "message must not be empty").max(2000, "message too long (max 2000 chars)"),
     model: z.string().max(64).optional(),
-    prompt_version: z.enum(["v1", "v2"]).optional(),
+    prompt_version: z.enum(["v1", "v2", "v3"]).optional(),
+    placeholders: z.enum(["fill", "raw"]).optional(),
     stream: z.boolean().optional(),
     include_reasoning: z.boolean().optional(),
   })
@@ -209,6 +210,7 @@ export function createApp(gw: Gateway) {
         model: body.model,
         promptVersion,
         includeReasoning: body.include_reasoning,
+        placeholders: body.placeholders,
       });
       return {
         estimatedPromptTokens: prepared.estimatedPromptTokens,
@@ -334,7 +336,9 @@ export function createApp(gw: Gateway) {
     if (!gw.config.demoMode) throw new GatewayError(404, "not_found", "Demo mode is off.");
     res.json({
       adminToken: gw.config.adminToken,
-      tenants: DEMO_TENANTS.map((t) => ({ id: t.id, name: t.name, plan: t.plan, apiKey: t.apiKey, allowedTiers: t.allowedTiers })),
+      tenants: DEMO_TENANTS.map((t) => ({
+        id: t.id, name: t.name, plan: t.plan, apiKey: t.apiKey, allowedTiers: t.allowedTiers, profile: t.profile ?? {},
+      })),
       // all backends, including ones not configured on this host, so the console can label them offline
       backends: gw.backends.map((b) => ({
         id: b.config.id, tier: b.config.tier, model: b.config.model, location: b.config.location, enabled: b.config.enabled,
