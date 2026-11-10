@@ -190,6 +190,13 @@ describe("placeholder rendering", () => {
     );
   });
 
+  it("reads naturally when the sentence already names an unknown identifier", () => {
+    const r = new PlaceholderRenderer(buildSlots("see ETA of my order", {}));
+    expect(r.push("ETA for the order number {{Order Number}} is soon, bills from {{Person Name}}.") + r.flush()).toBe(
+      "ETA for the order number on file is soon, bills from the person you mentioned.",
+    );
+  });
+
   it("releases text that only looks like an opening brace", () => {
     expect(render(["a { b ", "{{ not closed " + "x".repeat(100)]).text).toContain("{{ not closed");
   });
