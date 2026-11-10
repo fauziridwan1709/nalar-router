@@ -9,11 +9,15 @@ import { admit, getUsage } from "../src/quota.js";
 import { openDb } from "../src/db.js";
 import { getTenant } from "../src/tenants.js";
 import { FakeBackend, KB, TENANTS, cfg, fail, hang, reply } from "./helpers.js";
+import { PlaceholderRenderer, buildSlots, extractFromMessage, fillablePlaceholders } from "../src/support/placeholders.js";
 
 const INTENTS = new Set(["cancel_order", "track_order", "get_refund", "unknown"]);
 const tenant = (id: string) => {
   const t = TENANTS.find((x) => x.id === id)!;
-  return { id: t.id, name: t.name, plan: t.plan, allowedTiers: t.allowedTiers, tokenQuota: t.tokenQuota, requestQuota: t.requestQuota, quotaResetAt: 0 };
+  return {
+    id: t.id, name: t.name, plan: t.plan, allowedTiers: t.allowedTiers, tokenQuota: t.tokenQuota, requestQuota: t.requestQuota,
+    quotaResetAt: 0, profile: t.profile ?? {},
+  };
 };
 
 describe("output parser", () => {
@@ -145,5 +149,55 @@ describe("quota", () => {
       expect(e.status).toBe(503);
       expect(e.code).toBe("quota_unavailable");
     }
+  });
+});
+
+describe("placeholder rendering", () => {
+  const slots = buildSlots("please cancel order #A-12345, refund $49.90", { "Customer Support Phone Number": "+62 21 555 0100" });
+  const render = (chunks: string[]) => {
+    const r = new PlaceholderRenderer(slots);
+    return { text: chunks.map((c) => r.push(c)).join("") + r.flush(), r };
+  };
+
+  it("extracts concrete values from the customer's message", () => {
+    expect(extractFromMessage("cancel order 12345 please")["Order Number"]).toBe("12345");
+    expect(extractFromMessage("I need invoice #00108")["Invoice Number"]).toBe("00108");
+    expect(extractFromMessage("switch to the platinum account")["Account Type"]).toBe("platinum");
+    expect(extractFromMessage("where is my order?")["Order Number"]).toBeUndefined();
+  });
+
+  it("fills from message > profile > UI label > fallback, even when split across chunks", () => {
+    const { text, r } = render(["Order {{Ord", "er Number}} will be refunded {{Currency Symbol}}{{Refund Amount}}. Call {", "{Customer Support Phone Number}} or open '{{Online Order Interaction}}' with {{Tracking Number}}."]);
+    expect(text).toBe("Order A-12345 will be refunded $49.90. Call +62 21 555 0100 or open 'Orders' with your tracking number.");
+    expect(Object.fromEntries(r.report().map((x) => [x.name, x.source]))).toMatchObject({
+      "Order Number": "message",
+      "Customer Support Phone Number": "profile",
+      "Online Order Interaction": "ui_label",
+      "Tracking Number": "fallback",
+    });
+  });
+
+  it("never leaves raw braces and tidies empty substitutions", () => {
+    const { text } = render(["Hello {{Salutation}} {{Client Last Name}}, see {{Some Unknown Thing}}."]);
+    expect(text).not.toMatch(/\{\{|\}\}/);
+    expect(text).toBe("Hello, see some unknown thing.");
+  });
+
+  it("maps shortened names to the known slot and avoids doubled determiners in fallbacks", () => {
+    expect(render(["call {{Support Phone Number}}"]).text).toBe("call +62 21 555 0100");
+    expect(render(["sign in on our {{Online Company Portal Info}} with {{Tracking Number}}"]).text).toBe(
+      "sign in on our online account with your tracking number",
+    );
+  });
+
+  it("releases text that only looks like an opening brace", () => {
+    expect(render(["a { b ", "{{ not closed " + "x".repeat(100)]).text).toContain("{{ not closed");
+  });
+
+  it("tells the model only about placeholders that have real values", () => {
+    const f = fillablePlaceholders(["{{Order Number}} {{Tracking Number}} {{Customer Support Phone Number}}"], slots);
+    // Tracking Number has no value → not offered; the phone number is a core contact the tenant has
+    expect(f).toEqual(["Customer Support Phone Number", "Order Number"]);
+    expect(fillablePlaceholders([], slots)).toEqual(["Customer Support Phone Number"]);
   });
 });

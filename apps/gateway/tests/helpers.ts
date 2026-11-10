@@ -19,7 +19,10 @@ export const KB: KbEntry[] = [
 ];
 
 export const TENANTS: SeedTenant[] = [
-  { id: "pro", name: "Pro", plan: "pro", apiKey: "k-pro", allowedTiers: ["fast", "strong", "degraded"], tokenQuota: 100_000, requestQuota: 100 },
+  {
+    id: "pro", name: "Pro", plan: "pro", apiKey: "k-pro", allowedTiers: ["fast", "strong", "degraded"], tokenQuota: 100_000, requestQuota: 100,
+    profile: { "Customer Support Phone Number": "+62 21 555 0100", "Website URL": "pro.example" },
+  },
   { id: "free", name: "Free", plan: "free", apiKey: "k-free", allowedTiers: ["fast", "degraded"], tokenQuota: 100_000, requestQuota: 100 },
   { id: "tiny", name: "Tiny", plan: "trial", apiKey: "k-tiny", allowedTiers: ["fast", "degraded"], tokenQuota: 900, requestQuota: 2 },
 ];

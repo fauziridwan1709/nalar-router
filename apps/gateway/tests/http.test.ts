@@ -150,6 +150,21 @@ describe("support endpoint", () => {
   });
 });
 
+describe("placeholders", () => {
+  it("fills slots from the message and the tenant profile before streaming; raw mode keeps them", async () => {
+    const out = '{"intent":"cancel_order","confidence":0.9}\n###\nCancel order {{Order Number}} at {{Website URL}} or call {{Customer Support Phone Number}}.';
+    const s = await startServer([new FakeBackend(cfg("f", "fast"), reply(out))]);
+    close = s.close;
+    const ev = await sse(await post(s.base, "/v1/support/answer", "k-pro", { message: "how do I cancel my order 98765" }));
+    const answer = ev.filter((e) => e.event === "token").map((e) => e.data.text).join("");
+    expect(answer).toBe("Cancel order 98765 at pro.example or call +62 21 555 0100.");
+    const step = ev.find((e) => e.event === "step" && e.data.name === "placeholders_rendered")!;
+    expect(step.data.slots.map((x: any) => x.source)).toEqual(["message", "profile", "profile"]);
+    const raw = await (await post(s.base, "/v1/support/answer", "k-pro", { message: "how do I cancel my order 98765", placeholders: "raw", stream: false })).json();
+    expect(raw.answer).toContain("{{Order Number}}");
+  });
+});
+
 describe("reasoning and backend status", () => {
   it("streams reasoning as separate events, never as part of the answer, only when asked", async () => {
     const s = await startServer([new FakeBackend(cfg("f", "fast"), think("check the KB first", GOOD))]);
