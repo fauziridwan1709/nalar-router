@@ -8,7 +8,7 @@ export interface DemoTenant {
 export interface DemoConfig {
   adminToken: string;
   tenants: DemoTenant[];
-  backends: { id: string; tier: string; model: string }[];
+  backends: { id: string; tier: string; model: string; location: string; enabled: boolean }[];
   intents: string[];
 }
 
@@ -31,7 +31,7 @@ export class ApiError extends Error {
 /** POST + parse a Server-Sent-Events body (EventSource can't POST). */
 export async function streamSupport(
   apiKey: string,
-  body: { message: string; model?: string; prompt_version?: string },
+  body: { message: string; model?: string; prompt_version?: string; include_reasoning?: boolean },
   onEvent: (event: string, data: any) => void,
   signal?: AbortSignal,
 ) {
@@ -75,6 +75,18 @@ export async function admin<T = any>(token: string, path: string, init: RequestI
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new ApiError(r.status, j?.error?.code ?? "http_error", j?.error?.message ?? r.statusText);
   return j as T;
+}
+
+export interface BackendStatus {
+  id: string;
+  tier: string;
+  model: string;
+  enabled: boolean;
+  location: string;
+  health?: { label: "online" | "offline"; availability: string; reason: string; checkedAt: number | null; probeLatencyMs: number | null };
+  breaker: { state: string; reopensInMs: number; lastError: string | null; consecutiveFailures: number };
+  chaos: { failRate: number; mode: string; addedLatencyMs: number };
+  [k: string]: any;
 }
 
 export const fmtUsd = (x: number | null | undefined) =>

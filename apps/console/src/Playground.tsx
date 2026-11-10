@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { ApiError, fmtMs, fmtN, fmtUsd, streamSupport, type DemoConfig } from "./api";
+import { LOCATION_LABEL, StatusBadge, statusOf, useBackendStatus } from "./StatusBadge";
 
 const SAMPLES = [
   "how can I cancel my order 12345?",
@@ -21,15 +22,34 @@ interface Turn {
   retrieval?: any;
   intent?: any;
   attempts: any[];
+  /** reasoning per attempt (a fallback can produce reasoning from several models) */
+  reasoning: { seq: number; backend: string; text: string }[];
+  /** every non-token event with its server-side elapsed time, for the trace */
+  trace: { event: string; t: number; data: any }[];
   done?: any;
   meta?: any;
   streaming: boolean;
 }
 
+const TRACE_LABEL: Record<string, (d: any) => string> = {
+  meta: (d) => `authenticated · quota admitted (max ${d.admission?.maxCompletionTokens} completion tokens)`,
+  route: (d) => `routed: ${d.rule} → ${d.chain.join(" → ")}`,
+  retrieval: (d) => `retrieved ${d.entries.length} KB entries · top intent ${d.topIntent ?? "–"} · coverage ${d.coverage}`,
+  step: (d) => `${d.name === "scope_gate" ? (d.passed ? "scope gate passed" : "scope gate: refuse") : "header validated"} · ${d.detail}`,
+  attempt: (d) => (d.status === "started" ? `attempt #${d.seq} → ${d.backend}` : `attempt #${d.seq} ${d.backend}: ${d.status}${d.error ? ` (${d.error})` : ""}`),
+  intent: (d) => `intent ${d.intent} · confidence ${d.confidence} (${d.label}) · first answer token, committed`,
+  refusal: (d) => `refused: ${d.reason}${d.detail ? ` (${d.detail})` : ""}`,
+  error: (d) => `error: ${d.code}`,
+  done: (d) => `done · ${d.outcome} · ${fmtN(d.usage?.totalTokens)} tokens · ${fmtUsd(d.costUsd)}`,
+};
+
 export function Playground({ cfg }: { cfg: DemoConfig }) {
   const [tenantId, setTenantId] = useState(cfg.tenants[0]?.id ?? "");
   const [model, setModel] = useState("auto");
   const [promptVersion, setPromptVersion] = useState("v2");
+  const [showReasoning, setShowReasoning] = useState(true);
+  const status = useBackendStatus(cfg.adminToken);
+  const statusById = Object.fromEntries(status.map((b) => [b.id, b]));
   const [msg, setMsg] = useState(SAMPLES[0]);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
@@ -43,16 +63,17 @@ export function Playground({ cfg }: { cfg: DemoConfig }) {
   async function send() {
     if (!msg.trim() || busy) return;
     const id = Date.now();
-    setTurns((ts) => [...ts, { id, question: msg, tenant: tenant.id, answer: "", attempts: [], streaming: true }]);
+    setTurns((ts) => [...ts, { id, question: msg, tenant: tenant.id, answer: "", attempts: [], reasoning: [], trace: [], streaming: true }]);
     setSelected(id);
     const ac = new AbortController();
     abortRef.current = ac;
     try {
       await streamSupport(
         tenant.apiKey,
-        { message: msg, model, prompt_version: promptVersion },
+        { message: msg, model, prompt_version: promptVersion, include_reasoning: showReasoning },
         (ev, data) =>
-          update(id, (t) => {
+          update(id, (t0) => {
+            const t = ev === "token" || ev === "reasoning" ? t0 : { ...t0, trace: [...t0.trace, { event: ev, t: data.t ?? 0, data }] };
             switch (ev) {
               case "meta": return { ...t, meta: data };
               case "route": return { ...t, route: data };
@@ -63,6 +84,13 @@ export function Playground({ cfg }: { cfg: DemoConfig }) {
               }
               case "intent": return { ...t, intent: data };
               case "token": return { ...t, answer: t.answer + data.text };
+              case "reasoning": {
+                const last = t.reasoning[t.reasoning.length - 1];
+                if (last && last.seq === data.seq) {
+                  return { ...t, reasoning: [...t.reasoning.slice(0, -1), { ...last, text: last.text + data.text }] };
+                }
+                return { ...t, reasoning: [...t.reasoning, { seq: data.seq, backend: data.backend, text: data.text }] };
+              }
               case "refusal": return { ...t, refusal: data };
               case "error": return { ...t, error: data };
               case "done": return { ...t, done: data, streaming: false };
@@ -96,15 +124,39 @@ export function Playground({ cfg }: { cfg: DemoConfig }) {
           {[...new Set(cfg.backends.map((b) => b.tier))].map((t) => (
             <option key={t} value={t}>tier: {t}</option>
           ))}
-          {cfg.backends.map((b) => (
-            <option key={b.id} value={b.id}>backend: {b.id} ({b.model})</option>
-          ))}
+          {cfg.backends.map((b) => {
+            const st = statusById[b.id] ? statusOf(statusById[b.id]) : { label: b.enabled ? "online" : "offline" };
+            return (
+              <option key={b.id} value={b.id} disabled={st.label === "offline"}>
+                {st.label === "online" ? "●" : st.label === "degraded" ? "◐" : "○"} backend: {b.id} · {LOCATION_LABEL[b.location] ?? b.location} · {st.label}
+              </option>
+            );
+          })}
         </select>
+        <div className="backend-strip">
+          {status.map((b) => (
+            <div key={b.id} className="bs" title={`${b.model} · ${statusOf(b).reason}`}>
+              <StatusBadge b={b} />
+              <span className="mono">{b.id}</span>
+              <span className="muted small">{LOCATION_LABEL[b.location] ?? b.location}</span>
+            </div>
+          ))}
+        </div>
         <label>Prompt version</label>
         <select value={promptVersion} onChange={(e) => setPromptVersion(e.target.value)}>
           <option value="v2">v2 – grounded (default)</option>
           <option value="v1">v1 – minimal</option>
         </select>
+        <label className="check">
+          <input type="checkbox" checked={showReasoning} onChange={(e) => setShowReasoning(e.target.checked)} />
+          Show model reasoning (thinking)
+        </label>
+        {showReasoning && (
+          <div className="hint">
+            Free on Groq (gpt-oss reasons anyway). On <span className="mono">local-qwen</span> it switches Qwen thinking on: about
+            10× slower and about 1k extra tokens.
+          </div>
+        )}
         <label>Customer message</label>
         <textarea
           rows={4}
@@ -134,6 +186,18 @@ export function Playground({ cfg }: { cfg: DemoConfig }) {
         {turns.map((t) => (
           <div key={t.id} className={`turn ${current?.id === t.id ? "sel" : ""}`} onClick={() => setSelected(t.id)}>
             <div className="q"><span className="who">{t.tenant}</span>{t.question}</div>
+            {t.reasoning.map((r) => (
+              <details key={r.seq} className="thinking" open={t.streaming && !t.answer}>
+                <summary>
+                  💭 thinking · <span className="mono">{r.backend}</span>
+                  {t.attempts.find((a) => a.seq === r.seq && a.status !== "started" && a.status !== "ok") && (
+                    <span className="badge bad">attempt #{r.seq} discarded</span>
+                  )}
+                  <span className="muted small"> · {r.text.length} chars</span>
+                </summary>
+                <div className="thought">{r.text}</div>
+              </details>
+            ))}
             <div className={`a ${t.refusal ? "refusal" : ""} ${t.error && !t.answer ? "err" : ""}`}>
               {t.refusal ? (
                 <>
@@ -182,6 +246,19 @@ function Inspector({ t }: { t: Turn }) {
         <Metric k="Latency" v={fmtMs(d?.latencyMs)} sub={d?.ttftMs != null ? `first token ${fmtMs(d.ttftMs)}` : undefined} />
         <Metric k="Est. cost" v={fmtUsd(d?.costUsd)} sub={d?.quota && `${fmtN(d.quota.tokensRemaining)} tok / ${fmtN(d.quota.requestsRemaining)} req left`} />
       </div>
+
+      {t.trace.length > 0 && (
+        <Block title="Trace (server time)">
+          <ol className="trace">
+            {t.trace.map((s, i) => (
+              <li key={i} className={`tr-${s.event}${s.event === "attempt" && s.data.status !== "started" && s.data.status !== "ok" ? " bad" : ""}`}>
+                <span className="mono tt">+{s.t} ms</span>
+                <span>{(TRACE_LABEL[s.event] ?? (() => s.event))(s.data)}</span>
+              </li>
+            ))}
+          </ol>
+        </Block>
+      )}
 
       {t.error?.details && (
         <Block title="Error details">

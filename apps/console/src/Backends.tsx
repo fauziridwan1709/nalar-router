@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { admin, fmtMs, type DemoConfig } from "./api";
+import { LOCATION_LABEL, StatusBadge } from "./StatusBadge";
 
 const MODES = ["error", "hang", "garbage", "slow_first_token"];
 
@@ -34,12 +35,19 @@ export function Backends({ cfg }: { cfg: DemoConfig }) {
         </p>
         <table className="tbl">
           <thead>
-            <tr><th>Backend</th><th>Tier</th><th>Model</th><th>Price in/out per 1M</th><th>Timeouts (first token / total)</th><th>Breaker</th><th>Fail rate</th><th>Mode</th><th>Added latency</th></tr>
+            <tr><th>Backend</th><th>Status</th><th>Tier</th><th>Model</th><th>Price in/out per 1M</th><th>Timeouts (first token / total)</th><th>Breaker</th><th>Fail rate</th><th>Mode</th><th>Added latency</th></tr>
           </thead>
           <tbody>
             {list.map((b) => (
               <tr key={b.id} className={b.enabled ? "" : "disabled"}>
-                <td className="mono"><b>{b.id}</b>{!b.enabled && <div className="small muted">disabled (no credentials)</div>}</td>
+                <td className="mono"><b>{b.id}</b><div className="small muted">{LOCATION_LABEL[b.location] ?? b.location}</div></td>
+                <td>
+                  <StatusBadge b={b} />
+                  <div className="small muted" style={{ maxWidth: 220 }}>
+                    {b.health?.reason}
+                    {b.health?.probeLatencyMs != null && ` · probe ${b.health.probeLatencyMs} ms`}
+                  </div>
+                </td>
                 <td>{b.tier}</td>
                 <td className="mono small">{b.model}</td>
                 <td>${b.priceInPerM} / ${b.priceOutPerM}</td>
