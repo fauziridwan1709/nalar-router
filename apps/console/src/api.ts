@@ -4,6 +4,8 @@ export interface DemoTenant {
   plan: string;
   apiKey: string;
   allowedTiers: string[];
+  /** company facts the gateway uses to fill {{…}} placeholders */
+  profile: Record<string, string>;
 }
 export interface DemoConfig {
   adminToken: string;

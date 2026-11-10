@@ -35,7 +35,12 @@ const TRACE_LABEL: Record<string, (d: any) => string> = {
   meta: (d) => `authenticated · quota admitted (max ${d.admission?.maxCompletionTokens} completion tokens)`,
   route: (d) => `routed: ${d.rule} → ${d.chain.join(" → ")}`,
   retrieval: (d) => `retrieved ${d.entries.length} KB entries · top intent ${d.topIntent ?? "–"} · coverage ${d.coverage}`,
-  step: (d) => `${d.name === "scope_gate" ? (d.passed ? "scope gate passed" : "scope gate: refuse") : "header validated"} · ${d.detail}`,
+  step: (d) =>
+    d.name === "scope_gate"
+      ? `${d.passed ? "scope gate passed" : "scope gate: refuse"} · ${d.detail}`
+      : d.name === "placeholders_rendered"
+        ? `filled ${d.slots.length} placeholder${d.slots.length === 1 ? "" : "s"} (${[...new Set(d.slots.map((x: any) => x.source))].join(", ")})`
+        : `header validated · ${d.detail}`,
   attempt: (d) => (d.status === "started" ? `attempt #${d.seq} → ${d.backend}` : `attempt #${d.seq} ${d.backend}: ${d.status}${d.error ? ` (${d.error})` : ""}`),
   intent: (d) => `intent ${d.intent} · confidence ${d.confidence} (${d.label}) · first answer token, committed`,
   refusal: (d) => `refused: ${d.reason}${d.detail ? ` (${d.detail})` : ""}`,
@@ -46,7 +51,7 @@ const TRACE_LABEL: Record<string, (d: any) => string> = {
 export function Playground({ cfg }: { cfg: DemoConfig }) {
   const [tenantId, setTenantId] = useState(cfg.tenants[0]?.id ?? "");
   const [model, setModel] = useState("auto");
-  const [promptVersion, setPromptVersion] = useState("v2");
+  const [promptVersion, setPromptVersion] = useState("v3");
   const [showReasoning, setShowReasoning] = useState(true);
   const status = useBackendStatus(cfg.adminToken);
   const statusById = Object.fromEntries(status.map((b) => [b.id, b]));
@@ -118,6 +123,18 @@ export function Playground({ cfg }: { cfg: DemoConfig }) {
           ))}
         </select>
         <div className="hint mono">{tenant.apiKey} · tiers: {tenant.allowedTiers.join(", ")}</div>
+        <details className="profile">
+          <summary className="hint">
+            company profile: {Object.keys(tenant.profile ?? {}).length ? `${Object.keys(tenant.profile).length} fields (fills answer placeholders)` : "none, so generic phrases are used"}
+          </summary>
+          <table className="tbl small">
+            <tbody>
+              {Object.entries(tenant.profile ?? {}).map(([k, v]) => (
+                <tr key={k}><td className="mono">{`{{${k}}}`}</td><td>{v}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
         <label>Model routing</label>
         <select value={model} onChange={(e) => setModel(e.target.value)}>
           <option value="auto">auto (router decides)</option>
@@ -144,7 +161,8 @@ export function Playground({ cfg }: { cfg: DemoConfig }) {
         </div>
         <label>Prompt version</label>
         <select value={promptVersion} onChange={(e) => setPromptVersion(e.target.value)}>
-          <option value="v2">v2 – grounded (default)</option>
+          <option value="v3">v3 – grounded + rendered slots (default)</option>
+          <option value="v2">v2 – grounded</option>
           <option value="v1">v1 – minimal</option>
         </select>
         <label className="check">
@@ -315,8 +333,28 @@ function Inspector({ t }: { t: Turn }) {
         </Block>
       )}
 
+      {(() => {
+        const ph = t.trace.find((s) => s.event === "step" && s.data.name === "placeholders_rendered")?.data;
+        if (!ph) return null;
+        return (
+          <Block title="Filled placeholders (by the gateway, not the model)">
+            <table className="tbl small">
+              <tbody>
+                {ph.slots.map((x: any) => (
+                  <tr key={x.name}>
+                    <td className="mono">{`{{${x.name}}}`}</td>
+                    <td>{x.value || <span className="muted">(removed)</span>}</td>
+                    <td><span className={`badge ${x.source === "fallback" ? "warn" : x.source === "message" ? "ok" : ""}`}>{x.source}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Block>
+        );
+      })()}
+
       {t.retrieval && (
-        <Block title={`Retrieved (coverage ${t.retrieval.coverage})`}>
+        <Block title={`Retrieved (coverage ${t.retrieval.coverage}) · raw KB text`}>
           <div className="small">
             {t.retrieval.votes.map((v: any) => (
               <span key={v.intent} className="badge">{v.intent} {Math.round(v.share * 100)}%</span>

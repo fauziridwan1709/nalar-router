@@ -124,3 +124,5 @@ ol.trace li.tr-intent::before, ol.trace li.tr-done::before { background: var(--o
 ol.trace li.bad::before, ol.trace li.tr-error::before { background: var(--bad); }
 ol.trace li.tr-refusal::before { background: var(--warn); }
 ol.trace .tt { color: var(--muted); min-width: 64px; text-align: right; }
+details.profile summary { cursor: pointer; }
+details.profile table { margin-top: 4px; }
