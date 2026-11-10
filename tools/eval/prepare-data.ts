@@ -12,9 +12,15 @@
  *   - kb.json        80 rows per intent (2,160 entries) used for retrieval
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DATA = resolve(HERE, "../../data");
+
 import { parse } from "csv-parse/sync";
 
-const src = process.argv[2] ?? "data/raw/bitext.csv";
+const src = process.argv[2] ?? resolve(DATA, "raw/bitext.csv");
 const KB_PER_INTENT = 80;
 const HOLDOUT_PER_INTENT = 50;
 const EXTRA_EVAL = 3;
@@ -91,15 +97,14 @@ const ood = [
   "Who won the football world cup in 2010?",
 ].map((message, i) => ({ id: `ood-${i + 1}`, message, expectedIntent: null, shouldRefuse: true }));
 
-mkdirSync("data", { recursive: true });
-writeFileSync("data/kb.json", JSON.stringify(kb));
-writeFileSync("data/eval.json", JSON.stringify(evalCases.map(toCase), null, 2));
-writeFileSync("data/eval-ood.json", JSON.stringify(ood, null, 2));
-writeFileSync(
-  "data/retrieval-holdout.json",
+mkdirSync(DATA, { recursive: true });
+writeFileSync(resolve(DATA, "kb.json"), JSON.stringify(kb));
+writeFileSync(resolve(DATA, "eval.json"), JSON.stringify(evalCases.map(toCase), null, 2));
+writeFileSync(resolve(DATA, "eval-ood.json"), JSON.stringify(ood, null, 2));
+writeFileSync(resolve(DATA, "retrieval-holdout.json"),
   JSON.stringify(holdout.map((r) => ({ message: r.instruction, expectedIntent: r.intent }))),
 );
-writeFileSync("data/intents.json", JSON.stringify(intents, null, 2));
+writeFileSync(resolve(DATA, "intents.json"), JSON.stringify(intents, null, 2));
 console.log(
   `rows=${rows.length} intents=${intents.length} kb=${kb.length} eval=${evalCases.length} holdout=${holdout.length} ood=${ood.length}`,
 );

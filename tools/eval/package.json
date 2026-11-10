@@ -1,0 +1,15 @@
+{
+  "name": "@mir/eval",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare-data": "tsx prepare-data.ts ../../data/raw/bitext.csv",
+    "retrieval-eval": "tsx retrieval-eval.ts",
+    "eval": "tsx eval.ts"
+  },
+  "devDependencies": {
+    "csv-parse": "^7.0.3",
+    "tsx": "^4.23.15"
+  }
+}

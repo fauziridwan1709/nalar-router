@@ -1,5 +1,6 @@
 /** Dependency container: everything a request handler needs, built once at boot (and in tests). */
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { BackendConfig, Config } from "./config.js";
 import { openDb, type DB, type SeedTenant, DEMO_TENANTS } from "./db.js";
 import type { Backend } from "./backends/types.js";
@@ -30,7 +31,7 @@ export function createGateway(
   const chaos = overrides.chaos ?? new ChaosRegistry();
   const raw = overrides.backends ?? config.backends.map(buildBackend);
   const backends = raw.map((b) => withChaos(b, chaos));
-  const kbEntries: KbEntry[] = overrides.kbEntries ?? JSON.parse(readFileSync("data/kb.json", "utf8"));
+  const kbEntries: KbEntry[] = overrides.kbEntries ?? JSON.parse(readFileSync(resolve(config.dataDir, "kb.json"), "utf8"));
   const intents = [...new Set(kbEntries.map((e) => e.intent))].sort();
   return {
     config,

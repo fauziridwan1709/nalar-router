@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { SupportOutputParser, parseHeader } from "../server/support/parser.js";
-import { Bm25Index } from "../server/support/retrieval.js";
-import { planRoute } from "../server/router/policy.js";
-import { CircuitBreaker } from "../server/router/breaker.js";
-import { executeWithFallback } from "../server/router/executor.js";
-import { BackendError } from "../server/errors.js";
-import { admit, getUsage } from "../server/quota.js";
-import { openDb } from "../server/db.js";
-import { getTenant } from "../server/tenants.js";
+import { SupportOutputParser, parseHeader } from "../src/support/parser.js";
+import { Bm25Index } from "../src/support/retrieval.js";
+import { planRoute } from "../src/router/policy.js";
+import { CircuitBreaker } from "../src/router/breaker.js";
+import { executeWithFallback } from "../src/router/executor.js";
+import { BackendError } from "../src/errors.js";
+import { admit, getUsage } from "../src/quota.js";
+import { openDb } from "../src/db.js";
+import { getTenant } from "../src/tenants.js";
 import { FakeBackend, KB, TENANTS, cfg, fail, hang, reply } from "./helpers.js";
 
 const INTENTS = new Set(["cancel_order", "track_order", "get_refund", "unknown"]);

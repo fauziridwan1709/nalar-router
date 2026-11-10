@@ -1,10 +1,11 @@
 {
-  "name": "mir-console",
+  "name": "@mir/console",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build"
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "react": "^19.3.1",
@@ -16,5 +17,6 @@
     "@vitejs/plugin-react": "^6.3.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.7"
-  }
+  },
+  "version": "1.0.0"
 }

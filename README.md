@@ -26,18 +26,31 @@ The design reasoning, the measured results and the trade-offs are in **[docs/REP
                 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+## Repository layout
+
+```
+apps/gateway/   Express API: auth, quota, routing, fallback, metering, support assistant (TypeScript)
+apps/console/   React + Vite console (playground, usage, backends and fault injection)
+tools/eval/     data preparation, retrieval eval, end-to-end eval; results/ holds committed runs
+data/           KB slice and held-out eval sets (generated from Bitext, seeded)
+docs/           REPORT.md (design and results), API.md
+CLAUDE.md       notes for coding agents: layout, commands, invariants
+```
+
+This is an npm-workspaces monorepo. Run every command from the repo root.
+
 ## Run it locally
 
 Requires Node ≥ 22.13 (it uses the built-in `node:sqlite`).
 
 ```bash
-npm install && npm --prefix web install
+npm install
 cp .env.example .env            # add GROQ_API_KEY; optionally enable the local model
-npm run build                   # server (tsc) + console (vite)
+npm run build                   # gateway (tsc) + console (vite)
 npm start                       # http://localhost:3000  (console + API)
 ```
 
-For development, run `npm run dev` (API with reload on :3000) and `npm run dev:web` (Vite on :5173, which proxies to the API).
+For development, run `npm run dev` (API with reload on :3000) and `npm run dev:console` (Vite on :5173, which proxies to the API).
 
 **Optional local model (Apple Silicon, MLX):**
 
@@ -64,68 +77,11 @@ Admin token: `ADMIN_TOKEN` (default `admin-demo-token`). With `DEMO_MODE=true` t
 
 ## API
 
-### `POST /v1/support/answer` (the capability)
+The full reference is in [docs/API.md](docs/API.md). In short:
 
-```bash
-curl -N http://localhost:3000/v1/support/answer \
-  -H 'authorization: Bearer sk-acme-demo-7f3a9c' -H 'content-type: application/json' \
-  -d '{"message":"how do I cancel order 123?"}'
-```
-
-Body: `message` (1–2000 chars), `model` (`auto` | tier | backend id, optional), `prompt_version` (`v1` | `v2`), `stream` (default `true`).
-
-The response is a stream of Server-Sent Events, in this order:
-
-| event | payload |
-|---|---|
-| `meta` | `requestId`, tenant |
-| `route` | `rule`, `reason`, `chain`, `signals` (why this backend was picked) |
-| `retrieval` | `coverage`, intent `votes`, top `entries` (id, intent, score, question, answer) |
-| `attempt` | one per backend try: `started`, then `ok` / `error` / `timeout_first_token` / `timeout_total` / `unusable_output` / `skipped_circuit_open` / `refused`, with latency, tokens and cost |
-| `intent` | `intent`, `confidence` (0–1), `label`, `components`, `agreesWithRetrieval`. Sent right before the first token. |
-| `token` | `{text}`, the streamed answer |
-| `refusal` | `reason` (`out_of_scope` / `low_confidence`) and the message shown to the customer |
-| `error` | `code` (`all_backends_failed`, `stream_interrupted`, …), `partial` |
-| `done` | `requestId`, `outcome`, `backend`, `model`, `fallbackUsed`, `usage{prompt,completion,total,source}`, `costUsd`, `latencyMs`, `ttftMs`, `intent`, `confidence`, remaining `quota` |
-
-With `"stream": false` you get the same information as one JSON object.
-
-### `POST /v1/chat/completions` (raw gateway, OpenAI-compatible)
-
-```bash
-curl -N http://localhost:3000/v1/chat/completions -H 'authorization: Bearer sk-acme-demo-7f3a9c' \
-  -H 'content-type: application/json' -d '{"messages":[{"role":"user","content":"hi"}],"model":"auto"}'
-```
-
-It streams standard `chat.completion.chunk`s. The final chunk carries `usage` and an `x_router` block with backend, fallback, cost and trace.
-
-### Other endpoints
-
-- `GET /v1/usage` returns the calling tenant's usage and remaining quota.
-- `GET /v1/requests/:id` returns one of the tenant's own requests, with its attempts.
-- These require `x-admin-token`:
-  - `GET /admin/usage`
-  - `GET /admin/requests?tenant=&limit=`
-  - `GET /admin/requests/:id`, which returns the routing decision and every attempt
-  - `GET /admin/backends`, which returns health, breaker state and chaos settings
-  - `PUT /admin/chaos/:backend`, with body `{failRate, mode: error|hang|garbage|slow_first_token, addedLatencyMs}`
-  - `DELETE /admin/chaos`
-  - `POST /admin/tenants/:id/reset-quota`
-- `GET /healthz`
-
-### Errors
-
-Every error has the shape `{"error": {"code", "message", "details?"}}`.
-
-| status | code | when |
-|---|---|---|
-| 400 | `invalid_request` / `invalid_json` / `unknown_model` | bad input, with the field-level reason |
-| 401 | `missing_api_key` / `invalid_api_key` | |
-| 403 | `model_not_allowed` | the tenant asked for a tier its plan doesn't include |
-| 413 | `payload_too_large` | body over 64 kB |
-| 429 | `quota_exceeded` | includes the remaining quota, `resetsAt` and `Retry-After` |
-| 502 | `all_backends_failed` | every backend errored, timed out or returned unusable output |
-| 503 | `quota_unavailable` | the quota check itself failed, so the request is rejected (fail closed) |
+- `POST /v1/support/answer` is the support capability. It streams SSE: `route`, `retrieval`, `attempt`, `intent`, `token`, `refusal`, `done`.
+- `POST /v1/chat/completions` is the raw gateway. It is OpenAI-compatible and adds an `x_router` block.
+- `GET /v1/usage` returns the calling tenant's usage. The `/admin/*` endpoints cover usage, request inspection, backend health and fault injection.
 
 ## Evaluation and tests
 
@@ -135,7 +91,7 @@ npm run retrieval-eval                     # LLM-free retrieval accuracy on 1,35
 npm run eval -- --base http://localhost:3000 --configs groq-fast:v2,groq-strong:v2 --judge groq-strong
 ```
 
-The eval writes results to `eval/results/<timestamp>.{md,json}`. The headline numbers are in the report.
+The eval writes results to `tools/eval/results/<timestamp>.{md,json}`. The headline numbers are in the report.
 
 ## Deploy (Render)
 
@@ -143,6 +99,6 @@ The eval writes results to `eval/results/<timestamp>.{md,json}`. The headline nu
 
 1. Create a Render Blueprint from this repository.
 2. Set `GROQ_API_KEY` in the dashboard.
-3. The service is built with `npm ci && npm --prefix web ci && npm run build` and started with `npm start`.
+3. The service is built with `npm ci && npm run build` and started with `npm start`.
 
 On the free plan the disk is ephemeral, so the SQLite metering data resets whenever the service redeploys or spins down. See the report for why that trade-off was accepted.

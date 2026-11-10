@@ -305,7 +305,7 @@ export function createApp(gw: Gateway) {
   });
 
   // ---------- console static files ----------
-  const webDist = resolve("web/dist");
+  const webDist = gw.config.consoleDist;
   if (existsSync(webDist)) {
     app.use(express.static(webDist));
     app.get(/^\/(?!v1\/|admin\/|api\/|healthz).*/, (_req, res) => res.sendFile(resolve(webDist, "index.html")));

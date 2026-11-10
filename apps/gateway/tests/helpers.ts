@@ -1,12 +1,12 @@
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
-import { config as baseConfig, type BackendConfig } from "../server/config.js";
-import { openDb, type SeedTenant } from "../server/db.js";
-import { createGateway, type Gateway } from "../server/gateway.js";
-import { createApp } from "../server/http/app.js";
-import type { Backend, BackendRequest, StreamChunk } from "../server/backends/types.js";
-import { abortableSleep } from "../server/backends/chaos.js";
-import type { KbEntry } from "../server/support/retrieval.js";
+import { config as baseConfig, type BackendConfig } from "../src/config.js";
+import { openDb, type SeedTenant } from "../src/db.js";
+import { createGateway, type Gateway } from "../src/gateway.js";
+import { createApp } from "../src/http/app.js";
+import type { Backend, BackendRequest, StreamChunk } from "../src/backends/types.js";
+import { abortableSleep } from "../src/backends/chaos.js";
+import type { KbEntry } from "../src/support/retrieval.js";
 
 export const KB: KbEntry[] = [
   { id: "c1", question: "how do I cancel my order", intent: "cancel_order", category: "ORDER", answer: "To cancel order {{Order Number}}, go to Orders and press Cancel." },

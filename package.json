@@ -3,30 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=22.13"
-  },
+  "engines": { "node": ">=22.13" },
+  "workspaces": ["apps/gateway", "apps/console", "tools/eval"],
   "scripts": {
-    "dev": "tsx watch server/index.ts",
-    "dev:web": "npm --prefix web run dev",
-    "build": "tsc -p tsconfig.json && npm --prefix web run build",
-    "start": "node dist/server/index.js",
-    "prepare-data": "tsx scripts/prepare-data.ts data/raw/bitext.csv",
-    "eval": "tsx scripts/eval.ts",
-    "retrieval-eval": "tsx scripts/retrieval-eval.ts",
-    "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
-  },
-  "dependencies": {
-    "express": "^5.3.0",
-    "zod": "^3.25.76"
-  },
-  "devDependencies": {
-    "@types/express": "^5.0.6",
-    "@types/node": "^26.6.6",
-    "csv-parse": "^7.0.3",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
-    "vitest": "^5.1.0"
+    "build": "npm run build -w @mir/gateway && npm run build -w @mir/console",
+    "start": "npm start -w @mir/gateway",
+    "dev": "npm run dev -w @mir/gateway",
+    "dev:console": "npm run dev -w @mir/console",
+    "test": "npm test -w @mir/gateway",
+    "typecheck": "npm run typecheck -w @mir/gateway && npm run typecheck -w @mir/console",
+    "prepare-data": "npm run prepare-data -w @mir/eval",
+    "retrieval-eval": "npm run retrieval-eval -w @mir/eval",
+    "eval": "npm run eval -w @mir/eval --"
   }
 }

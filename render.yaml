@@ -3,7 +3,7 @@ services:
     name: mini-inference-router
     runtime: node
     plan: free
-    buildCommand: npm ci && npm --prefix web ci && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /healthz
     envVars:
@@ -15,5 +15,3 @@ services:
         value: "true"        # exposes demo tenant keys to the console (reviewer convenience)
       - key: ADMIN_TOKEN
         generateValue: true
-      - key: DB_PATH
-        value: data/router.db

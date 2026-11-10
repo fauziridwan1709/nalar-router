@@ -15,6 +15,13 @@
  * Results: eval/results/<stamp>.json + eval/results/<stamp>.md
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DATA = resolve(HERE, "../../data");
+const RESULTS = resolve(HERE, "results");
+
 
 const args = Object.fromEntries(
   process.argv.slice(2).reduce<[string, string][]>((acc, a, i, all) => {
@@ -34,8 +41,8 @@ const SKIP_OOD = args["no-ood"] === "true";
 const DELAY_MS = Number(args.delay ?? 0); // spacing between calls for strict free-tier RPM limits
 
 interface Case { id: string; message: string; expectedIntent: string | null; referenceAnswer?: string; shouldRefuse?: boolean }
-const inDomain: Case[] = JSON.parse(readFileSync("data/eval.json", "utf8")).slice(0, LIMIT);
-const ood: Case[] = SKIP_OOD ? [] : JSON.parse(readFileSync("data/eval-ood.json", "utf8"));
+const inDomain: Case[] = JSON.parse(readFileSync(resolve(DATA, "eval.json"), "utf8")).slice(0, LIMIT);
+const ood: Case[] = SKIP_OOD ? [] : JSON.parse(readFileSync(resolve(DATA, "eval-ood.json"), "utf8"));
 
 // ---------- metrics ----------
 const words = (s: string) => s.toLowerCase().replace(/\{\{[^}]*\}\}/g, " placeholder ").match(/[a-z0-9]+/g) ?? [];
@@ -250,7 +257,7 @@ const md = [
   ]),
 ].join("\n");
 
-mkdirSync("eval/results", { recursive: true });
-writeFileSync(`eval/results/${stamp}.json`, JSON.stringify(report, null, 2));
-writeFileSync(`eval/results/${stamp}.md`, md);
-console.log(`\n${md}\n\nwritten eval/results/${stamp}.{json,md}`);
+mkdirSync(RESULTS, { recursive: true });
+writeFileSync(resolve(RESULTS, `${stamp}.json`), JSON.stringify(report, null, 2));
+writeFileSync(resolve(RESULTS, `${stamp}.md`), md);
+console.log(`\n${md}\n\nwritten tools/eval/results/${stamp}.{json,md}`);

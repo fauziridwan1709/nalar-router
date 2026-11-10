@@ -1,4 +1,6 @@
 import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * All tunables live here so routing/pricing decisions are reviewable in one place.
@@ -25,14 +27,20 @@ export interface BackendConfig {
   enabled: boolean;
 }
 
-// local convenience: load .env if present (on Render, env vars come from the dashboard)
-if (existsSync(".env")) process.loadEnvFile(".env");
+// apps/gateway/{src,dist}/config.* → repo root is three levels up
+const here = dirname(fileURLToPath(import.meta.url));
+export const REPO_ROOT = resolve(here, "../../..");
+// local convenience: load the repo-root .env if present (on Render, env vars come from the dashboard)
+const envFile = resolve(REPO_ROOT, ".env");
+if (existsSync(envFile)) process.loadEnvFile(envFile);
 const env = process.env;
 const num = (v: string | undefined, d: number) => (v !== undefined && v !== "" && !isNaN(Number(v)) ? Number(v) : d);
 
 export const config = {
   port: num(env.PORT, 3000),
-  dbPath: env.DB_PATH ?? "data/router.db",
+  dbPath: env.DB_PATH ?? resolve(REPO_ROOT, "apps/gateway/var/router.db"),
+  dataDir: env.DATA_DIR ?? resolve(REPO_ROOT, "data"),
+  consoleDist: env.CONSOLE_DIST ?? resolve(REPO_ROOT, "apps/console/dist"),
   /** exposes demo tenant keys + admin token to the console. Never on in a real deployment. */
   demoMode: (env.DEMO_MODE ?? "true") === "true",
   adminToken: env.ADMIN_TOKEN ?? "admin-demo-token",

@@ -7,13 +7,19 @@
  *   npm run retrieval-eval
  */
 import { readFileSync } from "node:fs";
-import { Bm25Index, type KbEntry } from "../server/support/retrieval.js";
+import { Bm25Index, type KbEntry } from "../../apps/gateway/src/support/retrieval.js";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const kb: KbEntry[] = JSON.parse(readFileSync("data/kb.json", "utf8"));
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DATA = resolve(HERE, "../../data");
+
+
+const kb: KbEntry[] = JSON.parse(readFileSync(resolve(DATA, "kb.json"), "utf8"));
 const holdout: { message: string; expectedIntent: string }[] = JSON.parse(
-  readFileSync("data/retrieval-holdout.json", "utf8"),
+  readFileSync(resolve(DATA, "retrieval-holdout.json"), "utf8"),
 );
-const ood: { message: string }[] = JSON.parse(readFileSync("data/eval-ood.json", "utf8"));
+const ood: { message: string }[] = JSON.parse(readFileSync(resolve(DATA, "eval-ood.json"), "utf8"));
 const extraOod = [
   "hi",
   "tell me a joke",
