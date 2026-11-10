@@ -4,7 +4,7 @@
  *   npm run eval -- --base http://localhost:3000 \
  *       --configs groq-fast:v2,groq-strong:v2 --judge groq-strong
  *
- * Each config is <model-or-tier>:<prompt-version>. For every config we run the 30
+ * Each config is <model-or-tier>:<prompt-version>[:raw]. ":raw" turns off placeholder rendering. For every config we run the 30
  * held-out cases + 5 out-of-domain prompts sequentially (free-tier rate limits) and report:
  *   - intent accuracy (all cases; refusals count as wrong) and on answered cases
  *   - false-refusal rate (in-domain) and correct-refusal rate (out-of-domain)
@@ -32,8 +32,9 @@ const args = Object.fromEntries(
 const BASE = args.base ?? "http://localhost:3000";
 const KEY = args.key ?? process.env.EVAL_API_KEY ?? "sk-eval-demo-e7a1";
 const CONFIGS = (args.configs ?? "auto:v1,auto:v2").split(",").map((c) => {
-  const [model, prompt] = c.split(":");
-  return { name: c, model, prompt: prompt ?? "v2" };
+  // <model>:<prompt>[:raw]  (raw = stream the model text without placeholder rendering)
+  const [model, prompt, render] = c.split(":");
+  return { name: c, model, prompt: prompt ?? "v3", placeholders: render === "raw" ? "raw" : "fill" };
 });
 const JUDGE = args.judge && args.judge !== "none" ? args.judge : null;
 const LIMIT = args.limit ? Number(args.limit) : Infinity;
@@ -73,13 +74,13 @@ const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.l
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- client ----------
-async function ask(message: string, model: string, prompt: string) {
+async function ask(message: string, model: string, prompt: string, placeholders = "fill") {
   const t0 = performance.now();
   let ttft: number | null = null;
   const res = await fetch(`${BASE}/v1/support/answer`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${KEY}` },
-    body: JSON.stringify({ message, model, prompt_version: prompt, stream: true }),
+    body: JSON.stringify({ message, model, prompt_version: prompt, placeholders, stream: true }),
   });
   if (!res.ok) return { httpError: `${res.status} ${await res.text()}` } as any;
   const out: any = { answer: "", attempts: [] };
@@ -119,6 +120,8 @@ Score 1-5:
 2 = mostly wrong / unhelpful
 1 = wrong, harmful, or invents policies
 
+The reference is a template: placeholders like {{Order Number}} or {{Customer Support Phone Number}} stand for real values. A candidate that shows concrete values or plain-language phrases in their place is correct; do not penalise that. A candidate that still shows raw {{...}} placeholders to the customer is worse (at most 4).
+
 Customer: ${question}
 Reference answer: ${reference}
 Candidate answer: ${answer}
@@ -147,7 +150,7 @@ for (const c of CONFIGS) {
   console.log(`\n=== ${c.name} ===`);
   const rows: any[] = [];
   for (const k of [...inDomain, ...ood]) {
-    const r = await ask(k.message, c.model, c.prompt);
+    const r = await ask(k.message, c.model, c.prompt, c.placeholders);
     const refused = !!r.refusal;
     const predicted = r.intent?.intent ?? null;
     const row: any = {
@@ -171,6 +174,7 @@ for (const c of CONFIGS) {
       usageSource: r.done?.usage?.source ?? null,
       costUsd: r.done?.costUsd ?? 0,
       answer: r.answer,
+      leakedPlaceholders: (r.answer.match(/\{\{[^}]*\}\}/g) ?? []).length,
       rougeL: k.referenceAnswer && !refused && r.answer ? rougeL(r.answer, k.referenceAnswer) : null,
     };
     if (JUDGE && k.referenceAnswer && !refused && r.answer) {
@@ -201,6 +205,7 @@ for (const c of CONFIGS) {
     oodTotal: oodRows.length,
     errors: rows.filter((r) => !["success", "refused_out_of_scope", "refused_low_confidence"].includes(r.outcome)).length,
     fallbacks: rows.filter((r) => r.fallback).length,
+    answersWithRawPlaceholders: answered.filter((r) => r.leakedPlaceholders > 0).length,
     rougeLMean: mean(answered.map((r) => r.rougeL).filter((x) => x != null)),
     judgeMean: mean(answered.map((r) => r.judgeScore).filter((x) => x != null)),
     judgeN: answered.filter((r) => r.judgeScore != null).length,
@@ -241,6 +246,7 @@ const md = [
     ["tokens per model call (mean)", (c: any) => String(c.tokensPerModelCall)],
     ["total est. cost (35 req)", (c: any) => `$${c.costTotalUsd.toFixed(5)}`],
     ["est. cost per 1k requests", (c: any) => `$${c.costPer1kRequestsUsd.toFixed(3)}`],
+    ["answers showing raw {{placeholders}}", (c: any) => `${c.answersWithRawPlaceholders}/${c.answered ?? inDomain.length}`],
     ["errors / fallbacks", (c: any) => `${c.errors} / ${c.fallbacks}`],
     ["served by", (c: any) => Object.entries(c.backends).map(([k, v]) => `${k}:${v}`).join(", ")],
   ].map(([label, fn]: any) => `| ${label} | ${report.configs.map(fn).join(" | ")} |`),
