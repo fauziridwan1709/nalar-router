@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/fauziridwan1709/nalar-router/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/fauziridwan1709/nalar-router/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-29%20passing-3fb984">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-31%20passing-3fb984">
   <img alt="Intent accuracy" src="https://img.shields.io/badge/intent%20accuracy-100%25%20(30%20held--out)-3fb984">
   <img alt="Hard-case probe" src="https://img.shields.io/badge/hard--case%20probe-8%2F8-3fb984">
   <img alt="Out-of-domain refusals" src="https://img.shields.io/badge/out--of--domain%20refused-5%2F5-3fb984">
@@ -76,6 +76,9 @@
 ### Console
 
 - **Playground:** live streaming plus an inspector panel showing the routing decision, the fallback trail, intent and confidence, retrieved entries, tokens, latency and cost.
+- **Model reasoning:** an optional *thinking* panel streams the model's reasoning (gpt-oss on Groq, Qwen thinking on MLX), kept separate from the answer and labelled per attempt.
+- **Step trace:** a timeline of every step with server-side timings: auth and quota, routing, retrieval, scope gate, each attempt, header validation, the commit point, and done.
+- **Online/offline labels** on every backend, from live health probes plus the circuit breaker. On the cloud deployment the local model is listed as *offline: runs on a local machine*.
 - **Usage:** requests, tokens, cost and remaining quota per tenant, with a drill-down into each request.
 - **Backends:** health, circuit breaker state, and fault-injection controls.
 
@@ -253,6 +256,7 @@ All settings are environment variables, read from `.env` at the repo root (or fr
 | `SUPPORT_REFUSE_BELOW` | `0.5` | Confidence below which the assistant hands off instead of answering |
 | `SUPPORT_PROMPT_VERSION` | `v2` | `v1` (minimal) or `v2` (grounded) |
 | `MOCK_TOKEN_DELAY_MS` | `15` | Streaming speed of the mock backend |
+| `HEALTH_INTERVAL_MS` | `30000` | How often enabled backends are probed for the online/offline label |
 | `DEMO_MODE` | `true` | Exposes the demo keys to the console via `/api/demo-config`. **Turn off outside demos.** |
 | `ADMIN_TOKEN` | `admin-demo-token` | Protects `/admin/*` |
 | `PORT` | `3000` | |
@@ -274,6 +278,7 @@ All settings are environment variables, read from `.env` at the repo root (or fr
 |---|---|---|
 | `POST /v1/support/answer` | tenant key | The support capability. SSE events: `meta` → `route` → `retrieval` → `attempt`… → `intent` → `token`… → `done` (or `refusal` / `error`). Send `"stream": false` for a single JSON response. |
 | `POST /v1/chat/completions` | tenant key | Raw gateway, OpenAI-compatible chunks plus an `x_router` block |
+| `GET /v1/backends` | tenant key | Every backend with its online/offline label, where it runs, and whether your plan may use it |
 | `GET /v1/usage` | tenant key | The calling tenant's usage and remaining quota |
 | `GET /v1/requests/:id` | tenant key | One of the tenant's own requests, with its attempts |
 | `GET /admin/usage` · `/admin/requests` · `/admin/requests/:id` | admin token | Usage per tenant; request log with routing decision and attempts |
@@ -302,7 +307,7 @@ Results are written to `tools/eval/results/<timestamp>.{md,json}`. The eval goes
 ## Testing
 
 ```bash
-npm test          # 29 vitest tests, no network (scripted fake backends)
+npm test          # 31 vitest tests, no network (scripted fake backends)
 npm run typecheck
 ```
 
@@ -312,6 +317,7 @@ The tests cover:
 - **Fallback:** on error, on first-token timeout and on unusable output, plus *no* fallback after commit.
 - **Circuit breaker.**
 - **Support assistant:** header parsing (code fences, `<think>` blocks, percentage confidence), refusals, and routing rules.
+- **Reasoning and status:** reasoning is streamed separately from the answer and only when asked for, and offline backends are labelled.
 
 CI runs typecheck, tests, build and the retrieval eval on every push.
 

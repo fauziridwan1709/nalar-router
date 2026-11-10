@@ -10,7 +10,12 @@ curl -N http://localhost:3000/v1/support/answer \
   -d '{"message":"how do I cancel order 123?"}'
 ```
 
-Body: `message` (1–2000 chars), `model` (`auto` | tier | backend id, optional), `prompt_version` (`v1` | `v2`), `stream` (default `true`).
+Body:
+- `message`: 1–2000 chars
+- `model`: optional; `auto`, a tier, or a backend id
+- `prompt_version`: `v1` or `v2`
+- `stream`: defaults to `true`
+- `include_reasoning`: defaults to `false`. When `true`, the model's thinking is streamed as `reasoning` events. On Groq gpt-oss this costs nothing extra, since the model reasons anyway. On the local Qwen model it turns thinking on, which is much slower.
 
 The response is a stream of Server-Sent Events, in this order:
 
@@ -21,12 +26,16 @@ The response is a stream of Server-Sent Events, in this order:
 | `retrieval` | `coverage`, intent `votes`, top `entries` (id, intent, score, question, answer) |
 | `attempt` | one per backend try: `started`, then `ok` / `error` / `timeout_first_token` / `timeout_total` / `unusable_output` / `skipped_circuit_open` / `refused`, with latency, tokens and cost |
 | `intent` | `intent`, `confidence` (0–1), `label`, `components`, `agreesWithRetrieval`. Sent right before the first token. |
+| `step` | intermediate decisions: `scope_gate` (passed or refused, with the reason) and `header_validated` (the model's intent and self-reported confidence) |
+| `reasoning` | `{seq, backend, text}`: model thinking, only sent when `include_reasoning` is set. It is diagnostic only: never parsed, never part of the answer, and it can come from an attempt that is later discarded by fallback. |
 | `token` | `{text}`, the streamed answer |
 | `refusal` | `reason` (`out_of_scope` / `low_confidence`) and the message shown to the customer |
 | `error` | `code` (`all_backends_failed`, `stream_interrupted`, …), `partial` |
 | `done` | `requestId`, `outcome`, `backend`, `model`, `fallbackUsed`, `usage{prompt,completion,total,source}`, `costUsd`, `latencyMs`, `ttftMs`, `intent`, `confidence`, remaining `quota` |
 
-With `"stream": false` you get the same information as one JSON object.
+Every event except `token` and `reasoning` includes `t`, the milliseconds since the gateway received the request. The console uses it to draw the trace. The `meta` event also reports the quota admission: `maxCompletionTokens` and the tokens and requests remaining.
+
+With `"stream": false` you get the same information as one JSON object, including `steps` and, if requested, `reasoning`.
 
 ## `POST /v1/chat/completions` (raw gateway, OpenAI-compatible)
 
@@ -36,6 +45,24 @@ curl -N http://localhost:3000/v1/chat/completions -H 'authorization: Bearer sk-a
 ```
 
 It streams standard `chat.completion.chunk`s. The final chunk carries `usage` and an `x_router` block with backend, fallback, cost and trace.
+
+## `GET /v1/backends`
+
+This lists every backend, including ones not configured on this host. For each it returns the online/offline label, where the model runs, and whether the caller's plan may use it.
+
+```json
+[{ "id": "local-qwen", "tier": "local", "location": "local", "allowedForTenant": true,
+   "health": { "label": "offline", "availability": "disabled",
+               "reason": "runs on a local machine; not configured on this deployment" },
+   "breaker": "closed" }]
+```
+
+`availability` is one of:
+- `online` or `offline`: the result of probing `GET {baseUrl}/models` every 30 s
+- `disabled`: the backend isn't configured on this host
+- `unknown`: not probed yet
+
+The probe only feeds the label. Routing relies on the circuit breaker and fallback.
 
 ## Other endpoints
 

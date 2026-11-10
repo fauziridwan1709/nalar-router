@@ -27,6 +27,14 @@ A tenant calls `POST /v1/support/answer` with an API key. The gateway authentica
 
 The `requests` table is the single source of truth for both metering and quota. There is no separate counter that could drift.
 
+**Observability beyond the answer.**
+
+- **Step trace.** Every SSE event except tokens carries `t`, the server-side milliseconds since the request arrived. The console draws them as a trace: quota admitted, routed, retrieved, scope gate, each attempt, header validated, committed, done.
+- **Reasoning.** A caller can set `include_reasoning` to receive the model's reasoning as separate `reasoning` events. It is never parsed and never part of the answer, and it can come from an attempt that fallback later discards.
+  - On Groq the setting is free: gpt-oss reasons at `reasoning_effort: low` either way, and those tokens are billed either way, so we only choose whether to *receive* them.
+  - On the local Qwen model the setting turns thinking on. Measured on this laptop, that changed one request from about 4 s to about 46 s and added about 1,200 completion tokens. That's why it's off by default in the API, and the console warns about it.
+- **Online/offline labels.** Each backend is labelled online or offline from a 30 s probe (`GET {baseUrl}/models`) combined with the circuit breaker. Backends that aren't configured on a host are still listed, as offline with a reason. On the cloud deployment the local model shows as *offline: runs on a local machine*. The probe only feeds the label; routing still relies on the breaker and fallback.
+
 ## 3. Routing
 
 **Backends.** I chose these for the constraints given: no keys are provided, and at least one real model must serve requests.
@@ -138,7 +146,7 @@ Multi-intent ("charged twice … payment methods … refund?"), vague ("it doesn
 
 **Token accounting.** Each row records `usage_source`: `provider` (from the provider's usage report), `estimated` (mock backend, aborted streams), or `none` (the provider rejected the call). I checked the chars/4 estimator against provider counts on the 119 eval calls. It reads **6–17% high** (mean 1.06–1.17×). For quota pre-authorisation that is the safe direction. It means estimated rows overstate cost a little, and they are labelled as estimates.
 
-**Tests.** There are 29 vitest tests on scripted fake backends, with no network. They cover:
+**Tests.** There are 31 vitest tests on scripted fake backends, with no network. They cover:
 - the parser
 - retrieval
 - the routing rules
@@ -149,6 +157,7 @@ Multi-intent ("charged twice … payment methods … refund?"), vague ("it doesn
 - auth, validation, the 403 plan check
 - refusals
 - the OpenAI-compatible stream format
+- reasoning streamed separately and only when asked for, and offline backends labelled
 
 ## 6. Trade-offs I accepted
 

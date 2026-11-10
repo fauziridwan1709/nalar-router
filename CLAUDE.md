@@ -41,6 +41,7 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 - **Quota fails closed.** Any exception in `admit()` becomes 503 `quota_unavailable` and no model is called. Usage is always derived from the `requests` table. Do not add a separate counter.
 - **There is one commit point per attempt.** Fallback is allowed only before `ctx.commit()` (the first byte sent to the client). After commit, errors end the request. Never splice output from two models together.
 - **The support header is validated before streaming.** The intent must be in the label set (or `unknown`). Header and empty-answer failures raise `BackendError("unusable_output")`, which moves on to the next backend.
+- **Reasoning is diagnostic only.** `{type:"reasoning"}` chunks are forwarded as `reasoning` events. They are never parsed, never count as the commit point, and never become part of the answer. They do count as liveness for the first-token timer, and their tokens are metered.
 - **Refusals are `StopRequest`, not errors.** They don't trip the circuit breaker and they don't fall back.
 - **Every attempt is metered,** including failed ones. `usage_source` is `provider` only when the provider actually reported usage. Otherwise it is `estimated`, or `none` when the provider rejected the call outright.
 - **Routing reasons are data.** If you add a rule, give it a `rule` id and a human-readable `reason` in `planRoute`, and add a test.
@@ -48,6 +49,7 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 
 ## Conventions
 
+- Commits use Conventional Commits with the part touched as the scope: `feat(gateway): …`, `fix(console): …`, `docs(readme): …`, `test(gateway): …`, `chore(eval): …`, `ci: …`. Split commits by part.
 - ESM everywhere. The gateway uses `.js` suffixes in relative imports (NodeNext).
 - Errors use `GatewayError(status, code, message, details)` and come out as `{error:{code,message,details}}`.
 - New backends implement `Backend.stream()` and yield `{type:"text"}` and `{type:"usage"}` chunks. They must honour `req.signal`.
