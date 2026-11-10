@@ -1,5 +1,5 @@
 {
-  "name": "@mir/console",
+  "name": "@nalar/console",
   "private": true,
   "type": "module",
   "scripts": {
