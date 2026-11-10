@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-label="nalar-router: an LLM gateway with common sense">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="0.55" stop-color="#121a33"/>
+      <stop offset="1" stop-color="#0d2a2a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6aa8ff"/>
+      <stop offset="1" stop-color="#3fd6a8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.82" cy="0.5" r="0.45">
+      <stop offset="0" stop-color="#3fd6a8" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#3fd6a8" stop-opacity="0"/>
+    </radialGradient>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6aa8ff"/>
+    </marker>
+    <marker id="arrDim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4a5470"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="320" fill="url(#bg)"/>
+  <rect width="1280" height="320" fill="url(#glow)"/>
+  <g stroke="#ffffff" stroke-opacity="0.035">
+    <path d="M0 64H1280M0 128H1280M0 192H1280M0 256H1280"/>
+    <path d="M128 0V320M256 0V320M384 0V320M512 0V320M640 0V320M768 0V320M896 0V320M1024 0V320M1152 0V320"/>
+  </g>
+
+  <!-- wordmark -->
+  <g font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="72" y="140" font-size="76" font-weight="800" fill="#e8ecf6" letter-spacing="-1.5">nalar<tspan fill="url(#accent)">-router</tspan></text>
+    <text x="76" y="188" font-size="26" fill="#aab3c8">An LLM gateway with common sense.</text>
+    <text x="76" y="222" font-size="18" fill="#7d879e">Routes by evidence · fails over before the first byte · meters every token · refuses instead of guessing</text>
+    <g font-size="14" font-weight="600">
+      <rect x="76" y="248" width="118" height="30" rx="15" fill="#1a2440" stroke="#2c3a63"/>
+      <text x="135" y="268" text-anchor="middle" fill="#9fc3ff">auth + quota</text>
+      <rect x="204" y="248" width="150" height="30" rx="15" fill="#1a2440" stroke="#2c3a63"/>
+      <text x="279" y="268" text-anchor="middle" fill="#9fc3ff">routing + fallback</text>
+      <rect x="364" y="248" width="104" height="30" rx="15" fill="#1a2440" stroke="#2c3a63"/>
+      <text x="416" y="268" text-anchor="middle" fill="#9fc3ff">metering</text>
+      <rect x="478" y="248" width="170" height="30" rx="15" fill="#13302b" stroke="#245a4c"/>
+      <text x="563" y="268" text-anchor="middle" fill="#7fe0b3">RAG support assistant</text>
+    </g>
+  </g>
+
+  <!-- router glyph: one request in, four backends out, one chosen -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">
+    <circle cx="905" cy="160" r="30" fill="#162038" stroke="url(#accent)" stroke-width="2.5"/>
+    <text x="905" y="165" text-anchor="middle" fill="#e8ecf6" font-weight="700">route</text>
+    <path d="M800 160 H868" stroke="#6aa8ff" stroke-width="2.5" marker-end="url(#arr)"/>
+    <text x="790" y="148" text-anchor="end" fill="#7d879e">request</text>
+
+    <path d="M935 150 C 980 120, 1000 82, 1040 78" stroke="#3fd6a8" stroke-width="3" fill="none" marker-end="url(#arr)"/>
+    <path d="M936 158 C 985 150, 1000 132, 1040 128" stroke="#4a5470" stroke-width="2" fill="none" stroke-dasharray="5 5" marker-end="url(#arrDim)"/>
+    <path d="M936 164 C 985 172, 1000 186, 1040 190" stroke="#4a5470" stroke-width="2" fill="none" stroke-dasharray="5 5" marker-end="url(#arrDim)"/>
+    <path d="M935 172 C 980 200, 1000 240, 1040 242" stroke="#4a5470" stroke-width="2" fill="none" stroke-dasharray="5 5" marker-end="url(#arrDim)"/>
+
+    <rect x="1048" y="62" width="200" height="32" rx="8" fill="#13302b" stroke="#3fd6a8"/>
+    <text x="1060" y="83" fill="#7fe0b3">gpt-oss-20b · fast</text>
+    <rect x="1048" y="112" width="200" height="32" rx="8" fill="#151b2c" stroke="#2c3a63"/>
+    <text x="1060" y="133" fill="#aab3c8">gpt-oss-120b · strong</text>
+    <rect x="1048" y="174" width="200" height="32" rx="8" fill="#151b2c" stroke="#2c3a63"/>
+    <text x="1060" y="195" fill="#aab3c8">qwen3.5-4b · local</text>
+    <rect x="1048" y="226" width="200" height="32" rx="8" fill="#151b2c" stroke="#2c3a63"/>
+    <text x="1060" y="247" fill="#aab3c8">extractive · fallback</text>
+  </g>
+</svg>

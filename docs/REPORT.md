@@ -5,6 +5,7 @@
 - **Live:** https://nalar-router.onrender.com (Render free tier; the first request after 15 minutes idle takes about a minute)
 - **Code:** `apps/gateway` (API), `apps/console` (React console), `tools/eval` (data prep and evals)
 - **Raw eval output:** [`tools/eval/results/`](../tools/eval/results/)
+- **Diagrams:** [ARCHITECTURE.md](ARCHITECTURE.md) (system overview, request lifecycle, routing decision, data model)
 
 ## 1. What I built, in one paragraph
 

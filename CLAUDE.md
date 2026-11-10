@@ -16,9 +16,9 @@ apps/gateway/     Node ≥22.13 + Express 5 API (TypeScript → dist/). Serves t
   src/db.ts          node:sqlite schema + demo tenant seed
   tests/             vitest; scripted FakeBackend, no network
 apps/console/     React 19 + Vite console (Playground / Usage / Backends)
-tools/eval/       prepare-data.ts, retrieval-eval.ts, eval.ts; results/ holds committed eval outputs
-data/             kb.json (2,160 KB entries), eval.json (30 held-out), eval-ood.json, retrieval-holdout.json
-docs/             REPORT.md (design + results), API.md
+tools/eval/       prepare-data.ts, retrieval-eval.ts, eval.ts, probe.ts; results/ holds committed eval outputs
+data/             kb.json (2,160 KB entries), eval.json (30 held-out), eval-ood.json, eval-hard.json, retrieval-holdout.json
+docs/             REPORT.md (design + results), ARCHITECTURE.md (Mermaid diagrams), API.md, assets/ (banner, screenshots)
 ```
 
 ## Commands (run from the repo root)
