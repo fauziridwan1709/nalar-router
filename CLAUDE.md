@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+**Starting a new session? Read [PROJECT.md](PROJECT.md) first.** It has the current state, the checklist, environment setup, the decisions log and the next steps.
+
 This file is for coding agents working in **nalar-router**. It is an npm-workspaces monorepo for a small LLM gateway with a customer-support capability on top.
 
 ## Layout

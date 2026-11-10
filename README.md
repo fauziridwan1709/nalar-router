@@ -384,6 +384,7 @@ nalar-router/
 ├── .agents/skills/              project agent skills (pinned in skills-lock.json, linked in .claude/skills)
 ├── .github/workflows/ci.yml
 ├── render.yaml
+├── PROJECT.md                   hand-off: status checklist, environment, decisions, next steps
 └── CLAUDE.md                    notes for coding agents: layout, commands, invariants
 ```
 
