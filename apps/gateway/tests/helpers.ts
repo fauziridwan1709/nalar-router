@@ -41,7 +41,7 @@ export class FakeBackend implements Backend {
 
 export function cfg(id: string, tier: BackendConfig["tier"], over: Partial<BackendConfig> = {}): BackendConfig {
   return {
-    id, kind: "openai-compatible", tier, model: `${id}-model`, priceInPerM: 1, priceOutPerM: 2,
+    id, kind: "openai-compatible", location: "cloud", tier, model: `${id}-model`, priceInPerM: 1, priceOutPerM: 2,
     firstTokenTimeoutMs: 300, totalTimeoutMs: 2_000, enabled: true, ...over,
   };
 }
@@ -53,6 +53,13 @@ export const reply = (text: string, usage = { promptTokens: 100, completionToken
       yield { type: "text", text: piece };
     }
     yield { type: "usage", ...usage };
+  };
+
+/** a "thinking" model: reasoning chunks first, then the answer */
+export const think = (thought: string, text: string): Script =>
+  async function* (req) {
+    if (req.includeReasoning) for (const w of thought.split(" ")) yield { type: "reasoning", text: w + " " };
+    yield* reply(text)(req);
   };
 
 export const fail = (msg = "boom"): Script =>

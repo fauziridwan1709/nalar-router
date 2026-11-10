@@ -1,6 +1,6 @@
 /** End-to-end request path over real HTTP with scripted backends. */
 import { afterEach, describe, expect, it } from "vitest";
-import { FakeBackend, cfg, fail, hang, reply, sse, startServer } from "./helpers.js";
+import { FakeBackend, cfg, fail, hang, reply, sse, startServer, think } from "./helpers.js";
 
 let close: (() => Promise<void>) | null = null;
 afterEach(async () => {
@@ -36,7 +36,9 @@ describe("support endpoint", () => {
     expect(res.headers.get("content-type")).toContain("text/event-stream");
     const ev = await sse(res);
     const names = ev.map((e) => e.event);
-    expect(names.slice(0, 4)).toEqual(["meta", "route", "retrieval", "attempt"]);
+    expect(names.slice(0, 5)).toEqual(["meta", "route", "retrieval", "step", "attempt"]);
+    expect(ev[0].data.admission.maxCompletionTokens).toBeGreaterThan(0);
+    expect(typeof ev[1].data.t).toBe("number"); // server-side elapsed ms on every non-token event
     expect(names).toContain("intent");
     const answer = ev.filter((e) => e.event === "token").map((e) => e.data.text).join("");
     expect(answer).toBe("Go to Orders and press Cancel.");
@@ -145,6 +147,35 @@ describe("support endpoint", () => {
     const res = await post(s.base, "/v1/support/answer", "k-free", { message: "cancel my order", model: "strong" });
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe("model_not_allowed");
+  });
+});
+
+describe("reasoning and backend status", () => {
+  it("streams reasoning as separate events, never as part of the answer, only when asked", async () => {
+    const s = await startServer([new FakeBackend(cfg("f", "fast"), think("check the KB first", GOOD))]);
+    close = s.close;
+    const on = await sse(await post(s.base, "/v1/support/answer", "k-pro", { message: "cancel my order", include_reasoning: true }));
+    const thought = on.filter((e) => e.event === "reasoning").map((e) => e.data.text).join("");
+    expect(thought.trim()).toBe("check the KB first");
+    expect(on.filter((e) => e.event === "token").map((e) => e.data.text).join("")).toBe("Go to Orders and press Cancel.");
+    const off = await sse(await post(s.base, "/v1/support/answer", "k-pro", { message: "cancel my order" }));
+    expect(off.some((e) => e.event === "reasoning")).toBe(false);
+  });
+
+  it("lists every backend with an online/offline label, including ones not configured on this host", async () => {
+    const s = await startServer([
+      new FakeBackend(cfg("f", "fast"), reply(GOOD)),
+      new FakeBackend(cfg("local", "local", { location: "local", enabled: false }), reply(GOOD)),
+      new FakeBackend(cfg("m", "degraded", { kind: "mock", location: "built-in" }), reply(GOOD)),
+    ]);
+    close = s.close;
+    const list = await (await fetch(`${s.base}/v1/backends`, { headers: { authorization: "Bearer k-pro" } })).json();
+    const local = list.find((b: any) => b.id === "local");
+    expect(local.health).toMatchObject({ label: "offline", availability: "disabled", location: "local" });
+    expect(local.health.reason).toMatch(/local machine/);
+    expect(list.find((b: any) => b.id === "m").health.label).toBe("online");
+    const demo = await (await fetch(`${s.base}/api/demo-config`)).json();
+    expect(demo.backends.map((b: any) => b.id)).toContain("local");
   });
 });
 
