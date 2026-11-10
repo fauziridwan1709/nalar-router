@@ -13,7 +13,8 @@ curl -N http://localhost:3000/v1/support/answer \
 Body:
 - `message`: 1–2000 chars
 - `model`: optional; `auto`, a tier, or a backend id
-- `prompt_version`: `v1` or `v2`
+- `prompt_version`: `v1`, `v2` or `v3` (default `v3`)
+- `placeholders`: `fill` (default) or `raw`. With `fill`, template slots such as `{{Order Number}}` are filled in before streaming, from the customer's message, the tenant's company profile, default UI labels, or a natural phrase. With `raw`, the model's text is streamed untouched.
 - `stream`: defaults to `true`
 - `include_reasoning`: defaults to `false`. When `true`, the model's thinking is streamed as `reasoning` events. On Groq gpt-oss this costs nothing extra, since the model reasons anyway. On the local Qwen model it turns thinking on, which is much slower.
 
@@ -26,7 +27,7 @@ The response is a stream of Server-Sent Events, in this order:
 | `retrieval` | `coverage`, intent `votes`, top `entries` (id, intent, score, question, answer) |
 | `attempt` | one per backend try: `started`, then `ok` / `error` / `timeout_first_token` / `timeout_total` / `unusable_output` / `skipped_circuit_open` / `refused`, with latency, tokens and cost |
 | `intent` | `intent`, `confidence` (0–1), `label`, `components`, `agreesWithRetrieval`. Sent right before the first token. |
-| `step` | intermediate decisions: `scope_gate` (passed or refused, with the reason) and `header_validated` (the model's intent and self-reported confidence) |
+| `step` | intermediate decisions: `scope_gate` (passed or refused, with the reason), `header_validated` (the model's intent and self-reported confidence), and `placeholders_rendered` (each slot filled, with its value and source: `message`, `profile`, `ui_label` or `fallback`) |
 | `reasoning` | `{seq, backend, text}`: model thinking, only sent when `include_reasoning` is set. It is diagnostic only: never parsed, never part of the answer, and it can come from an attempt that is later discarded by fallback. |
 | `token` | `{text}`, the streamed answer |
 | `refusal` | `reason` (`out_of_scope` / `low_confidence`) and the message shown to the customer |

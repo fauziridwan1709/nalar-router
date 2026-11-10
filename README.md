@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/fauziridwan1709/nalar-router/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/fauziridwan1709/nalar-router/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-31%20passing-3fb984">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-40%20passing-3fb984">
   <img alt="Intent accuracy" src="https://img.shields.io/badge/intent%20accuracy-100%25%20(30%20held--out)-3fb984">
   <img alt="Hard-case probe" src="https://img.shields.io/badge/hard--case%20probe-8%2F8-3fb984">
   <img alt="Out-of-domain refusals" src="https://img.shields.io/badge/out--of--domain%20refused-5%2F5-3fb984">
@@ -71,6 +71,11 @@
 - **Retrieval:** BM25 over 2,160 Bitext KB entries, with typo correction. It reaches 94.7% intent accuracy on its own, and a query takes 0.12 ms.
 - **Response:** the answer, the detected intent, the retrieved entries, and a confidence score made of three parts (retrieval vote, lexical coverage, the model's own estimate).
 - **Validated output:** the model must emit a JSON header (intent and confidence) before any text streams. If the header is bad, the router falls back to the next backend.
+- **No raw `{{placeholders}}`:** Bitext answers are templates. The model keeps placeholders and the gateway fills them in while streaming, so the LLM never types a phone number, URL or order id. Values come from, in order:
+  1. the customer's own message ("order 12345")
+  2. the tenant's **company profile** (phone, hours, website)
+  3. default UI labels
+  4. a natural phrase ("your order number")
 - **Refusal:** short off-topic messages are refused before any model is called ($0). The model can also mark a message `unknown`. Low confidence leads to a hand-off message instead of a guess.
 
 ### Console
@@ -97,6 +102,7 @@ Thirty held-out Bitext cases and five out-of-domain prompts were run end to end 
 - **Refusals:** every configuration refused 5/5 out-of-domain prompts, and none wrongly refused any of the 30 in-domain cases.
 - **Hard-case probe:** 8/8 inputs (prompt injection, angry, multi-intent, typo'd, Indonesian) behaved as expected after one fix that the probe itself uncovered.
 - **Real fallback:** during the eval Groq slowed down, both Groq backends timed out, and local Qwen served the request. All three attempts are recorded.
+- **No raw placeholders:** answers showing raw `{{placeholders}}` dropped from **15/30 to 0/30** with prompt v3 and gateway-side rendering. Intent accuracy is unchanged, and the cost is +7% tokens. See the report for the honest judge numbers.
 - **Token estimates:** my chars/4 estimate runs 6–17% *above* what the provider reports. That is the safe direction for pre-authorising quota.
 
 The full analysis, including what these numbers *don't* show, is in **[docs/REPORT.md](docs/REPORT.md)**. Raw results are in [`tools/eval/results/`](tools/eval/results/).
@@ -254,7 +260,7 @@ All settings are environment variables, read from `.env` at the repo root (or fr
 | `SUPPORT_MIN_COVERAGE` | `0.3` | Lexical coverage below which a short message is refused without a model call |
 | `SUPPORT_GATE_MAX_TERMS` | `6` | The coverage check applies only to messages with this many content terms or fewer |
 | `SUPPORT_REFUSE_BELOW` | `0.5` | Confidence below which the assistant hands off instead of answering |
-| `SUPPORT_PROMPT_VERSION` | `v2` | `v1` (minimal) or `v2` (grounded) |
+| `SUPPORT_PROMPT_VERSION` | `v3` | `v1` (minimal), `v2` (grounded), or `v3` (grounded, and tells the model which placeholders the gateway can fill) |
 | `MOCK_TOKEN_DELAY_MS` | `15` | Streaming speed of the mock backend |
 | `HEALTH_INTERVAL_MS` | `30000` | How often enabled backends are probed for the online/offline label |
 | `DEMO_MODE` | `true` | Exposes the demo keys to the console via `/api/demo-config`. **Turn off outside demos.** |
@@ -307,7 +313,7 @@ Results are written to `tools/eval/results/<timestamp>.{md,json}`. The eval goes
 ## Testing
 
 ```bash
-npm test          # 31 vitest tests, no network (scripted fake backends)
+npm test          # 40 vitest tests, no network (scripted fake backends)
 npm run typecheck
 ```
 
@@ -317,6 +323,7 @@ The tests cover:
 - **Fallback:** on error, on first-token timeout and on unusable output, plus *no* fallback after commit.
 - **Circuit breaker.**
 - **Support assistant:** header parsing (code fences, `<think>` blocks, percentage confidence), refusals, and routing rules.
+- **Placeholders:** extraction from the message, priority between sources, placeholders split across chunks, shortened names, and no raw braces.
 - **Reasoning and status:** reasoning is streamed separately from the answer and only when asked for, and offline backends are labelled.
 
 CI runs typecheck, tests, build and the retrieval eval on every push.

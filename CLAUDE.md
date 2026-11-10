@@ -10,7 +10,8 @@ apps/gateway/     Node ≥22.13 + Express 5 API (TypeScript → dist/). Serves t
   src/http/          app.ts (routes, auth, shared capability handler), sink.ts (SSE), chatFormat.ts (OpenAI wire format)
   src/router/        policy.ts (which backends, in what order), executor.ts (fallback/timeouts/attempt metering), breaker.ts
   src/backends/      openaiCompat.ts (Groq, MLX, Ollama…), mock.ts (extractive), chaos.ts (fault injection)
-  src/support/       retrieval.ts (BM25 + typo correction), prompt.ts (v1/v2), parser.ts (header validation), assistant.ts
+  src/support/       retrieval.ts (BM25 + typo correction), prompt.ts (v1/v2/v3), parser.ts (header validation),
+                     placeholders.ts (slot filling), assistant.ts
   src/quota.ts       fail-closed admission + token reservations
   src/metering.ts    requests/attempts rows
   src/db.ts          node:sqlite schema + demo tenant seed
@@ -42,6 +43,7 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 - **There is one commit point per attempt.** Fallback is allowed only before `ctx.commit()` (the first byte sent to the client). After commit, errors end the request. Never splice output from two models together.
 - **The support header is validated before streaming.** The intent must be in the label set (or `unknown`). Header and empty-answer failures raise `BackendError("unusable_output")`, which moves on to the next backend.
 - **Reasoning is diagnostic only.** `{type:"reasoning"}` chunks are forwarded as `reasoning` events. They are never parsed, never count as the commit point, and never become part of the answer. They do count as liveness for the first-token timer, and their tokens are metered.
+- **The model never types contact details or ids.** It writes `{{placeholders}}`, and `PlaceholderRenderer` fills them from the message, the tenant profile, UI labels, or a fallback phrase. Create a fresh renderer for each attempt. Raw `{{…}}` must never reach the customer in `fill` mode.
 - **Refusals are `StopRequest`, not errors.** They don't trip the circuit breaker and they don't fall back.
 - **Every attempt is metered,** including failed ones. `usage_source` is `provider` only when the provider actually reported usage. Otherwise it is `estimated`, or `none` when the provider rejected the call outright.
 - **Routing reasons are data.** If you add a rule, give it a `rule` id and a human-readable `reason` in `planRoute`, and add a test.

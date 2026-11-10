@@ -102,6 +102,34 @@ The model's self-reported confidence gets the smallest weight on purpose: it is 
 - Out of scope, model: the model labels the message `unknown`.
 - Low confidence: the score is below 0.5. The customer gets a hand-off message instead of a guess. The model stream is aborted, so the remaining tokens are never paid for.
 
+**Template placeholders.** Bitext answers are templates: 76 distinct slots such as `{{Order Number}}`, `{{Customer Support Phone Number}}` and `{{Online Order Interaction}}`. Streaming them to a customer as raw text is unacceptable. Asking the model to "fill them in" would invite it to invent phone numbers and URLs. So the work is split:
+- **The model:** keeps placeholders. Prompt v3 lists exactly which ones have real values for this request; anything else it writes in plain words.
+- **The gateway:** fills them deterministically while streaming (`support/placeholders.ts`), from four sources in priority order:
+  1. the customer's message (order, invoice and tracking ids, amounts, plan names)
+  2. the tenant's **company profile**, a new `tenants.profile` column with phone, hours, email, URLs and shipping times
+  3. default UI labels (`{{Online Order Interaction}}` → "Orders")
+  4. a natural fallback phrase ("your order number", or "on file" when the sentence already names the id)
+
+The renderer handles placeholders split across stream chunks, model-shortened names (`{{Support Phone Number}}`), a currency sign directly before an amount slot, and duplicated determiners. Every filled slot is reported in a `placeholders_rendered` step, with its value and source, and shown in the console.
+
+Measured on groq-fast, 30 held-out cases ([`2026-11-10T08-11-44`](../tools/eval/results/2026-11-10T08-11-44.md)):
+
+| | v2, raw | v3, rendered |
+|---|---|---|
+| answers showing raw `{{…}}` to the customer | **15/30** | **0/30** |
+| intent accuracy / OOD refused | 100% / 5/5 | 100% / 5/5 |
+| LLM judge, 1–5 | 4.60 | 4.50 |
+| tokens per call / cost per 1k requests | 1,080 / $0.093 | 1,162 / $0.099 |
+
+- **Leaks:** across three runs, raw placeholders appeared in 15–16 of 30 v2 answers and in **0** v3 answers.
+- **Judge score:** about 0.1 lower for v3 in both clean runs (4.53 vs 4.40, then 4.60 vs 4.50).
+  - The judge's reasons for the low v3 scores mostly cite tone or missing follow-up questions, not the rendering.
+  - Two reasons pointed at genuine rendering artifacts: "the order number your order number", and an empty gap where an unknown name went. Both were fixed, along with a currency-sign bug the same check uncovered, and covered by tests.
+  - The reference answers are themselves templates, so a judge comparing against them may slightly favour template-like text. I can't rule out a small real cost. I accept it: the alternative is showing customers raw template syntax.
+- **Token cost:** v3 costs about 7% more tokens because of the slot list in the prompt.
+
+A third run ([`08-35-26`](../tools/eval/results/2026-11-10T08-35-26.md)) hit Groq's free-tier limit of 8k tokens per minute, which is shared by everything using the key. The breaker and fallback served 59 of 60 in-domain requests, through groq-strong, local-qwen and the extractive backend, with **0 errors**. That makes it a good resilience result. The two configurations were served by different models, though, so I left it out of the quality comparison.
+
 ## 5. Evaluation
 
 **Method.** `tools/eval/eval.ts` drives the real HTTP gateway (auth → quota → routing → streaming → metering) once for each configuration. It runs sequentially because of Groq's free-tier limit of 8k tokens per minute. For each configuration it measures:
@@ -146,7 +174,7 @@ Multi-intent ("charged twice … payment methods … refund?"), vague ("it doesn
 
 **Token accounting.** Each row records `usage_source`: `provider` (from the provider's usage report), `estimated` (mock backend, aborted streams), or `none` (the provider rejected the call). I checked the chars/4 estimator against provider counts on the 119 eval calls. It reads **6–17% high** (mean 1.06–1.17×). For quota pre-authorisation that is the safe direction. It means estimated rows overstate cost a little, and they are labelled as estimates.
 
-**Tests.** There are 31 vitest tests on scripted fake backends, with no network. They cover:
+**Tests.** There are 40 vitest tests on scripted fake backends, with no network. They cover:
 - the parser
 - retrieval
 - the routing rules
@@ -158,6 +186,7 @@ Multi-intent ("charged twice … payment methods … refund?"), vague ("it doesn
 - refusals
 - the OpenAI-compatible stream format
 - reasoning streamed separately and only when asked for, and offline backends labelled
+- placeholder extraction, rendering across chunk boundaries, and raw mode
 
 ## 6. Trade-offs I accepted
 
