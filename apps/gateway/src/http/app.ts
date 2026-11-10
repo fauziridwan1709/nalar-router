@@ -14,6 +14,7 @@ import { CollectSink, SseSink, type EventSink } from "./sink.js";
 import { ChatSseSink, chatCompletionJson } from "./chatFormat.js";
 import { DEMO_TENANTS } from "../db.js";
 import type { ChaosMode } from "../backends/chaos.js";
+import { computeMetrics, RANGES, type RangeKey } from "../metrics.js";
 
 declare module "express-serve-static-core" {
   interface Request {
@@ -289,6 +290,12 @@ export function createApp(gw: Gateway) {
       })),
     );
   });
+  app.get("/admin/metrics", adminAuth, (req, res) => {
+    const range = String(req.query.range ?? "24h");
+    if (!(range in RANGES)) throw new GatewayError(400, "invalid_request", `range must be one of ${Object.keys(RANGES).join(", ")}`);
+    res.json(computeMetrics(gw.db, range as RangeKey, { tenantId: req.query.tenant ? String(req.query.tenant) : undefined }));
+  });
+
   app.get("/admin/requests", adminAuth, (req, res) => {
     res.json(listRequests(gw.db, { tenantId: req.query.tenant ? String(req.query.tenant) : undefined, limit: Number(req.query.limit) || 50 }));
   });

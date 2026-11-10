@@ -8,6 +8,7 @@ import { BackendError } from "../src/errors.js";
 import { admit, getUsage } from "../src/quota.js";
 import { openDb } from "../src/db.js";
 import { getTenant } from "../src/tenants.js";
+import { computeMetrics, outcomeGroup } from "../src/metrics.js";
 import { FakeBackend, KB, TENANTS, cfg, fail, hang, reply } from "./helpers.js";
 import { PlaceholderRenderer, buildSlots, extractFromMessage, fillablePlaceholders } from "../src/support/placeholders.js";
 
@@ -214,5 +215,36 @@ describe("placeholder rendering", () => {
     // Tracking Number has no value → not offered; the phone number is a core contact the tenant has
     expect(f).toEqual(["Customer Support Phone Number", "Order Number"]);
     expect(fillablePlaceholders([], slots)).toEqual(["Customer Support Phone Number"]);
+  });
+});
+
+describe("dashboard metrics", () => {
+  it("buckets requests by time with outcome groups, latency percentiles and fallback rate", () => {
+    const db = openDb(":memory:", TENANTS);
+    const now = Date.UTC(2026, 10, 10, 10, 30, 0);
+    const ins = db.prepare(
+      `INSERT INTO requests (id, tenant_id, endpoint, created_at, outcome, backend, fallback_used, prompt_tokens, completion_tokens, latency_ms, cost_usd)
+       VALUES (?, ?, 'support.answer', ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    ins.run("a", "pro", now - 2 * 60_000, "success", "f", 0, 100, 20, 400, 0.001);
+    ins.run("b", "pro", now - 2 * 60_000, "success", "s", 1, 100, 20, 900, 0.002);
+    ins.run("c", "free", now - 10 * 60_000, "refused_out_of_scope", null, 0, 0, 0, 1, 0);
+    ins.run("d", "free", now - 50 * 60_000, "quota_exceeded", null, 0, 0, 0, 0, 0);
+    ins.run("old", "pro", now - 3 * 3_600_000, "success", "f", 0, 1, 1, 1, 1);
+    const m = computeMetrics(db, "1h", { now });
+    expect(m.buckets).toHaveLength(12);
+    expect(m.totals).toMatchObject({ requests: 4, modelCalls: 2, fallbackRate: 0.5, p50: 400, p95: 900 });
+    expect(m.totals.outcomes).toEqual({ success: 2, refused: 1, rejected: 1, failed: 0 });
+    expect(m.totals.costUsd).toBeCloseTo(0.003);
+    expect(m.byTenant[0]).toMatchObject({ tenant: "pro", requests: 2 });
+    expect(m.byBackend.map((b) => b.backend).sort()).toEqual(["f", "s"]);
+    // the last bucket is the current (partial) one; the two requests 2 min ago sit in the one before
+    const at = now - 2 * 60_000;
+    expect(m.buckets.find((x) => x.t <= at && at < x.t + m.bucketMs)!.requests).toBe(2);
+    expect(m.buckets.at(-1)!.t).toBeLessThanOrEqual(now);
+    expect(computeMetrics(db, "1h", { now, tenantId: "free" }).totals.requests).toBe(2);
+  });
+  it("groups outcomes into four states", () => {
+    expect(["success", "refused_low_confidence", "quota_exceeded", "partial"].map(outcomeGroup)).toEqual(["success", "refused", "rejected", "failed"]);
   });
 });
