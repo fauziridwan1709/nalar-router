@@ -19,7 +19,10 @@ apps/gateway/     Node ≥22.13 + Express 5 API (TypeScript → dist/). Serves t
 apps/console/     React 19 + Vite console (Playground / Usage / Backends)
 tools/eval/       prepare-data.ts, retrieval-eval.ts, eval.ts, probe.ts; results/ holds committed eval outputs
 data/             kb.json (2,160 KB entries), eval.json (30 held-out), eval-ood.json, eval-hard.json, retrieval-holdout.json
-docs/             REPORT.md (design + results), ARCHITECTURE.md (Mermaid diagrams), API.md, assets/ (banner, screenshots)
+docs/             REPORT.md (design + results), EVALUATION.md (all eval runs), ARCHITECTURE.md (Mermaid diagrams),
+                  API.md, assets/ (banner, screenshots)
+apps/console/src  main.tsx (shell, nav, theme), Overview (dashboard), Playground, Requests (route strip), Tenants,
+                  Backends, Evaluations; charts.tsx (SVG chart primitives), ui.tsx (status, route strip, icons)
 ```
 
 ## Commands (run from the repo root)
@@ -48,6 +51,13 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 - **Every attempt is metered,** including failed ones. `usage_source` is `provider` only when the provider actually reported usage. Otherwise it is `estimated`, or `none` when the provider rejected the call outright.
 - **Routing reasons are data.** If you add a rule, give it a `rule` id and a human-readable `reason` in `planRoute`, and add a test.
 - Prices and thresholds belong in `config.ts`, not inline.
+
+## Agent skills (`.agents/skills`, linked in `.claude/skills`)
+
+- **Console UI work:** read `frontend-design` and `web-design-guidelines`; for React specifics, `vercel-react-best-practices`. Every chart follows the dataviz rules already in `apps/console/src/charts.tsx`: validated palette, one axis, a tooltip, and a table view.
+- **Gateway and API work:** `nodejs-backend-patterns` and `api-and-interface-design`. Keep the error shape and the invariants above.
+- **Always:** `karpathy-guidelines` (surgical changes, verifiable success criteria).
+- **Verifying the running console:** `webapp-testing`. To record the demo video: `product-demo`.
 
 ## Conventions
 

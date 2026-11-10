@@ -65,6 +65,28 @@ This lists every backend, including ones not configured on this host. For each i
 
 The probe only feeds the label. Routing relies on the circuit breaker and fallback.
 
+## `GET /admin/metrics?range=15m|1h|24h|7d&tenant=`
+
+Dashboard aggregates come from the same `requests` table that meters billing and enforces quota, so the charts always agree with both. The response includes:
+- `totals`: requests, success rate, tokens, cost, model calls, fallback rate, p50 and p95 latency, and outcome groups
+- `buckets[]`: the same figures per time bucket. Buckets are aligned to the wall clock: 1 min for `15m`, 5 min for `1h`, 1 h for `24h`, 6 h for `7d`.
+- `byTenant[]` and `byBackend[]` breakdowns
+
+Outcome groups:
+
+| group | outcomes |
+|---|---|
+| `success` | success |
+| `refused` | `refused_*` |
+| `rejected` | quota exceeded, invalid input |
+| `failed` | all backends failed, partial, internal error, aborted |
+
+Latency and fallback rate only count requests that reached a model.
+
+## `GET /admin/evals`
+
+Returns a summary of each committed eval run in `tools/eval/results/*.json`. Per-case rows are left out.
+
 ## Other endpoints
 
 - `GET /v1/usage` returns the calling tenant's usage and remaining quota.

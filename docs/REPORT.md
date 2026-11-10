@@ -174,7 +174,7 @@ Multi-intent ("charged twice … payment methods … refund?"), vague ("it doesn
 
 **Token accounting.** Each row records `usage_source`: `provider` (from the provider's usage report), `estimated` (mock backend, aborted streams), or `none` (the provider rejected the call). I checked the chars/4 estimator against provider counts on the 119 eval calls. It reads **6–17% high** (mean 1.06–1.17×). For quota pre-authorisation that is the safe direction. It means estimated rows overstate cost a little, and they are labelled as estimates.
 
-**Tests.** There are 40 vitest tests on scripted fake backends, with no network. They cover:
+**Tests.** There are 43 vitest tests on scripted fake backends, with no network. They cover:
 - the parser
 - retrieval
 - the routing rules
@@ -187,6 +187,7 @@ Multi-intent ("charged twice … payment methods … refund?"), vague ("it doesn
 - the OpenAI-compatible stream format
 - reasoning streamed separately and only when asked for, and offline backends labelled
 - placeholder extraction, rendering across chunk boundaries, and raw mode
+- dashboard metrics bucketing and percentiles, the attempt trail, and the eval-run listing
 
 ## 6. Trade-offs I accepted
 

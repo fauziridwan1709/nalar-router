@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/fauziridwan1709/nalar-router/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/fauziridwan1709/nalar-router/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-40%20passing-3fb984">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-43%20passing-3fb984">
   <img alt="Intent accuracy" src="https://img.shields.io/badge/intent%20accuracy-100%25%20(30%20held--out)-3fb984">
   <img alt="Hard-case probe" src="https://img.shields.io/badge/hard--case%20probe-8%2F8-3fb984">
   <img alt="Out-of-domain refusals" src="https://img.shields.io/badge/out--of--domain%20refused-5%2F5-3fb984">
@@ -80,12 +80,25 @@
 
 ### Console
 
+An operations console with a left nav, light and dark themes, and charts built to the dataviz method: validated palette, thin marks, one axis, a tooltip on every chart, and a table view for every chart.
+
+- **Overview:** one filter row (15 m, 1 h, 24 h or 7 d, plus tenant) scopes a stat strip and six charts:
+  - requests by outcome (stacked columns)
+  - latency p50 and p95
+  - tokens
+  - fallback rate
+  - cost by tenant
+  - traffic share by backend
+
+  **Run sample traffic** sends 14 real requests through the gateway. Nothing is synthetic.
 - **Playground:** live streaming plus an inspector panel showing the routing decision, the fallback trail, intent and confidence, retrieved entries, tokens, latency and cost.
 - **Model reasoning:** an optional *thinking* panel streams the model's reasoning (gpt-oss on Groq, Qwen thinking on MLX), kept separate from the answer and labelled per attempt.
 - **Step trace:** a timeline of every step with server-side timings: auth and quota, routing, retrieval, scope gate, each attempt, header validation, the commit point, and done.
 - **Online/offline labels** on every backend, from live health probes plus the circuit breaker. On the cloud deployment the local model is listed as *offline: runs on a local machine*.
-- **Usage:** requests, tokens, cost and remaining quota per tenant, with a drill-down into each request.
-- **Backends:** health, circuit breaker state, and fault-injection controls.
+- **Requests:** every metered request, with a **route strip** showing the attempts in order: failed hops struck through, the serving hop outlined. You can filter by tenant, outcome group or fallback, and open a drawer with the routing decision and each attempt.
+- **Tenants and quota:** monthly token and request meters that change colour by severity, cost, in-flight reservations, company profile, and outcome counts.
+- **Backends:** online/offline status, pricing, timeouts, circuit breaker state, and fault injection.
+- **Evaluations:** the committed eval runs, charted one metric at a time.
 
 ## Results
 
@@ -105,7 +118,7 @@ Thirty held-out Bitext cases and five out-of-domain prompts were run end to end 
 - **No raw placeholders:** answers showing raw `{{placeholders}}` dropped from **15/30 to 0/30** with prompt v3 and gateway-side rendering. Intent accuracy is unchanged, and the cost is +7% tokens. See the report for the honest judge numbers.
 - **Token estimates:** my chars/4 estimate runs 6–17% *above* what the provider reports. That is the safe direction for pre-authorising quota.
 
-The full analysis, including what these numbers *don't* show, is in **[docs/REPORT.md](docs/REPORT.md)**. Raw results are in [`tools/eval/results/`](tools/eval/results/).
+Every run, with links to its raw output, is in **[docs/EVALUATION.md](docs/EVALUATION.md)**. The same runs are charted on the console's Evaluations page. The full analysis, including what these numbers *don't* show, is in **[docs/REPORT.md](docs/REPORT.md)**.
 
 ## Architecture
 
@@ -171,17 +184,17 @@ More diagrams (the routing decision tree and the data model) are in **[docs/ARCH
 
 ## Screenshots
 
-**Playground.** Here `groq-fast` returned malformed output, so the router fell back to `groq-strong`. The inspector shows why.
+**Overview.** Traffic, reliability and spend, from the same table that meters billing.
 
-![Playground](docs/assets/console-playground.png)
+![Overview](docs/assets/console-overview.png)
 
-| Request drill-down: routing decision and attempts | Usage: per-tenant quota and cost |
+| Playground: streamed answer, trace, routing, filled placeholders | Requests: the route each request took |
 |---|---|
-| ![Request detail](docs/assets/console-request.png) | ![Usage](docs/assets/console-usage.png) |
-
-**Backends and fault injection**
-
-![Backends](docs/assets/console-backends.png)
+| ![Playground](docs/assets/console-playground.png) | ![Requests](docs/assets/console-requests.png) |
+| **Tenants and quota** | **Evaluations** |
+| ![Tenants](docs/assets/console-tenants.png) | ![Evaluations](docs/assets/console-evaluations.png) |
+| **Backends and fault injection** | **Dark mode** (its own validated steps, not an inversion) |
+| ![Backends](docs/assets/console-backends.png) | ![Overview, dark](docs/assets/console-overview-dark.png) |
 
 ## Quick start
 
@@ -289,6 +302,8 @@ All settings are environment variables, read from `.env` at the repo root (or fr
 | `GET /v1/requests/:id` | tenant key | One of the tenant's own requests, with its attempts |
 | `GET /admin/usage` · `/admin/requests` · `/admin/requests/:id` | admin token | Usage per tenant; request log with routing decision and attempts |
 | `GET /admin/backends` · `PUT /admin/chaos/:backend` · `DELETE /admin/chaos` | admin token | Health, breaker state, fault injection |
+| `GET /admin/metrics?range=15m\|1h\|24h\|7d&tenant=` | admin token | Time-bucketed requests by outcome, tokens, cost, p50/p95 latency and fallback rate, plus per-tenant and per-backend totals |
+| `GET /admin/evals` | admin token | Summaries of the committed eval runs |
 | `POST /admin/tenants/:id/reset-quota` | admin token | Demo helper |
 | `GET /healthz` | — | Liveness check |
 
@@ -313,7 +328,7 @@ Results are written to `tools/eval/results/<timestamp>.{md,json}`. The eval goes
 ## Testing
 
 ```bash
-npm test          # 40 vitest tests, no network (scripted fake backends)
+npm test          # 43 vitest tests, no network (scripted fake backends)
 npm run typecheck
 ```
 
@@ -362,13 +377,30 @@ nalar-router/
 ├── data/                        KB slice + held-out / OOD / hard eval sets (from Bitext)
 ├── docs/
 │   ├── REPORT.md                technical report: design, results, trade-offs
+│   ├── EVALUATION.md            every eval run, with headline numbers and raw output
 │   ├── ARCHITECTURE.md          diagrams
 │   ├── API.md                   API reference
 │   └── assets/                  banner and screenshots
+├── .agents/skills/              project agent skills (pinned in skills-lock.json, linked in .claude/skills)
 ├── .github/workflows/ci.yml
 ├── render.yaml
 └── CLAUDE.md                    notes for coding agents: layout, commands, invariants
 ```
+
+## Agent skills
+
+The repo ships the agent skills used to build and maintain it. They are installed with the [`skills` CLI](https://skills.sh), pinned in `skills-lock.json`, stored in `.agents/skills/`, and symlinked into `.claude/skills/`. Restore them with `npx skills experimental_install`.
+
+| skill | source | used for |
+|---|---|---|
+| `product-demo` | paralect/saas-skills | recording the console demo video |
+| `karpathy-guidelines` | multica-ai/andrej-karpathy-skills | small, verifiable, surgical changes |
+| `frontend-design` | anthropics/skills | console visual direction |
+| `web-design-guidelines` | vercel-labs/agent-skills | UI, accessibility and UX review |
+| `vercel-react-best-practices` | vercel-labs/agent-skills | React correctness and performance |
+| `webapp-testing` | anthropics/skills | Playwright checks of the running console |
+| `nodejs-backend-patterns` | wshobson/agents | gateway service patterns |
+| `api-and-interface-design` | addyosmani/agent-skills | API contracts and error design |
 
 ## Design decisions and trade-offs
 
