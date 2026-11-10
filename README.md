@@ -1,6 +1,6 @@
-# Nalar
+# nalar-router
 
-*Nalar* (Indonesian: reason, common sense) is an LLM gateway with common sense. It doesn't guess and it doesn't overspend.
+*Nalar* is Indonesian for "reason" or "common sense". nalar-router is an LLM gateway with common sense. It doesn't guess and it doesn't overspend.
 
 It is a small LLM gateway with one capability on top of it: a customer-support assistant built on the
 [Bitext customer-support dataset](https://huggingface.co/datasets/bitext/Bitext-customer-support-llm-chatbot-training-dataset).

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file is for coding agents working in **Nalar**. Nalar is an npm-workspaces monorepo for a small LLM gateway with a customer-support capability on top.
+This file is for coding agents working in **nalar-router**. It is an npm-workspaces monorepo for a small LLM gateway with a customer-support capability on top.
 
 ## Layout
 

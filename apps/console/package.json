@@ -1,5 +1,5 @@
 {
-  "name": "@nalar/console",
+  "name": "@nalar-router/console",
   "private": true,
   "type": "module",
   "scripts": {

@@ -1,19 +1,19 @@
 {
-  "name": "nalar",
+  "name": "nalar-router",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "engines": { "node": ">=22.13" },
   "workspaces": ["apps/gateway", "apps/console", "tools/eval"],
   "scripts": {
-    "build": "npm run build -w @nalar/gateway && npm run build -w @nalar/console",
-    "start": "npm start -w @nalar/gateway",
-    "dev": "npm run dev -w @nalar/gateway",
-    "dev:console": "npm run dev -w @nalar/console",
-    "test": "npm test -w @nalar/gateway",
-    "typecheck": "npm run typecheck -w @nalar/gateway && npm run typecheck -w @nalar/console",
-    "prepare-data": "npm run prepare-data -w @nalar/eval",
-    "retrieval-eval": "npm run retrieval-eval -w @nalar/eval",
-    "eval": "npm run eval -w @nalar/eval --"
+    "build": "npm run build -w @nalar-router/gateway && npm run build -w @nalar-router/console",
+    "start": "npm start -w @nalar-router/gateway",
+    "dev": "npm run dev -w @nalar-router/gateway",
+    "dev:console": "npm run dev -w @nalar-router/console",
+    "test": "npm test -w @nalar-router/gateway",
+    "typecheck": "npm run typecheck -w @nalar-router/gateway && npm run typecheck -w @nalar-router/console",
+    "prepare-data": "npm run prepare-data -w @nalar-router/eval",
+    "retrieval-eval": "npm run retrieval-eval -w @nalar-router/eval",
+    "eval": "npm run eval -w @nalar-router/eval --"
   }
 }

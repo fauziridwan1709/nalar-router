@@ -25,7 +25,7 @@ function App() {
     <div className="app">
       <header className="top">
         <div className="brand">
-          <span className="logo">◆</span> Nalar <span className="tagline">LLM gateway with common sense</span>
+          <span className="logo">◆</span> nalar-router <span className="tagline">LLM gateway with common sense</span>
         </div>
         <nav>
           {(["playground", "usage", "backends"] as Tab[]).map((t) => (

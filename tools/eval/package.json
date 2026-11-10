@@ -1,5 +1,5 @@
 {
-  "name": "@nalar/eval",
+  "name": "@nalar-router/eval",
   "version": "1.0.0",
   "private": true,
   "type": "module",

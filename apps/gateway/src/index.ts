@@ -6,7 +6,7 @@ const gw = createGateway(config);
 const app = createApp(gw);
 const server = app.listen(config.port, () => {
   const enabled = gw.backends.filter((b) => b.config.enabled).map((b) => `${b.config.id}(${b.config.model})`);
-  console.log(`nalar gateway on :${config.port} | backends: ${enabled.join(", ")} | KB ${gw.kb.entries.length} entries | demo=${config.demoMode}`);
+  console.log(`nalar-router on :${config.port} | backends: ${enabled.join(", ")} | KB ${gw.kb.entries.length} entries | demo=${config.demoMode}`);
 });
 // streaming responses can legitimately be long; don't let Node cut them
 server.requestTimeout = 0;

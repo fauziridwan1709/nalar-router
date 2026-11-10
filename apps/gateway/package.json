@@ -1,5 +1,5 @@
 {
-  "name": "@nalar/gateway",
+  "name": "@nalar-router/gateway",
   "version": "1.0.0",
   "private": true,
   "type": "module",
