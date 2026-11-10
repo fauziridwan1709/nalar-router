@@ -27,6 +27,8 @@ export interface RetrievalResult {
   topShare: number;
   /** IDF-weighted fraction of query terms found in the top hits (0..1). Low = out of scope. */
   coverage: number;
+  /** absolute IDF mass of query terms found in the top hits (not diluted by extra chatter) */
+  matchedWeight: number;
   queryTerms: string[];
 }
 
@@ -141,6 +143,7 @@ export class Bm25Index {
       topIntent: votes[0]?.intent ?? null,
       topShare: votes[0]?.share ?? 0,
       coverage: totalW ? covered / totalW : 0,
+      matchedWeight: covered,
       queryTerms: qTerms,
     };
   }

@@ -63,6 +63,12 @@ export const config = {
     contextK: 4,
     /** below this lexical coverage the question is treated as out of scope (no model call) */
     minCoverage: num(env.SUPPORT_MIN_COVERAGE, 0.3),
+    /**
+     * The gate only applies to short messages. In long, chatty messages ("third time my package is
+     * late, I'm furious…") coverage is diluted by extra words, so they always go to the model,
+     * which has its own "unknown" escape plus the confidence threshold. Found by the hard-case probe.
+     */
+    gateMaxTerms: num(env.SUPPORT_GATE_MAX_TERMS, 6),
     /** final confidence below this → refuse instead of answering */
     refuseBelow: num(env.SUPPORT_REFUSE_BELOW, 0.5),
     maxAnswerTokens: 800, // gpt-oss reasoning tokens count against max_tokens

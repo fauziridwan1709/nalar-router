@@ -94,6 +94,20 @@ describe("support endpoint", () => {
     expect(r.costUsd).toBe(0);
   });
 
+  it("does not gate long, chatty in-domain messages on lexical coverage (sends them to the model)", async () => {
+    const f = new FakeBackend(cfg("f", "fast"), reply(GOOD));
+    const s = await startServer([f]);
+    close = s.close;
+    const r = await (
+      await post(s.base, "/v1/support/answer", "k-pro", {
+        message: "this is the third time this week, I am honestly furious and exhausted, please just cancel my order",
+        stream: false,
+      })
+    ).json();
+    expect(f.calls).toBe(1);
+    expect(r.outcome).toBe("success");
+  });
+
   it("refuses when the model disagrees with retrieval and confidence is low", async () => {
     const s = await startServer([new FakeBackend(cfg("f", "fast"), reply('{"intent":"get_refund","confidence":0.1}\n###\nRefund stuff'))]);
     close = s.close;

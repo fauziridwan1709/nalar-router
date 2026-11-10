@@ -11,7 +11,18 @@ It is a small LLM gateway with one capability on top of it: a customer-support a
 - **Console** (React): a playground that streams the answer and shows the routing decision, the fallback trail, the intent and confidence, what was retrieved, and tokens, latency and cost. A usage view shows requests, cost and remaining quota per tenant. A backends view lets you inject failures and watch fallback happen.
 - **Eval:** 30 held-out cases plus 5 out-of-domain prompts, scored on intent accuracy, ROUGE-L, an LLM judge, latency and cost, across two configurations.
 
-The design reasoning, the measured results and the trade-offs are in **[docs/REPORT.md](docs/REPORT.md)**.
+**Live:** https://nalar-router.onrender.com. It runs on Render's free tier, so the first request after 15 minutes idle takes about a minute.
+
+**Headline results** (30 held-out cases plus 5 out-of-domain, run through the real gateway):
+
+| | intent accuracy | LLM judge (1–5) | p50 latency | cost per 1k requests |
+|---|---|---|---|---|
+| gpt-oss-20b (fast, default) | 100% | 4.47 | 0.74 s | $0.092 |
+| gpt-oss-120b (strong) | 100% | 4.53 | 0.79 s | $0.185 |
+
+Both models refused all 5 out-of-domain cases and wrongly refused none of the 30 in-domain ones. The hard-case probe (prompt injection, angry, multi-intent, typo'd, Indonesian) scored 8/8. BM25 retrieval alone reaches 94.7% intent accuracy on 1,350 held-out rows.
+
+The design reasoning, the full results and the trade-offs are in **[docs/REPORT.md](docs/REPORT.md)**.
 
 ```
                 ┌───────────────────────────── gateway (Express, Node ≥22) ─────────────────────────────┐
@@ -88,9 +99,10 @@ The full reference is in [docs/API.md](docs/API.md). In short:
 ## Evaluation and tests
 
 ```bash
-npm test                                   # 28 unit + HTTP tests (scripted fake backends, no network)
+npm test                                   # 29 unit + HTTP tests (scripted fake backends, no network)
 npm run retrieval-eval                     # LLM-free retrieval accuracy on 1,350 held-out rows
-npm run eval -- --base http://localhost:3000 --configs groq-fast:v2,groq-strong:v2 --judge groq-strong
+npm run eval -- --base http://localhost:3000 --configs groq-fast:v2,groq-strong:v2 --judge groq-strong --delay 17000
+npm run probe -w @nalar-router/eval -- --base http://localhost:3000 --model groq-fast   # 8 adversarial inputs
 ```
 
 The eval writes results to `tools/eval/results/<timestamp>.{md,json}`. The headline numbers are in the report.

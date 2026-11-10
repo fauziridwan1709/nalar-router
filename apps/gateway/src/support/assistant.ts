@@ -89,7 +89,7 @@ export async function runSupport(
   });
 
   const base = { routeReason, latencyMs: 0 };
-  if (retrieval.coverage < gw.config.support.minCoverage) {
+  if (retrieval.coverage < gw.config.support.minCoverage && retrieval.queryTerms.length <= gw.config.support.gateMaxTerms) {
     sink.emit("refusal", { reason: "out_of_scope", message: OUT_OF_SCOPE_MESSAGE, coverage: round(retrieval.coverage) });
     return {
       ...base, outcome: "refused_out_of_scope", httpStatus: 200, attempts: [], intent: null,

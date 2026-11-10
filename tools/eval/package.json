@@ -6,7 +6,8 @@
   "scripts": {
     "prepare-data": "tsx prepare-data.ts ../../data/raw/bitext.csv",
     "retrieval-eval": "tsx retrieval-eval.ts",
-    "eval": "tsx eval.ts"
+    "eval": "tsx eval.ts",
+    "probe": "tsx probe.ts"
   },
   "devDependencies": {
     "csv-parse": "^7.0.3",

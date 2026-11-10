@@ -48,7 +48,10 @@ for (const c of holdout) {
   shareIn.push(r.topShare);
 }
 const perQueryMs = (performance.now() - t1) / holdout.length;
-const covOod = [...ood.map((o) => o.message), ...extraOod].map((m) => ({ m, cov: idx.search(m, 8).coverage }));
+const covOod = [...ood.map((o) => o.message), ...extraOod].map((m) => {
+  const r = idx.search(m, 8);
+  return { m, cov: r.coverage, terms: r.queryTerms.length };
+});
 
 const pct = (xs: number[], p: number) => [...xs].sort((a, b) => a - b)[Math.floor((xs.length - 1) * p)];
 console.log(`KB entries: ${kb.length}, index build ${buildMs.toFixed(0)} ms, ${perQueryMs.toFixed(2)} ms/query`);
@@ -59,11 +62,13 @@ console.log(
   `  coverage in-domain p01=${pct(covIn, 0.01).toFixed(2)} p05=${pct(covIn, 0.05).toFixed(2)} p50=${pct(covIn, 0.5).toFixed(2)}`,
 );
 console.log(`  top vote share p10=${pct(shareIn, 0.1).toFixed(2)} p50=${pct(shareIn, 0.5).toFixed(2)}`);
+const termsIn = holdout.map((c) => idx.search(c.message, 8).queryTerms.length);
+const MAX_TERMS = 6; // mirrors config.support.gateMaxTerms
 for (const th of [0.2, 0.25, 0.3, 0.34, 0.4, 0.5]) {
-  const falseOut = covIn.filter((c) => c < th).length;
-  const caught = covOod.filter((o) => o.cov < th).length;
+  const falseOut = covIn.filter((c, i) => c < th && termsIn[i] <= MAX_TERMS).length;
+  const caught = covOod.filter((o) => o.cov < th && o.terms <= MAX_TERMS).length;
   console.log(
-    `  gate coverage<${th}: in-domain wrongly gated ${falseOut}/${covIn.length} (${((100 * falseOut) / covIn.length).toFixed(1)}%), OOD caught ${caught}/${covOod.length}`,
+    `  gate coverage<${th} (only if ≤${MAX_TERMS} terms): in-domain wrongly gated ${falseOut}/${covIn.length} (${((100 * falseOut) / covIn.length).toFixed(1)}%), OOD caught ${caught}/${covOod.length}`,
   );
 }
 console.log("OOD coverage:");
