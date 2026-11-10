@@ -65,6 +65,8 @@ describe("support endpoint", () => {
     const detail = await (await fetch(`${s.base}/admin/requests/${r.requestId}`, { headers: { "x-admin-token": "adm" } })).json();
     expect(detail.attempts).toHaveLength(2);
     expect(detail.route_reason.chain).toEqual(["f", "m"]);
+    const list = await (await fetch(`${s.base}/admin/requests`, { headers: { "x-admin-token": "adm" } })).json();
+    expect(list.find((x: any) => x.id === r.requestId).attempt_trail).toBe("f:unusable_output,m:ok");
   });
 
   it("falls back on first-token timeout", async () => {
@@ -191,6 +193,17 @@ describe("reasoning and backend status", () => {
     expect(list.find((b: any) => b.id === "m").health.label).toBe("online");
     const demo = await (await fetch(`${s.base}/api/demo-config`)).json();
     expect(demo.backends.map((b: any) => b.id)).toContain("local");
+  });
+});
+
+describe("eval results", () => {
+  it("lists committed eval runs as summaries (no per-case rows)", async () => {
+    const s = await startServer([new FakeBackend(cfg("f", "fast"), reply("x"))]);
+    close = s.close;
+    const runs = await (await fetch(`${s.base}/admin/evals`, { headers: { "x-admin-token": "adm" } })).json();
+    expect(runs.length).toBeGreaterThan(0);
+    expect(runs[0].configs[0]).toHaveProperty("intentAccuracy");
+    expect(runs[0].configs[0]).not.toHaveProperty("rows");
   });
 });
 
