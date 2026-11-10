@@ -94,10 +94,14 @@ export function getRequestDetail(db: DB, id: string) {
   return { ...r, route_reason: r.route_reason ? JSON.parse(r.route_reason) : null, attempts };
 }
 
+// "backend:outcome,backend:outcome" in attempt order: the route strip in the console
+const TRAIL = `(SELECT group_concat(backend || ':' || outcome, ',') FROM
+  (SELECT backend, outcome FROM attempts a WHERE a.request_id = r.id ORDER BY seq)) AS attempt_trail`;
+
 export function listRequests(db: DB, opts: { tenantId?: string; limit?: number }) {
-  const limit = Math.min(200, Math.max(1, opts.limit ?? 50));
+  const limit = Math.min(500, Math.max(1, opts.limit ?? 50));
   const rows = opts.tenantId
-    ? db.prepare("SELECT * FROM requests WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?").all(opts.tenantId, limit)
-    : db.prepare("SELECT * FROM requests ORDER BY created_at DESC LIMIT ?").all(limit);
+    ? db.prepare(`SELECT r.*, ${TRAIL} FROM requests r WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?`).all(opts.tenantId, limit)
+    : db.prepare(`SELECT r.*, ${TRAIL} FROM requests r ORDER BY created_at DESC LIMIT ?`).all(limit);
   return rows.map((r: any) => ({ ...r, route_reason: r.route_reason ? JSON.parse(r.route_reason) : null }));
 }

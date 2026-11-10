@@ -1,6 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { z, ZodError } from "zod";
 import type { Gateway } from "../gateway.js";
@@ -336,6 +336,22 @@ export function createApp(gw: Gateway) {
     if (!t) throw new GatewayError(404, "not_found", "Tenant not found.");
     resetQuota(gw.db, t.id);
     res.json(getUsage(gw.db, getTenant(gw.db, t.id)!));
+  });
+
+  // committed eval runs (tools/eval/results/*.json), summaries only: the per-case rows stay in the files
+  app.get("/admin/evals", adminAuth, (_req, res) => {
+    const dir = gw.config.evalResultsDir;
+    const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")).sort().reverse() : [];
+    res.json(
+      files.flatMap((f) => {
+        try {
+          const r = JSON.parse(readFileSync(resolve(dir, f), "utf8"));
+          return [{ file: f, stamp: r.stamp, judge: r.judge, n: r.n, configs: r.configs.map(({ rows: _rows, ...c }: any) => c) }];
+        } catch {
+          return [];
+        }
+      }),
+    );
   });
 
   // Demo convenience: lets the hosted console work without copy-pasting keys.

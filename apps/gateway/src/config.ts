@@ -45,6 +45,7 @@ export const config = {
   dbPath: env.DB_PATH ?? resolve(REPO_ROOT, "apps/gateway/var/router.db"),
   dataDir: env.DATA_DIR ?? resolve(REPO_ROOT, "data"),
   consoleDist: env.CONSOLE_DIST ?? resolve(REPO_ROOT, "apps/console/dist"),
+  evalResultsDir: env.EVAL_RESULTS_DIR ?? resolve(REPO_ROOT, "tools/eval/results"),
   /** exposes demo tenant keys + admin token to the console. Never on in a real deployment. */
   demoMode: (env.DEMO_MODE ?? "true") === "true",
   adminToken: env.ADMIN_TOKEN ?? "admin-demo-token",
