@@ -71,7 +71,7 @@ const FALLBACK: Record<string, string> = {
   "Delivery City": "your city",
   "Delivery Country": "your country",
   "Date Range": "the selected period",
-  "Person Name": "",
+  "Person Name": "the person you mentioned",
   "Client Name": "",
   "Client First Name": "",
   "Client Last Name": "",
@@ -163,6 +163,18 @@ export function resolveSlot(name: string, slots: Map<string, SlotValue>): SlotVa
 const DETERMINER = /\b(your|our|the|my|a|an)\s*$/i;
 
 /**
+ * Identifier slots read badly when the sentence already names them:
+ * "the order number {{Order Number}}" → "the order number on file" (not "… your order number").
+ */
+const ID_NOUN: Record<string, string> = {
+  "Order Number": "order number",
+  "Invoice Number": "invoice number",
+  "Tracking Number": "tracking number",
+  "Rebate Tracking Number": "tracking number",
+  "Account Number": "account number",
+};
+
+/**
  * Streaming renderer: placeholders can be split across chunks ("{{Order" + " Number}}"),
  * so text from an unmatched "{{" (or a trailing "{") is held back until it closes.
  */
@@ -207,7 +219,15 @@ export class PlaceholderRenderer {
       let value = v.value;
       const before = out + this.pending.slice(0, open);
       // "on our {{Online Company Portal Info}}" + fallback "your online account" → "on our online account"
-      if (v.source === "fallback" && DETERMINER.test(before)) value = value.replace(/^(your|our|the|my|a|an)\s+/i, "");
+      if (v.source === "fallback") {
+        const noun = ID_NOUN[canonical(normaliseName(name), this.slots)];
+        const tail = before.replace(/["'“‘(\s]+$/, "").toLowerCase();
+        if (noun && (tail.endsWith(noun) || tail.endsWith(noun.split(" ")[0]) || tail.endsWith("number") || tail.endsWith("#"))) {
+          value = "on file";
+        } else if (DETERMINER.test(before)) {
+          value = value.replace(/^(your|our|the|my|a|an)\s+/i, "");
+        }
+      }
       out += this.pending.slice(0, open) + value;
       this.pending = this.pending.slice(close + 2);
     }
