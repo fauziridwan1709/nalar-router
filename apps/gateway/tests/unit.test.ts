@@ -197,6 +197,14 @@ describe("placeholder rendering", () => {
     );
   });
 
+  it("uses already-streamed text as context and handles a currency sign before the slot", () => {
+    const r = new PlaceholderRenderer(buildSlots("ETA please", {}));
+    const out = ["your order with the order ", "number ", "{{Order", " Number}}. Refund of $", "{{", "Refund Amount", "}} is on its way, total $5."]
+      .map((c) => r.push(c))
+      .join("") + r.flush();
+    expect(out).toBe("your order with the order number on file. Refund of the refund amount is on its way, total $5.");
+  });
+
   it("releases text that only looks like an opening brace", () => {
     expect(render(["a { b ", "{{ not closed " + "x".repeat(100)]).text).toContain("{{ not closed");
   });

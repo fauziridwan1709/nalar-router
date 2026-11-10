@@ -180,6 +180,8 @@ const ID_NOUN: Record<string, string> = {
  */
 export class PlaceholderRenderer {
   private pending = "";
+  /** tail of already-emitted text: placeholders are judged in context ("the order number {{…}}") */
+  private recent = "";
   readonly used = new Map<string, SlotValue>();
   private static MAX_SLOT = 80;
 
@@ -191,15 +193,11 @@ export class PlaceholderRenderer {
     for (;;) {
       const open = this.pending.indexOf("{{");
       if (open < 0) {
-        // keep a lone trailing "{" in case the next chunk starts with "{"
-        if (this.pending.endsWith("{")) {
-          out += this.pending.slice(0, -1);
-          this.pending = "{";
-        } else {
-          out += this.pending;
-          this.pending = "";
-        }
-        return this.tidy(out);
+        // hold back a trailing "{", "$" or "${": the next chunk may complete a placeholder
+        const hold = /\$?\{?$/.exec(this.pending)![0];
+        out += this.pending.slice(0, this.pending.length - hold.length);
+        this.pending = hold;
+        return this.emit(out);
       }
       const close = this.pending.indexOf("}}", open);
       if (close < 0) {
@@ -209,15 +207,18 @@ export class PlaceholderRenderer {
           this.pending = this.pending.slice(open + 2);
           continue;
         }
-        out += this.pending.slice(0, open);
-        this.pending = this.pending.slice(open);
-        return this.tidy(out);
+        // waiting for "}}": keep a currency sign directly before "{{" with the placeholder
+        const cut = this.pending[open - 1] === "$" ? open - 1 : open;
+        out += this.pending.slice(0, cut);
+        this.pending = this.pending.slice(cut);
+        return this.emit(out);
       }
       const name = this.pending.slice(open + 2, close);
       const v = resolveSlot(name, this.slots);
       this.used.set(normaliseName(name), v);
       let value = v.value;
-      const before = out + this.pending.slice(0, open);
+      let seg = this.pending.slice(0, open);
+      const before = this.recent + out + seg;
       // "on our {{Online Company Portal Info}}" + fallback "your online account" → "on our online account"
       if (v.source === "fallback") {
         const noun = ID_NOUN[canonical(normaliseName(name), this.slots)];
@@ -227,8 +228,10 @@ export class PlaceholderRenderer {
         } else if (DETERMINER.test(before)) {
           value = value.replace(/^(your|our|the|my|a|an)\s+/i, "");
         }
+        // "${{Refund Amount}}" with no known amount → "the refund amount", not "$the refund amount"
+        if (seg.endsWith("$")) seg = seg.slice(0, -1);
       }
-      out += this.pending.slice(0, open) + value;
+      out += seg + value;
       this.pending = this.pending.slice(close + 2);
     }
   }
@@ -236,7 +239,13 @@ export class PlaceholderRenderer {
   flush(): string {
     const rest = this.pending;
     this.pending = "";
-    return this.tidy(rest);
+    return this.emit(rest);
+  }
+
+  private emit(s: string) {
+    const t = this.tidy(s);
+    this.recent = (this.recent + t).slice(-80);
+    return t;
   }
 
   /** after empty substitutions: "Hello , " → "Hello, " and no doubled spaces */
