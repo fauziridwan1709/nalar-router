@@ -1,0 +1,118 @@
+<!doctype html>
+<!-- The stage record.mjs serves from the app's origin: wallpaper, the app in a
+     rounded window, and the drawn cursor. Placeholders are filled by the script. -->
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body.warm {
+    background:
+      radial-gradient(60% 55% at 12% 8%, rgba(246, 184, 152, 0.75) 0%, rgba(246, 184, 152, 0) 70%),
+      radial-gradient(55% 55% at 92% 90%, rgba(196, 190, 244, 0.85) 0%, rgba(196, 190, 244, 0) 70%),
+      radial-gradient(45% 45% at 85% 12%, rgba(255, 226, 190, 0.8) 0%, rgba(255, 226, 190, 0) 70%),
+      linear-gradient(160deg, #f2ebe6 0%, #ebe6ec 100%);
+  }
+  body.cool {
+    background:
+      radial-gradient(60% 55% at 10% 10%, rgba(178, 214, 255, 0.9) 0%, rgba(178, 214, 255, 0) 70%),
+      radial-gradient(55% 55% at 90% 88%, rgba(186, 240, 222, 0.85) 0%, rgba(186, 240, 222, 0) 70%),
+      linear-gradient(160deg, #eef2f7 0%, #e9eef4 100%);
+  }
+  body.dark {
+    background:
+      radial-gradient(60% 55% at 15% 10%, rgba(120, 90, 160, 0.45) 0%, rgba(120, 90, 160, 0) 70%),
+      radial-gradient(55% 55% at 88% 90%, rgba(217, 119, 87, 0.35) 0%, rgba(217, 119, 87, 0) 70%),
+      linear-gradient(160deg, #1b1a1f 0%, #111014 100%);
+  }
+  body.plain { background: #f4f4f5; }
+  #window {
+    position: absolute;
+    left: __PAD__px; top: __PAD__px;
+    width: __WIN_W__px; height: __WIN_H__px;
+    overflow: hidden;
+    background: #fff;
+  }
+  #window.chrome {
+    border-radius: 16px;
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.06),
+      0 2px 6px rgba(0, 0, 0, 0.06),
+      0 24px 60px -12px rgba(40, 30, 40, 0.28),
+      0 60px 120px -30px rgba(40, 30, 40, 0.25);
+  }
+  body.dark #window.chrome {
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 24px 60px -12px rgba(0, 0, 0, 0.6),
+      0 60px 120px -30px rgba(0, 0, 0, 0.5);
+  }
+  #app { display: block; width: 100%; height: 100%; border: 0; }
+  #cursor, #hand {
+    position: absolute; left: 0; top: 0;
+    pointer-events: none;
+    z-index: 10;
+    transition: transform 90ms ease-out;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.25)) drop-shadow(0 4px 8px rgba(0,0,0,0.18));
+  }
+  #cursor { width: 30px; height: 30px; transform-origin: 6px 4px; }
+  #cursor.down { transform: scale(0.82); }
+  #hand { width: 32px; height: 32px; transform-origin: 13px 3px; display: none; }
+  #hand.down { transform: scale(0.88); }
+  body.pointer #cursor { display: none; }
+  body.pointer #hand { display: block; }
+  .ripple {
+    position: absolute;
+    width: 56px; height: 56px;
+    margin: -28px 0 0 -28px;
+    border-radius: 50%;
+    background: rgba(217, 119, 87, 0.35);
+    border: 1.5px solid rgba(217, 119, 87, 0.5);
+    pointer-events: none;
+    z-index: 9;
+    animation: ripple 520ms ease-out forwards;
+  }
+  @keyframes ripple {
+    from { transform: scale(0.25); opacity: 1; }
+    to { transform: scale(1); opacity: 0; }
+  }
+</style>
+</head>
+<body class="__WALLPAPER__">
+  <div id="window" class="__CHROME__"><iframe id="app" name="app" src="__APP__"></iframe></div>
+  <!-- macOS-style arrow; the tip is the hotspot. -->
+  <svg id="cursor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M5.5 3.2 L5.5 18.6 L9.4 15.1 L12 21.2 L14.9 20 L12.3 14 L17.4 13.7 Z"
+          fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" />
+  </svg>
+  <!-- Pointing hand, shown over anything clickable; the fingertip is the hotspot. -->
+  <svg id="hand" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M9 3.6a1.5 1.5 0 0 1 3 0V11h.6V9.6a1.5 1.5 0 0 1 3 0v1.9h.6v-1a1.5 1.5 0 0 1 3 0v1.6h.6v-.6a1.5 1.5 0 0 1 3 0v5.2c0 3.6-2.6 5.6-6.2 5.6h-2.6c-2.1 0-3.4-.9-4.4-2.4l-3.5-4.9a1.6 1.6 0 0 1 2.5-2L9 14.6Z"
+          fill="#fff" stroke="#111" stroke-width="1.5" stroke-linejoin="round" />
+  </svg>
+  <script>
+    const cursor = document.getElementById("cursor");
+    const hand = document.getElementById("hand");
+    let pos = { x: 0, y: 0 };
+    window.__cursor = (x, y) => {
+      pos = { x, y };
+      cursor.style.left = (x - 6) + "px";
+      cursor.style.top = (y - 4) + "px";
+      hand.style.left = (x - 13) + "px";
+      hand.style.top = (y - 3) + "px";
+    };
+    window.__shape = (pointer) => document.body.classList.toggle("pointer", pointer);
+    window.__press = (down) => {
+      cursor.classList.toggle("down", down);
+      hand.classList.toggle("down", down);
+      if (!down) return;
+      const r = document.createElement("div");
+      r.className = "ripple";
+      r.style.left = pos.x + "px";
+      r.style.top = pos.y + "px";
+      document.body.appendChild(r);
+      r.addEventListener("animationend", () => r.remove());
+    };
+  </script>
+</body>
+</html>
