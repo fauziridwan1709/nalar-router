@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { ApiError, fmtMs, fmtN, fmtUsd, streamSupport, type DemoConfig } from "./api";
 import { LOCATION_LABEL, StatusBadge, statusOf, useBackendStatus } from "./StatusBadge";
+import { Outcome } from "./ui";
 
 const SAMPLES = [
   "how can I cancel my order 12345?",
@@ -32,20 +33,20 @@ interface Turn {
 }
 
 const TRACE_LABEL: Record<string, (d: any) => string> = {
-  meta: (d) => `authenticated · quota admitted (max ${d.admission?.maxCompletionTokens} completion tokens)`,
-  route: (d) => `routed: ${d.rule} → ${d.chain.join(" → ")}`,
-  retrieval: (d) => `retrieved ${d.entries.length} KB entries · top intent ${d.topIntent ?? "–"} · coverage ${d.coverage}`,
+  meta: (d) => `authenticated; quota admitted, up to ${fmtN(d.admission?.maxCompletionTokens)} completion tokens`,
+  route: (d) => `routed by ${d.rule}: ${d.chain.join(" › ")}`,
+  retrieval: (d) => `retrieved ${d.entries.length} KB entries, top intent ${d.topIntent ?? "none"}, coverage ${d.coverage}`,
   step: (d) =>
     d.name === "scope_gate"
-      ? `${d.passed ? "scope gate passed" : "scope gate: refuse"} · ${d.detail}`
+      ? `${d.passed ? "scope check passed" : "scope check: refuse"}: ${d.detail}`
       : d.name === "placeholders_rendered"
         ? `filled ${d.slots.length} placeholder${d.slots.length === 1 ? "" : "s"} (${[...new Set(d.slots.map((x: any) => x.source))].join(", ")})`
-        : `header validated · ${d.detail}`,
-  attempt: (d) => (d.status === "started" ? `attempt #${d.seq} → ${d.backend}` : `attempt #${d.seq} ${d.backend}: ${d.status}${d.error ? ` (${d.error})` : ""}`),
-  intent: (d) => `intent ${d.intent} · confidence ${d.confidence} (${d.label}) · first answer token, committed`,
+        : `header validated: ${d.detail}`,
+  attempt: (d) => (d.status === "started" ? `attempt ${d.seq} sent to ${d.backend}` : `attempt ${d.seq} ${d.backend}: ${d.status.replace(/_/g, " ")}${d.error ? ` (${d.error})` : ""}`),
+  intent: (d) => `intent ${d.intent}, confidence ${d.confidence} (${d.label}); first answer token sent, no fallback after this`,
   refusal: (d) => `refused: ${d.reason}${d.detail ? ` (${d.detail})` : ""}`,
   error: (d) => `error: ${d.code}`,
-  done: (d) => `done · ${d.outcome} · ${fmtN(d.usage?.totalTokens)} tokens · ${fmtUsd(d.costUsd)}`,
+  done: (d) => `metered: ${d.outcome.replace(/_/g, " ")}, ${fmtN(d.usage?.totalTokens)} tokens, ${fmtUsd(d.costUsd)}`,
 };
 
 export function Playground({ cfg }: { cfg: DemoConfig }) {
@@ -113,140 +114,155 @@ export function Playground({ cfg }: { cfg: DemoConfig }) {
   }
 
   return (
-    <div className="playground">
+    <div className="pg">
       <section className="panel controls">
-        <h3>Request</h3>
-        <label>Tenant (API key)</label>
-        <select value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
-          {cfg.tenants.map((t) => (
-            <option key={t.id} value={t.id}>{t.name} – {t.plan}</option>
-          ))}
-        </select>
-        <div className="hint mono">{tenant.apiKey} · tiers: {tenant.allowedTiers.join(", ")}</div>
-        <details className="profile">
-          <summary className="hint">
-            company profile: {Object.keys(tenant.profile ?? {}).length ? `${Object.keys(tenant.profile).length} fields (fills answer placeholders)` : "none, so generic phrases are used"}
-          </summary>
-          <table className="tbl small">
-            <tbody>
-              {Object.entries(tenant.profile ?? {}).map(([k, v]) => (
-                <tr key={k}><td className="mono">{`{{${k}}}`}</td><td>{v}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </details>
-        <label>Model routing</label>
-        <select value={model} onChange={(e) => setModel(e.target.value)}>
-          <option value="auto">auto (router decides)</option>
-          {[...new Set(cfg.backends.map((b) => b.tier))].map((t) => (
-            <option key={t} value={t}>tier: {t}</option>
-          ))}
-          {cfg.backends.map((b) => {
-            const st = statusById[b.id] ? statusOf(statusById[b.id]) : { label: b.enabled ? "online" : "offline" };
-            return (
-              <option key={b.id} value={b.id} disabled={st.label === "offline"}>
-                {st.label === "online" ? "●" : st.label === "degraded" ? "◐" : "○"} backend: {b.id} · {LOCATION_LABEL[b.location] ?? b.location} · {st.label}
-              </option>
-            );
-          })}
-        </select>
-        <div className="backend-strip">
-          {status.map((b) => (
-            <div key={b.id} className="bs" title={`${b.model} · ${statusOf(b).reason}`}>
-              <StatusBadge b={b} />
-              <span className="mono">{b.id}</span>
-              <span className="muted small">{LOCATION_LABEL[b.location] ?? b.location}</span>
-            </div>
-          ))}
-        </div>
-        <label>Prompt version</label>
-        <select value={promptVersion} onChange={(e) => setPromptVersion(e.target.value)}>
-          <option value="v3">v3 – grounded + rendered slots (default)</option>
-          <option value="v2">v2 – grounded</option>
-          <option value="v1">v1 – minimal</option>
-        </select>
-        <label className="check">
-          <input type="checkbox" checked={showReasoning} onChange={(e) => setShowReasoning(e.target.checked)} />
-          Show model reasoning (thinking)
-        </label>
-        {showReasoning && (
-          <div className="hint">
-            Free on Groq (gpt-oss reasons anyway). On <span className="mono">local-qwen</span> it switches Qwen thinking on: about
-            10× slower and about 1k extra tokens.
+        <header><div><h2>Request</h2><p>Calls POST /v1/support/answer as the selected tenant</p></div></header>
+        <div className="body">
+          <label className="field">
+            <span>Tenant</span>
+            <select value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
+              {cfg.tenants.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.plan})</option>)}
+            </select>
+            <span className="hint mono">{tenant.apiKey}</span>
+          </label>
+          <details>
+            <summary className="hint" style={{ cursor: "pointer" }}>
+              Company profile: {Object.keys(tenant.profile ?? {}).length ? `${Object.keys(tenant.profile).length} fields fill answer placeholders` : "none, so answers use generic phrases"}
+            </summary>
+            <table className="table-view" style={{ marginTop: 6 }}>
+              <tbody>
+                {Object.entries(tenant.profile ?? {}).map(([k, v]) => (
+                  <tr key={k}><td className="mono" style={{ textAlign: "left" }}>{`{{${k}}}`}</td><td style={{ textAlign: "left" }}>{v}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
+          <label className="field">
+            <span>Model routing</span>
+            <select value={model} onChange={(e) => setModel(e.target.value)}>
+              <option value="auto">Auto: the router decides</option>
+              {[...new Set(cfg.backends.map((b) => b.tier))].map((t) => <option key={t} value={t}>Pin tier: {t}</option>)}
+              {cfg.backends.map((b) => {
+                const st = statusById[b.id] ? statusOf(statusById[b.id]) : { label: b.enabled ? "online" : "offline" };
+                return (
+                  <option key={b.id} value={b.id} disabled={st.label === "offline"}>
+                    Pin backend: {b.id} ({LOCATION_LABEL[b.location] ?? b.location}, {st.label})
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+          <div className="backend-list" aria-label="Backend status">
+            {status.map((b) => (
+              <div key={b.id} title={`${b.model}: ${statusOf(b).reason}`}>
+                <StatusBadge b={b} />
+                <span className="mono">{b.id}</span>
+                <span className="muted small">{LOCATION_LABEL[b.location] ?? b.location}</span>
+              </div>
+            ))}
           </div>
-        )}
-        <label>Customer message</label>
-        <textarea
-          rows={4}
-          value={msg}
-          onChange={(e) => setMsg(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
-          }}
-        />
-        <div className="row">
-          <button className="primary" disabled={busy || !msg.trim()} onClick={send}>
-            {busy ? "Streaming…" : "Send ⌘↵"}
-          </button>
-          {busy && <button onClick={() => abortRef.current?.abort()}>Stop</button>}
-        </div>
-        <label>Try</label>
-        <div className="samples">
-          {SAMPLES.map((s) => (
-            <button key={s} className="chip" onClick={() => setMsg(s)}>{s}</button>
-          ))}
+          <label className="field">
+            <span>Prompt version</span>
+            <select value={promptVersion} onChange={(e) => setPromptVersion(e.target.value)}>
+              <option value="v3">v3: grounded, gateway fills placeholders (default)</option>
+              <option value="v2">v2: grounded</option>
+              <option value="v1">v1: minimal</option>
+            </select>
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={showReasoning} onChange={(e) => setShowReasoning(e.target.checked)} />
+            Show model reasoning
+          </label>
+          {showReasoning && (
+            <div className="hint">
+              Free on Groq, where gpt-oss reasons anyway. On <span className="mono">local-qwen</span> it turns Qwen thinking on: about 10× slower
+              and about 1k extra tokens.
+            </div>
+          )}
+          <label className="field">
+            <span>Customer message</span>
+            <textarea
+              rows={4}
+              value={msg}
+              onChange={(e) => setMsg(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
+              }}
+            />
+          </label>
+          <div className="filters">
+            <button className="btn primary" style={{ flex: 1, justifyContent: "center" }} disabled={busy || !msg.trim()} onClick={send}>
+              {busy ? "Streaming…" : "Send message"}
+            </button>
+            {busy && <button className="btn" onClick={() => abortRef.current?.abort()}>Stop</button>}
+          </div>
+          <span className="hint">⌘ or Ctrl + Enter sends</span>
+          <div className="field">
+            <span>Try one of these</span>
+            <div className="samples">
+              {SAMPLES.map((s) => <button key={s} onClick={() => setMsg(s)}>{s}</button>)}
+            </div>
+          </div>
         </div>
       </section>
 
-      <section className="panel chat">
-        <h3>Conversation</h3>
-        {turns.length === 0 && <div className="muted">Send a message to see the answer stream in.</div>}
-        {turns.map((t) => (
-          <div key={t.id} className={`turn ${current?.id === t.id ? "sel" : ""}`} onClick={() => setSelected(t.id)}>
-            <div className="q"><span className="who">{t.tenant}</span>{t.question}</div>
-            {t.reasoning.map((r) => (
-              <details key={r.seq} className="thinking" open={t.streaming && !t.answer}>
-                <summary>
-                  💭 thinking · <span className="mono">{r.backend}</span>
-                  {t.attempts.find((a) => a.seq === r.seq && a.status !== "started" && a.status !== "ok") && (
-                    <span className="badge bad">attempt #{r.seq} discarded</span>
+      <section className="panel">
+        <header><div><h2>Conversation</h2><p>Select an answer to inspect how it was produced</p></div></header>
+        <div className="body">
+          {turns.length === 0 && (
+            <div className="empty">
+              <b>No messages yet</b>
+              <p>Send a message to watch the answer stream in, with routing, retrieval, intent, tokens, latency and cost alongside.</p>
+            </div>
+          )}
+          <div className="turns">
+            {turns.map((t) => (
+              <div key={t.id} className="turn" aria-selected={current?.id === t.id} onClick={() => setSelected(t.id)}>
+                <div className="q"><span className="tag">{t.tenant}</span><span>{t.question}</span></div>
+                {t.reasoning.map((r) => (
+                  <details key={r.seq} className="thinking" open={t.streaming && !t.answer}>
+                    <summary>
+                      Reasoning from <span className="mono">{r.backend}</span>
+                      {t.attempts.find((a) => a.seq === r.seq && a.status !== "started" && a.status !== "ok") && <> (attempt {r.seq}, discarded)</>}
+                    </summary>
+                    <div className="thought">{r.text}</div>
+                  </details>
+                ))}
+                <div className={`a ${t.refusal ? "refusal" : ""} ${t.error && !t.answer ? "err" : ""}`}>
+                  {t.refusal ? (
+                    t.refusal.message
+                  ) : t.error && !t.answer ? (
+                    <>{t.error.code}: {t.error.message}</>
+                  ) : (
+                    <>
+                      {t.answer}
+                      {t.streaming && <span className="cursor">▍</span>}
+                      {t.error && <div className="tag bad">{t.error.code}: {t.error.message}</div>}
+                    </>
                   )}
-                  <span className="muted small"> · {r.text.length} chars</span>
-                </summary>
-                <div className="thought">{r.text}</div>
-              </details>
+                </div>
+                <div className="foot">
+                  {t.done && <Outcome outcome={t.done.outcome} />}
+                  {t.refusal && <span className="tag warn">refused: {t.refusal.reason.replace(/_/g, " ")}</span>}
+                  {t.done?.backend && <span className="tag">{t.done.backend}</span>}
+                  {t.done?.fallbackUsed && <span className="tag warn">fallback</span>}
+                  {t.intent && <span className="tag accent">{t.intent.intent}, {t.intent.label}</span>}
+                  {t.done && <span className="num">{fmtN(t.done.usage?.totalTokens)} tokens, {fmtMs(t.done.latencyMs)}, {fmtUsd(t.done.costUsd)}</span>}
+                </div>
+              </div>
             ))}
-            <div className={`a ${t.refusal ? "refusal" : ""} ${t.error && !t.answer ? "err" : ""}`}>
-              {t.refusal ? (
-                <>
-                  <span className="badge warn">refused · {t.refusal.reason}</span> {t.refusal.message}
-                </>
-              ) : t.error && !t.answer ? (
-                <>
-                  <span className="badge bad">{t.error.code}</span> {t.error.message}
-                </>
-              ) : (
-                <>
-                  {t.answer}
-                  {t.streaming && <span className="cursor">▍</span>}
-                  {t.error && <div className="badge bad">{t.error.code}: {t.error.message}</div>}
-                </>
-              )}
-            </div>
-            <div className="foot">
-              {t.done?.backend && <span className="badge">{t.done.backend}</span>}
-              {t.done?.fallbackUsed && <span className="badge warn">fallback</span>}
-              {t.intent && <span className="badge ok">{t.intent.intent} · {t.intent.label}</span>}
-              {t.done && <span className="muted small">{fmtN(t.done.usage?.totalTokens)} tok · {fmtMs(t.done.latencyMs)} · {fmtUsd(t.done.costUsd)}</span>}
-            </div>
           </div>
-        ))}
+        </div>
       </section>
 
       <section className="panel inspector">
-        <h3>Inspector {current?.meta && <span className="mono small muted">{current.meta.requestId}</span>}</h3>
-        {!current && <div className="muted">Details for the selected answer appear here.</div>}
-        {current && <Inspector t={current} />}
+        <header>
+          <div>
+            <h2>Inspector</h2>
+            <p className="mono">{current?.meta?.requestId ?? "no request selected"}</p>
+          </div>
+        </header>
+        <div className="body">{current ? <Inspector t={current} /> : <div className="muted small">Details for the selected answer appear here.</div>}</div>
       </section>
     </div>
   );
@@ -254,148 +270,130 @@ export function Playground({ cfg }: { cfg: DemoConfig }) {
 
 function Inspector({ t }: { t: Turn }) {
   const d = t.done;
+  const ph = t.trace.find((s) => s.event === "step" && s.data.name === "placeholders_rendered")?.data;
   return (
-    <div className="insp">
+    <div>
       <div className="metrics">
-        <Metric k="Served by" v={d?.backend ?? (t.streaming ? "…" : "–")} sub={d?.model} />
-        <Metric k="Fallback" v={d ? (d.fallbackUsed ? "yes" : "no") : "…"} tone={d?.fallbackUsed ? "warn" : undefined} />
-        <Metric k="Outcome" v={d?.outcome ?? (t.error ? t.error.code : "…")} tone={d?.outcome === "success" ? "ok" : d ? "warn" : undefined} />
-        <Metric k="Tokens" v={d?.usage ? `${fmtN(d.usage.promptTokens)} in / ${fmtN(d.usage.completionTokens)} out` : "–"} sub={d?.usage?.source && `source: ${d.usage.source}`} />
+        <Metric k="Served by" v={d?.backend ?? (t.streaming ? "…" : "none")} sub={d?.model} />
+        <Metric k="Fallback" v={d ? (d.fallbackUsed ? "Yes" : "No") : "…"} />
+        <Metric k="Tokens" v={d?.usage ? `${fmtN(d.usage.promptTokens)} in, ${fmtN(d.usage.completionTokens)} out` : "–"} sub={d?.usage?.source && `from ${d.usage.source}`} />
         <Metric k="Latency" v={fmtMs(d?.latencyMs)} sub={d?.ttftMs != null ? `first token ${fmtMs(d.ttftMs)}` : undefined} />
-        <Metric k="Est. cost" v={fmtUsd(d?.costUsd)} sub={d?.quota && `${fmtN(d.quota.tokensRemaining)} tok / ${fmtN(d.quota.requestsRemaining)} req left`} />
+        <Metric k="Estimated cost" v={fmtUsd(d?.costUsd)} sub={d?.quota && `${fmtN(d.quota.tokensRemaining)} tokens left this month`} />
+        <Metric k="Outcome" v={d ? d.outcome.replace(/_/g, " ") : t.error ? t.error.code : "…"} />
       </div>
 
       {t.trace.length > 0 && (
-        <Block title="Trace (server time)">
+        <div className="section">
+          <h4>Trace, server time</h4>
           <ol className="trace">
-            {t.trace.map((s, i) => (
-              <li key={i} className={`tr-${s.event}${s.event === "attempt" && s.data.status !== "started" && s.data.status !== "ok" ? " bad" : ""}`}>
-                <span className="mono tt">+{s.t} ms</span>
-                <span>{(TRACE_LABEL[s.event] ?? (() => s.event))(s.data)}</span>
-              </li>
-            ))}
+            {t.trace.map((s, i) => {
+              const bad = (s.event === "attempt" && s.data.status !== "started" && s.data.status !== "ok" && s.data.status !== "refused") || s.event === "error";
+              const ok = s.event === "intent" || (s.event === "done" && s.data.outcome === "success");
+              const warn = s.event === "refusal" || (s.event === "step" && s.data.name === "scope_gate" && !s.data.passed);
+              return (
+                <li key={i} className={bad ? "bad" : ok ? "ok" : warn ? "warn" : ""}>
+                  <span className="tt">+{s.t} ms</span>
+                  <span>{(TRACE_LABEL[s.event] ?? (() => s.event))(s.data)}</span>
+                </li>
+              );
+            })}
           </ol>
-        </Block>
+        </div>
       )}
 
       {t.error?.details && (
-        <Block title="Error details">
-          <pre>{JSON.stringify(t.error.details, null, 2)}</pre>
-        </Block>
+        <div className="section"><h4>Error details</h4><pre>{JSON.stringify(t.error.details, null, 2)}</pre></div>
       )}
 
       {t.route && (
-        <Block title="Routing decision">
-          <div><span className="badge">{t.route.rule}</span></div>
-          <div className="small">{t.route.reason}</div>
-          <div className="chain">
-            {t.route.chain.map((c: string, i: number) => (
-              <span key={c}>{i > 0 && " → "}<span className="mono">{c}</span></span>
-            ))}
-          </div>
-        </Block>
+        <div className="section">
+          <h4>Routing decision</h4>
+          <div><span className="tag accent">{t.route.rule}</span> <span className="small">{t.route.reason}</span></div>
+          <div className="mono small muted" style={{ marginTop: 4 }}>chain: {t.route.chain.join(" › ")}</div>
+        </div>
       )}
 
-      <Block title="Attempts (fallback trail)">
-        {t.attempts.length === 0 && <div className="muted small">{t.refusal?.reason === "out_of_scope" && !t.attempts.length ? "No model call: refused by retrieval gate." : "–"}</div>}
-        <table className="tbl small">
-          <tbody>
-            {t.attempts.map((a) => (
-              <tr key={a.seq}>
-                <td>#{a.seq}</td>
-                <td className="mono">{a.backend}</td>
-                <td><span className={`badge ${a.status === "ok" ? "ok" : a.status === "started" ? "" : a.status === "refused" ? "warn" : "bad"}`}>{a.status}</span></td>
-                <td>{a.latencyMs != null ? fmtMs(a.latencyMs) : "…"}</td>
-                <td>{a.promptTokens != null ? `${a.promptTokens}/${a.completionTokens}` : ""}</td>
-                <td>{a.costUsd != null ? fmtUsd(a.costUsd) : ""}</td>
-              </tr>
-            ))}
-            {t.attempts.filter((a) => a.error).map((a) => (
-              <tr key={`e${a.seq}`}><td colSpan={6} className="muted small">#{a.seq}: {a.error}</td></tr>
-            ))}
-          </tbody>
-        </table>
-      </Block>
+      {t.attempts.length > 0 && (
+        <div className="section">
+          <h4>Attempts</h4>
+          <table className="tbl small">
+            <tbody>
+              {t.attempts.map((a) => (
+                <tr key={a.seq}>
+                  <td>{a.seq}</td>
+                  <td className="mono">{a.backend}</td>
+                  <td><span className={`tag ${a.status === "ok" ? "good" : a.status === "started" ? "" : a.status === "refused" ? "warn" : "bad"}`}>{a.status.replace(/_/g, " ")}</span></td>
+                  <td className="r">{a.latencyMs != null ? fmtMs(a.latencyMs) : "…"}</td>
+                  <td className="r">{a.promptTokens != null ? `${a.promptTokens} / ${a.completionTokens}` : ""}</td>
+                  <td className="r">{a.costUsd != null ? fmtUsd(a.costUsd) : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {t.attempts.filter((a) => a.error).map((a) => <div key={a.seq} className="muted small">Attempt {a.seq}: {a.error}</div>)}
+        </div>
+      )}
 
       {(t.intent || t.refusal?.intent) && (
-        <Block title="Intent & confidence">
+        <div className="section">
+          <h4>Intent and confidence</h4>
           {t.intent ? (
             <>
-              <div><b>{t.intent.intent}</b> <span className="badge">{t.intent.label}</span> {!t.intent.agreesWithRetrieval && <span className="badge warn">disagrees with retrieval</span>}</div>
-              <Bar v={t.intent.confidence} />
-              <div className="small muted">
-                0.45 × retrieval vote {t.intent.components.retrievalVote} + 0.35 × coverage {t.intent.components.coverage} + 0.20 × model {t.intent.components.model}
+              <div><b>{t.intent.intent}</b> <span className="tag">{t.intent.label}</span> {!t.intent.agreesWithRetrieval && <span className="tag warn">disagrees with retrieval</span>}</div>
+              <div className="bar" role="meter" aria-valuenow={t.intent.confidence} aria-valuemin={0} aria-valuemax={1} aria-label="confidence">
+                <div style={{ width: `${Math.round(t.intent.confidence * 100)}%` }} />
+              </div>
+              <div className="small muted num">
+                {t.intent.confidence.toFixed(2)} = 0.45 × retrieval vote {t.intent.components.retrievalVote} + 0.35 × coverage {t.intent.components.coverage} + 0.20 × model {t.intent.components.model}
               </div>
             </>
           ) : (
-            <div className="small">model said <b>{t.refusal.intent}</b>, confidence {t.refusal.confidence} → refused ({t.refusal.detail})</div>
+            <div className="small">The model said <b>{t.refusal.intent}</b> with confidence {t.refusal.confidence}, so the assistant refused ({t.refusal.detail}).</div>
           )}
-        </Block>
+        </div>
       )}
 
-      {(() => {
-        const ph = t.trace.find((s) => s.event === "step" && s.data.name === "placeholders_rendered")?.data;
-        if (!ph) return null;
-        return (
-          <Block title="Filled placeholders (by the gateway, not the model)">
-            <table className="tbl small">
-              <tbody>
-                {ph.slots.map((x: any) => (
-                  <tr key={x.name}>
-                    <td className="mono">{`{{${x.name}}}`}</td>
-                    <td>{x.value || <span className="muted">(removed)</span>}</td>
-                    <td><span className={`badge ${x.source === "fallback" ? "warn" : x.source === "message" ? "ok" : ""}`}>{x.source}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Block>
-        );
-      })()}
+      {ph && (
+        <div className="section">
+          <h4>Placeholders filled by the gateway</h4>
+          <table className="tbl small">
+            <tbody>
+              {ph.slots.map((x: any) => (
+                <tr key={x.name}>
+                  <td className="mono">{`{{${x.name}}}`}</td>
+                  <td>{x.value || <span className="muted">removed</span>}</td>
+                  <td><span className={`tag ${x.source === "fallback" ? "warn" : x.source === "message" ? "good" : ""}`}>{x.source.replace("_", " ")}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {t.retrieval && (
-        <Block title={`Retrieved (coverage ${t.retrieval.coverage}) · raw KB text`}>
-          <div className="small">
-            {t.retrieval.votes.map((v: any) => (
-              <span key={v.intent} className="badge">{v.intent} {Math.round(v.share * 100)}%</span>
-            ))}
+        <div className="section">
+          <h4>Retrieved knowledge base entries (raw text, coverage {t.retrieval.coverage})</h4>
+          <div className="filters small">
+            {t.retrieval.votes.map((v: any) => <span key={v.intent} className="tag">{v.intent} {Math.round(v.share * 100)}%</span>)}
           </div>
           {t.retrieval.entries.map((e: any) => (
             <details key={e.id} className="kb">
-              <summary>
-                <span className="mono small">{e.score}</span> <span className="badge">{e.intent}</span> {e.question}
-              </summary>
-              <div className="small pre">{e.answer}</div>
+              <summary><span className="num muted">{e.score}</span> <span className="tag">{e.intent}</span> {e.question}</summary>
+              <div className="small pre ink2">{e.answer}</div>
             </details>
           ))}
-        </Block>
+        </div>
       )}
     </div>
   );
 }
 
-function Metric({ k, v, sub, tone }: { k: string; v: string; sub?: string | false; tone?: string }) {
+function Metric({ k, v, sub }: { k: string; v: string; sub?: string | false }) {
   return (
-    <div className={`metric ${tone ?? ""}`}>
+    <div className="metric">
       <div className="k">{k}</div>
       <div className="v">{v}</div>
       {sub && <div className="s">{sub}</div>}
-    </div>
-  );
-}
-function Block({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="block">
-      <div className="bt">{title}</div>
-      {children}
-    </div>
-  );
-}
-function Bar({ v }: { v: number }) {
-  return (
-    <div className="bar">
-      <div style={{ width: `${Math.round(v * 100)}%` }} className={v >= 0.75 ? "ok" : v >= 0.5 ? "mid" : "low"} />
-      <span>{v.toFixed(2)}</span>
     </div>
   );
 }
