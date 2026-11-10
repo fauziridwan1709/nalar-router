@@ -19,6 +19,7 @@ export class OpenAICompatBackend implements Backend {
       max_tokens: req.maxTokens,
       temperature: req.temperature ?? 0.2,
       ...(this.config.extraBody ?? {}),
+      ...(this.config.reasoningBody ? (req.includeReasoning ? this.config.reasoningBody.on : this.config.reasoningBody.off) : {}),
     };
     let res: Response;
     try {
@@ -60,7 +61,11 @@ export class OpenAICompatBackend implements Backend {
           continue; // tolerate keep-alives / partial junk lines
         }
         if (json.error) throw new BackendError("error", `provider error: ${JSON.stringify(json.error).slice(0, 300)}`);
-        const text = json.choices?.[0]?.delta?.content;
+        const delta = json.choices?.[0]?.delta;
+        // Groq gpt-oss and mlx_lm use `reasoning`; vLLM/DeepSeek-style servers use `reasoning_content`
+        const thought = delta?.reasoning ?? delta?.reasoning_content;
+        if (typeof thought === "string" && thought.length) yield { type: "reasoning", text: thought };
+        const text = delta?.content;
         if (typeof text === "string" && text.length) yield { type: "text", text };
         const usage = json.usage ?? json.x_groq?.usage;
         if (usage && !sawUsage && typeof usage.prompt_tokens === "number") {

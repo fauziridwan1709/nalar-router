@@ -11,6 +11,8 @@ export type Tier = "fast" | "strong" | "local" | "degraded";
 
 export interface BackendConfig {
   id: string;
+  /** where the model runs: shown in the console next to the online/offline label */
+  location: "cloud" | "local" | "built-in";
   kind: "openai-compatible" | "mock";
   tier: Tier;
   model: string;
@@ -18,6 +20,8 @@ export interface BackendConfig {
   apiKey?: string;
   /** provider-specific body fields (e.g. reasoning_effort) */
   extraBody?: Record<string, unknown>;
+  /** body fields that switch reasoning output on / off for this provider */
+  reasoningBody?: { on: Record<string, unknown>; off: Record<string, unknown> };
   priceInPerM: number;
   priceOutPerM: number;
   /** abort and fall back if no first token by then */
@@ -52,6 +56,12 @@ export const config = {
     ambiguousVoteShare: num(env.ROUTE_AMBIGUOUS_VOTE_SHARE, 0.6),
   },
 
+  health: {
+    /** how often enabled backends are probed (GET {baseUrl}/models) for the online/offline label */
+    intervalMs: num(env.HEALTH_INTERVAL_MS, 30_000),
+    timeoutMs: 4_000,
+  },
+
   breaker: {
     failureThreshold: num(env.BREAKER_FAILURES, 3),
     openMs: num(env.BREAKER_OPEN_MS, 30_000),
@@ -72,6 +82,8 @@ export const config = {
     /** final confidence below this → refuse instead of answering */
     refuseBelow: num(env.SUPPORT_REFUSE_BELOW, 0.5),
     maxAnswerTokens: 800, // gpt-oss reasoning tokens count against max_tokens
+    /** extra completion budget when the caller asks to see reasoning (thinking models spend it before answering) */
+    reasoningExtraTokens: 1200,
     defaultPromptVersion: (env.SUPPORT_PROMPT_VERSION ?? "v2") as "v1" | "v2",
   },
 
@@ -79,11 +91,14 @@ export const config = {
     {
       id: "groq-fast",
       kind: "openai-compatible",
+      location: "cloud",
       tier: "fast",
       model: env.GROQ_FAST_MODEL ?? "openai/gpt-oss-20b",
       baseUrl: "https://api.groq.com/openai/v1",
       apiKey: env.GROQ_API_KEY,
-      extraBody: { reasoning_effort: "low", include_reasoning: false },
+      extraBody: { reasoning_effort: "low" },
+      // gpt-oss reasons either way (and it is billed either way); this only controls whether we receive it
+      reasoningBody: { on: { include_reasoning: true }, off: { include_reasoning: false } },
       priceInPerM: 0.075,
       priceOutPerM: 0.3,
       firstTokenTimeoutMs: num(env.GROQ_TTFT_TIMEOUT_MS, 6_000),
@@ -93,11 +108,14 @@ export const config = {
     {
       id: "groq-strong",
       kind: "openai-compatible",
+      location: "cloud",
       tier: "strong",
       model: env.GROQ_STRONG_MODEL ?? "openai/gpt-oss-120b",
       baseUrl: "https://api.groq.com/openai/v1",
       apiKey: env.GROQ_API_KEY,
-      extraBody: { reasoning_effort: "low", include_reasoning: false },
+      extraBody: { reasoning_effort: "low" },
+      // gpt-oss reasons either way (and it is billed either way); this only controls whether we receive it
+      reasoningBody: { on: { include_reasoning: true }, off: { include_reasoning: false } },
       priceInPerM: 0.15,
       priceOutPerM: 0.6,
       firstTokenTimeoutMs: num(env.GROQ_TTFT_TIMEOUT_MS, 8_000),
@@ -109,13 +127,17 @@ export const config = {
       // (`mlx_lm.server`); point LOCAL_LLM_BASE_URL at Ollama (http://localhost:11434/v1) to use that instead.
       id: "local-qwen",
       kind: "openai-compatible",
+      location: "local",
       tier: "local",
       model: env.LOCAL_LLM_MODEL ?? "mlx-community/Qwen3.5-4B-MLX-4bit",
       baseUrl: env.LOCAL_LLM_BASE_URL ?? "http://127.0.0.1:8080/v1",
       apiKey: "local",
-      extraBody: env.LOCAL_LLM_EXTRA_BODY
-        ? JSON.parse(env.LOCAL_LLM_EXTRA_BODY)
-        : { chat_template_kwargs: { enable_thinking: false } },
+      extraBody: env.LOCAL_LLM_EXTRA_BODY ? JSON.parse(env.LOCAL_LLM_EXTRA_BODY) : {},
+      // Qwen3.5 thinking is a real cost here (≈ seconds of extra latency on a laptop), so it is opt-in
+      reasoningBody: {
+        on: { chat_template_kwargs: { enable_thinking: true } },
+        off: { chat_template_kwargs: { enable_thinking: false } },
+      },
       // marginal $ cost of a local model is ~0; we record 0 and say so in the report
       priceInPerM: 0,
       priceOutPerM: 0,
@@ -126,6 +148,7 @@ export const config = {
     {
       id: "mock",
       kind: "mock",
+      location: "built-in",
       tier: "degraded",
       model: "extractive-kb-v1",
       priceInPerM: 0,

@@ -5,8 +5,14 @@ export interface EventSink {
 }
 
 /** Server-Sent Events over a POST response. */
+const stamp = (event: string, data: unknown, start: number) =>
+  event === "token" || event === "reasoning" || typeof data !== "object" || data === null || Array.isArray(data)
+    ? data
+    : { ...(data as object), t: Date.now() - start };
+
 export class SseSink implements EventSink {
   private heartbeat: NodeJS.Timeout;
+  private start = Date.now();
   constructor(private res: Response) {
     res.status(200);
     res.setHeader("content-type", "text/event-stream; charset=utf-8");
@@ -21,7 +27,7 @@ export class SseSink implements EventSink {
     if (!this.res.writableEnded && !this.res.destroyed) this.res.write(s);
   }
   emit(event: string, data: unknown) {
-    this.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    this.write(`event: ${event}\ndata: ${JSON.stringify(stamp(event, data, this.start))}\n\n`);
   }
   end() {
     clearInterval(this.heartbeat);
@@ -33,9 +39,12 @@ export class SseSink implements EventSink {
 export class CollectSink implements EventSink {
   events: { event: string; data: any }[] = [];
   answer = "";
+  reasoning: Record<string, string> = {};
+  private start = Date.now();
   emit(event: string, data: any) {
     if (event === "token") this.answer += data.text;
-    else this.events.push({ event, data });
+    else if (event === "reasoning") this.reasoning[data.backend] = (this.reasoning[data.backend] ?? "") + data.text;
+    else this.events.push({ event, data: stamp(event, data, this.start) });
   }
   last(event: string) {
     return [...this.events].reverse().find((e) => e.event === event)?.data;

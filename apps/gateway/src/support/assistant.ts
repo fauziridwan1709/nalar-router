@@ -31,9 +31,11 @@ export interface SupportInput {
   message: string;
   model?: string;
   promptVersion: PromptVersion;
+  includeReasoning?: boolean;
 }
 
 export interface Prepared {
+  includeReasoning: boolean;
   retrieval: RetrievalResult;
   plan: RoutePlan;
   messages: ReturnType<typeof buildSupportMessages>;
@@ -52,7 +54,7 @@ export function prepareSupport(gw: Gateway, tenant: Tenant, input: SupportInput)
   const contextHits = retrieval.hits.slice(0, input.promptVersion === "v1" ? 2 : gw.config.support.contextK);
   const messages = buildSupportMessages(input.promptVersion, input.message, contextHits, gw.intents);
   const estimatedPromptTokens = messages.reduce((n, m) => n + estimateTokens(m.content) + 4, 2);
-  return { retrieval, plan, messages, estimatedPromptTokens };
+  return { retrieval, plan, messages, estimatedPromptTokens, includeReasoning: !!input.includeReasoning };
 }
 
 export function confidenceOf(r: RetrievalResult, intent: string, modelConfidence: number) {
@@ -89,7 +91,18 @@ export async function runSupport(
   });
 
   const base = { routeReason, latencyMs: 0 };
-  if (retrieval.coverage < gw.config.support.minCoverage && retrieval.queryTerms.length <= gw.config.support.gateMaxTerms) {
+  const gated =
+    retrieval.coverage < gw.config.support.minCoverage && retrieval.queryTerms.length <= gw.config.support.gateMaxTerms;
+  sink.emit("step", {
+    name: "scope_gate",
+    passed: !gated,
+    detail: gated
+      ? `short message (${retrieval.queryTerms.length} terms) with coverage ${round(retrieval.coverage)} < ${gw.config.support.minCoverage}: refuse without a model call`
+      : retrieval.queryTerms.length > gw.config.support.gateMaxTerms
+        ? `long message (${retrieval.queryTerms.length} terms): lexical gate skipped, model decides scope`
+        : `coverage ${round(retrieval.coverage)} ≥ ${gw.config.support.minCoverage}: in scope`,
+  });
+  if (gated) {
     sink.emit("refusal", { reason: "out_of_scope", message: OUT_OF_SCOPE_MESSAGE, coverage: round(retrieval.coverage) });
     return {
       ...base, outcome: "refused_out_of_scope", httpStatus: 200, attempts: [], intent: null,
@@ -108,9 +121,14 @@ export async function runSupport(
     chain: plan.chain,
     breaker: gw.breaker,
     messages: p.messages,
-    maxTokens: Math.min(gw.config.support.maxAnswerTokens, ctx.maxCompletionTokens),
+    maxTokens: Math.min(
+      gw.config.support.maxAnswerTokens + (p.includeReasoning ? gw.config.support.reasoningExtraTokens : 0),
+      ctx.maxCompletionTokens,
+    ),
     temperature: 0.2,
     clientSignal: ctx.clientSignal,
+    includeReasoning: p.includeReasoning,
+    onReasoning: (r) => sink.emit("reasoning", r),
     hints: topEntry
       ? { extractive: { intent: topEntry.intent, answer: topEntry.answer, confidence: retrieval.topShare } }
       : undefined,
@@ -122,6 +140,11 @@ export async function runSupport(
       let committed = false;
       const decide = () => {
         const h = parser.parsedHeader!;
+        sink.emit("step", {
+          name: "header_validated",
+          backend: actx.backend.config.id,
+          detail: `model said intent=${h.intent}, self-confidence ${h.modelConfidence}`,
+        });
         if (h.intent === "unknown") throw new StopRequest("model classified the message as out of scope");
         const conf = confidenceOf(retrieval, h.intent, h.modelConfidence);
         if (conf.value < gw.config.support.refuseBelow) {

@@ -9,6 +9,7 @@ import { MockBackend } from "./backends/mock.js";
 import { ChaosRegistry, withChaos } from "./backends/chaos.js";
 import { CircuitBreaker } from "./router/breaker.js";
 import { Bm25Index, type KbEntry } from "./support/retrieval.js";
+import { HealthMonitor } from "./health.js";
 
 export interface Gateway {
   config: Config;
@@ -18,6 +19,8 @@ export interface Gateway {
   chaos: ChaosRegistry;
   kb: Bm25Index;
   intents: string[];
+  /** online/offline probes; started by index.ts, not in tests */
+  health: HealthMonitor;
 }
 
 export function buildBackend(cfg: BackendConfig): Backend {
@@ -41,5 +44,6 @@ export function createGateway(
     chaos,
     kb: new Bm25Index(kbEntries),
     intents,
+    health: new HealthMonitor(backends, config.health),
   };
 }

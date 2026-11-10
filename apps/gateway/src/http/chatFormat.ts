@@ -38,6 +38,9 @@ export class ChatSseSink implements EventSink {
       case "token":
         this.chunk({ content: data.text }, null);
         break;
+      case "reasoning":
+        this.chunk({ reasoning: data.text }, null, { x_router_backend: data.backend });
+        break;
       case "error":
         this.write(`data: ${JSON.stringify({ error: data })}\n\n`);
         break;
@@ -74,6 +77,11 @@ export function chatCompletionJson(s: CollectSink, done: any) {
       prompt_tokens: done.usage.promptTokens, completion_tokens: done.usage.completionTokens, total_tokens: done.usage.totalTokens,
     },
     ...(err ? { error: err } : {}),
-    x_router: { ...done, route: s.last("route"), attempts: s.all("attempt").filter((a: any) => a.status !== "started") },
+    x_router: {
+      ...done,
+      route: s.last("route"),
+      attempts: s.all("attempt").filter((a: any) => a.status !== "started"),
+      ...(Object.keys(s.reasoning).length ? { reasoning: s.reasoning } : {}),
+    },
   };
 }

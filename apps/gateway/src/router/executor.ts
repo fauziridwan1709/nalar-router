@@ -60,6 +60,9 @@ export interface ExecuteOptions {
   maxTokens: number;
   temperature?: number;
   hints?: BackendRequest["hints"];
+  includeReasoning?: boolean;
+  /** reasoning is diagnostic only: it is forwarded as-is, never parsed, and is not the commit point */
+  onReasoning?: (info: { seq: number; backend: string; text: string }) => void;
   clientSignal: AbortSignal;
   consume: (text: AsyncIterable<string>, ctx: ConsumeContext) => Promise<void>;
   onAttemptStart?: (info: { seq: number; backend: string; model: string }) => void;
@@ -115,6 +118,7 @@ export async function executeWithFallback(o: ExecuteOptions): Promise<ExecuteRes
 
     let ttft: number | undefined;
     let produced = "";
+    let reasoned = "";
     let usage: { promptTokens: number; completionTokens: number } | null = null;
     let committed = false;
     let requestSent = false;
@@ -122,9 +126,15 @@ export async function executeWithFallback(o: ExecuteOptions): Promise<ExecuteRes
     async function* text(): AsyncIterable<string> {
       requestSent = true;
       for await (const c of backend.stream({
-        messages: o.messages, maxTokens: o.maxTokens, temperature: o.temperature, hints: o.hints, signal: ac.signal,
+        messages: o.messages, maxTokens: o.maxTokens, temperature: o.temperature, hints: o.hints,
+        includeReasoning: o.includeReasoning, signal: ac.signal,
       })) {
-        if (c.type === "text") {
+        if (c.type === "reasoning") {
+          // a thinking model is alive even before its first answer token: stop the first-token timer
+          clearTimeout(ttftTimer);
+          reasoned += c.text;
+          o.onReasoning?.({ seq, backend: cfg.id, text: c.text });
+        } else if (c.type === "text") {
           if (ttft === undefined) {
             ttft = now() - started;
             clearTimeout(ttftTimer);
@@ -172,9 +182,9 @@ export async function executeWithFallback(o: ExecuteOptions): Promise<ExecuteRes
       promptTokens = u.promptTokens;
       completionTokens = u.completionTokens;
       usageSource = cfg.kind === "mock" ? "estimated" : "provider";
-    } else if (requestSent && !(err?.kind === "http" || (err?.kind === "error" && !produced))) {
+    } else if (requestSent && !(err?.kind === "http" || (err?.kind === "error" && !produced && !reasoned))) {
       promptTokens = estimateMessagesTokens(o.messages);
-      completionTokens = estimateTokens(produced);
+      completionTokens = estimateTokens(produced) + estimateTokens(reasoned); // reasoning tokens are billed too
       usageSource = "estimated";
     }
     const rec: AttemptRecord = {

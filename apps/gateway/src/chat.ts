@@ -30,7 +30,14 @@ export async function runChat(
   gw: Gateway,
   plan: RoutePlan,
   messages: ChatMessage[],
-  ctx: { maxCompletionTokens: number; temperature?: number; sink: EventSink; clientSignal: AbortSignal; startedAt: number },
+  ctx: {
+    maxCompletionTokens: number;
+    temperature?: number;
+    includeReasoning?: boolean;
+    sink: EventSink;
+    clientSignal: AbortSignal;
+    startedAt: number;
+  },
 ): Promise<RunResult> {
   const routeReason = { rule: plan.rule, reason: plan.reason, chain: plan.chain.map((b) => b.config.id), signals: plan.signals };
   ctx.sink.emit("route", routeReason);
@@ -42,6 +49,8 @@ export async function runChat(
     maxTokens: ctx.maxCompletionTokens,
     temperature: ctx.temperature,
     clientSignal: ctx.clientSignal,
+    includeReasoning: ctx.includeReasoning,
+    onReasoning: (r) => ctx.sink.emit("reasoning", r),
     onAttemptStart: (a) => ctx.sink.emit("attempt", { ...a, status: "started" }),
     onAttemptEnd: (a) => ctx.sink.emit("attempt", { ...a, status: a.outcome }),
     consume: async (text, actx) => {

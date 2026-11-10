@@ -27,6 +27,7 @@ const SupportBody = z
     model: z.string().max(64).optional(),
     prompt_version: z.enum(["v1", "v2"]).optional(),
     stream: z.boolean().optional(),
+    include_reasoning: z.boolean().optional(),
   })
   .strict();
 
@@ -42,6 +43,7 @@ const ChatBody = z
     stream: z.boolean().optional(),
     max_tokens: z.number().int().min(1).max(4096).optional(),
     temperature: z.number().min(0).max(2).optional(),
+    include_reasoning: z.boolean().optional(),
   })
   .strict();
 
@@ -134,7 +136,16 @@ export function createApp(gw: Gateway) {
     });
 
     const sink = spec.stream ? spec.makeSink() : new CollectSink();
-    sink.emit("meta", { requestId, tenant: tenant.id, endpoint });
+    sink.emit("meta", {
+      requestId,
+      tenant: tenant.id,
+      endpoint,
+      admission: {
+        maxCompletionTokens: admission.maxCompletionTokens,
+        tokensRemaining: admission.usage.tokensRemaining,
+        requestsRemaining: admission.usage.requestsRemaining,
+      },
+    });
 
     let result: RunResult;
     try {
@@ -193,10 +204,16 @@ export function createApp(gw: Gateway) {
     await runCapability(req, res, "support.answer", (tenant) => {
       const body = SupportBody.parse(req.body ?? {});
       const promptVersion = body.prompt_version ?? gw.config.support.defaultPromptVersion;
-      const prepared = prepareSupport(gw, tenant, { message: body.message, model: body.model, promptVersion });
+      const prepared = prepareSupport(gw, tenant, {
+        message: body.message,
+        model: body.model,
+        promptVersion,
+        includeReasoning: body.include_reasoning,
+      });
       return {
         estimatedPromptTokens: prepared.estimatedPromptTokens,
-        requestedMaxTokens: gw.config.support.maxAnswerTokens,
+        requestedMaxTokens:
+          gw.config.support.maxAnswerTokens + (body.include_reasoning ? gw.config.support.reasoningExtraTokens : 0),
         promptVersion,
         stream: body.stream ?? true,
         makeSink: () => new SseSink(res),
@@ -211,6 +228,8 @@ export function createApp(gw: Gateway) {
           retrieved: s.last("retrieval"),
           route: s.last("route"),
           error: s.last("error") ?? null,
+          steps: s.all("step"),
+          reasoning: body.include_reasoning ? s.reasoning : undefined,
         }),
       };
     });
@@ -225,10 +244,26 @@ export function createApp(gw: Gateway) {
         requestedMaxTokens: body.max_tokens ?? 1024,
         stream: body.stream ?? true,
         makeSink: () => new ChatSseSink(res),
-        run: (ctx) => runChat(gw, plan, body.messages, { ...ctx, temperature: body.temperature }),
+        run: (ctx) =>
+          runChat(gw, plan, body.messages, { ...ctx, temperature: body.temperature, includeReasoning: body.include_reasoning }),
         respondJson: (s, done) => chatCompletionJson(s, done),
       };
     });
+  });
+
+  // which backends exist, whether they're online, and whether this tenant's plan may use them
+  app.get("/v1/backends", tenantAuth, (req, res) => {
+    res.json(
+      gw.backends.map((b) => ({
+        id: b.config.id,
+        tier: b.config.tier,
+        model: b.config.model,
+        location: b.config.location,
+        allowedForTenant: req.tenant!.allowedTiers.includes(b.config.tier),
+        health: gw.health.get(b.config.id),
+        breaker: gw.breaker.snapshot(b.config.id).state,
+      })),
+    );
   });
 
   app.get("/v1/usage", tenantAuth, (req, res) => {
@@ -264,6 +299,7 @@ export function createApp(gw: Gateway) {
     res.json(
       gw.backends.map((b) => ({
         id: b.config.id, tier: b.config.tier, model: b.config.model, enabled: b.config.enabled,
+        location: b.config.location, health: gw.health.get(b.config.id),
         priceInPerM: b.config.priceInPerM, priceOutPerM: b.config.priceOutPerM,
         firstTokenTimeoutMs: b.config.firstTokenTimeoutMs, totalTimeoutMs: b.config.totalTimeoutMs,
         breaker: gw.breaker.snapshot(b.config.id), chaos: gw.chaos.get(b.config.id),
@@ -299,7 +335,10 @@ export function createApp(gw: Gateway) {
     res.json({
       adminToken: gw.config.adminToken,
       tenants: DEMO_TENANTS.map((t) => ({ id: t.id, name: t.name, plan: t.plan, apiKey: t.apiKey, allowedTiers: t.allowedTiers })),
-      backends: gw.backends.filter((b) => b.config.enabled).map((b) => ({ id: b.config.id, tier: b.config.tier, model: b.config.model })),
+      // all backends, including ones not configured on this host, so the console can label them offline
+      backends: gw.backends.map((b) => ({
+        id: b.config.id, tier: b.config.tier, model: b.config.model, location: b.config.location, enabled: b.config.enabled,
+      })),
       intents: gw.intents,
     });
   });

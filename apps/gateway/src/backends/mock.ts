@@ -22,6 +22,15 @@ export class MockBackend implements Backend {
     const out = ex
       ? `{"intent":"${ex.intent}","confidence":${ex.confidence.toFixed(2)}}\n###\n${ex.answer}`
       : `[mock backend] No real model was used. You said: "${lastUser.slice(0, 200)}"`;
+    if (req.includeReasoning) {
+      const why = ex
+        ? `Degraded mode: no language model is used. Retrieval's top intent is "${ex.intent}" (vote share ${ex.confidence.toFixed(2)}), so I return that knowledge-base answer verbatim.`
+        : "Degraded mode: no language model is available, so I can only echo the request.";
+      for (const w of why.match(/\S+\s*/g) ?? []) {
+        await abortableSleep(this.tokenDelayMs, req.signal);
+        yield { type: "reasoning", text: w };
+      }
+    }
     const pieces = out.match(/\S+\s*|\s+/g) ?? [out];
     let produced = "";
     for (const p of pieces) {

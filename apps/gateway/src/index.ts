@@ -4,6 +4,7 @@ import { createApp } from "./http/app.js";
 
 const gw = createGateway(config);
 const app = createApp(gw);
+gw.health.start();
 const server = app.listen(config.port, () => {
   const enabled = gw.backends.filter((b) => b.config.enabled).map((b) => `${b.config.id}(${b.config.model})`);
   console.log(`nalar-router on :${config.port} | backends: ${enabled.join(", ")} | KB ${gw.kb.entries.length} entries | demo=${config.demoMode}`);

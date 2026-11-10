@@ -10,6 +10,8 @@ export interface BackendRequest {
   maxTokens: number;
   temperature?: number;
   signal: AbortSignal;
+  /** stream the model's reasoning ("thinking") as separate chunks, if the backend supports it */
+  includeReasoning?: boolean;
   /**
    * Capability-specific hints. The mock backend uses `extractive` to produce a
    * grounded, retrieval-only answer (degraded mode); real models ignore it.
@@ -19,6 +21,8 @@ export interface BackendRequest {
 
 export type StreamChunk =
   | { type: "text"; text: string }
+  /** model reasoning; never part of the answer, never parsed, only shown for transparency */
+  | { type: "reasoning"; text: string }
   | { type: "usage"; promptTokens: number; completionTokens: number };
 
 export interface Backend {
