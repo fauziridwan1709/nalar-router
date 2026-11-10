@@ -1,0 +1,126 @@
+import { existsSync } from "node:fs";
+
+/**
+ * All tunables live here so routing/pricing decisions are reviewable in one place.
+ * Prices are USD per 1M tokens. They are list prices at build time and are only
+ * used for *estimated* cost; change them here, not in code.
+ */
+export type Tier = "fast" | "strong" | "local" | "degraded";
+
+export interface BackendConfig {
+  id: string;
+  kind: "openai-compatible" | "mock";
+  tier: Tier;
+  model: string;
+  baseUrl?: string;
+  apiKey?: string;
+  /** provider-specific body fields (e.g. reasoning_effort) */
+  extraBody?: Record<string, unknown>;
+  priceInPerM: number;
+  priceOutPerM: number;
+  /** abort and fall back if no first token by then */
+  firstTokenTimeoutMs: number;
+  /** abort the whole call after this */
+  totalTimeoutMs: number;
+  enabled: boolean;
+}
+
+// local convenience: load .env if present (on Render, env vars come from the dashboard)
+if (existsSync(".env")) process.loadEnvFile(".env");
+const env = process.env;
+const num = (v: string | undefined, d: number) => (v !== undefined && v !== "" && !isNaN(Number(v)) ? Number(v) : d);
+
+export const config = {
+  port: num(env.PORT, 3000),
+  dbPath: env.DB_PATH ?? "data/router.db",
+  /** exposes demo tenant keys + admin token to the console. Never on in a real deployment. */
+  demoMode: (env.DEMO_MODE ?? "true") === "true",
+  adminToken: env.ADMIN_TOKEN ?? "admin-demo-token",
+
+  routing: {
+    /** queries longer than this (estimated tokens) go to the strong tier */
+    longQueryTokens: num(env.ROUTE_LONG_QUERY_TOKENS, 60),
+    /** retrieval vote share below this = ambiguous → strong tier */
+    ambiguousVoteShare: num(env.ROUTE_AMBIGUOUS_VOTE_SHARE, 0.6),
+  },
+
+  breaker: {
+    failureThreshold: num(env.BREAKER_FAILURES, 3),
+    openMs: num(env.BREAKER_OPEN_MS, 30_000),
+  },
+
+  support: {
+    topK: 8,
+    /** retrieved entries shown to the model */
+    contextK: 4,
+    /** below this lexical coverage the question is treated as out of scope (no model call) */
+    minCoverage: num(env.SUPPORT_MIN_COVERAGE, 0.3),
+    /** final confidence below this → refuse instead of answering */
+    refuseBelow: num(env.SUPPORT_REFUSE_BELOW, 0.5),
+    maxAnswerTokens: 800, // gpt-oss reasoning tokens count against max_tokens
+    defaultPromptVersion: (env.SUPPORT_PROMPT_VERSION ?? "v2") as "v1" | "v2",
+  },
+
+  backends: [
+    {
+      id: "groq-fast",
+      kind: "openai-compatible",
+      tier: "fast",
+      model: env.GROQ_FAST_MODEL ?? "openai/gpt-oss-20b",
+      baseUrl: "https://api.groq.com/openai/v1",
+      apiKey: env.GROQ_API_KEY,
+      extraBody: { reasoning_effort: "low", include_reasoning: false },
+      priceInPerM: 0.075,
+      priceOutPerM: 0.3,
+      firstTokenTimeoutMs: num(env.GROQ_TTFT_TIMEOUT_MS, 6_000),
+      totalTimeoutMs: 30_000,
+      enabled: !!env.GROQ_API_KEY,
+    },
+    {
+      id: "groq-strong",
+      kind: "openai-compatible",
+      tier: "strong",
+      model: env.GROQ_STRONG_MODEL ?? "openai/gpt-oss-120b",
+      baseUrl: "https://api.groq.com/openai/v1",
+      apiKey: env.GROQ_API_KEY,
+      extraBody: { reasoning_effort: "low", include_reasoning: false },
+      priceInPerM: 0.15,
+      priceOutPerM: 0.6,
+      firstTokenTimeoutMs: num(env.GROQ_TTFT_TIMEOUT_MS, 8_000),
+      totalTimeoutMs: 45_000,
+      enabled: !!env.GROQ_API_KEY,
+    },
+    {
+      // Local model behind any OpenAI-compatible server. Default: Qwen3.5-4B on Apple MLX
+      // (`mlx_lm.server`); point LOCAL_LLM_BASE_URL at Ollama (http://localhost:11434/v1) to use that instead.
+      id: "local-qwen",
+      kind: "openai-compatible",
+      tier: "local",
+      model: env.LOCAL_LLM_MODEL ?? "mlx-community/Qwen3.5-4B-MLX-4bit",
+      baseUrl: env.LOCAL_LLM_BASE_URL ?? "http://127.0.0.1:8080/v1",
+      apiKey: "local",
+      extraBody: env.LOCAL_LLM_EXTRA_BODY
+        ? JSON.parse(env.LOCAL_LLM_EXTRA_BODY)
+        : { chat_template_kwargs: { enable_thinking: false } },
+      // marginal $ cost of a local model is ~0; we record 0 and say so in the report
+      priceInPerM: 0,
+      priceOutPerM: 0,
+      firstTokenTimeoutMs: num(env.LOCAL_LLM_TTFT_TIMEOUT_MS, 20_000),
+      totalTimeoutMs: 90_000,
+      enabled: (env.LOCAL_LLM_ENABLED ?? "false") === "true",
+    },
+    {
+      id: "mock",
+      kind: "mock",
+      tier: "degraded",
+      model: "extractive-kb-v1",
+      priceInPerM: 0,
+      priceOutPerM: 0,
+      firstTokenTimeoutMs: 5_000,
+      totalTimeoutMs: 20_000,
+      enabled: true,
+    },
+  ] satisfies BackendConfig[] as BackendConfig[],
+};
+
+export type Config = typeof config;

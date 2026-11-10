@@ -1,0 +1,32 @@
+{
+  "name": "mini-inference-router",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "tsx watch server/index.ts",
+    "dev:web": "npm --prefix web run dev",
+    "build": "tsc -p tsconfig.json && npm --prefix web run build",
+    "start": "node dist/server/index.js",
+    "prepare-data": "tsx scripts/prepare-data.ts data/raw/bitext.csv",
+    "eval": "tsx scripts/eval.ts",
+    "retrieval-eval": "tsx scripts/retrieval-eval.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.6",
+    "csv-parse": "^7.0.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

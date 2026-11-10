@@ -1,0 +1,242 @@
+[
+  {
+    "id": "eval-01",
+    "message": "help me cancel purchase {{Order Number}}",
+    "expectedIntent": "cancel_order",
+    "category": "ORDER",
+    "referenceAnswer": "I get it that you're seeking assistance in canceling your purchase with the order number {{Order Number}}. I'm here to help guide you through the process and ensure a smooth cancellation experience.\n\nTo cancel your purchase, please follow these steps:\n\n1. Access Your Account: Start by logging in to your {{Online Company Portal Info}} using your credentials.\n2. Locate Your Order: Once logged in, navigate to the '{{Online Order Interaction}}' or '{{Online Order Interaction}}' section within your account.\n3. Find the Order in Question: Look for the specific order associated with the order number {{Order Number}}. Click on it to view the order details.\n4. Initiate Cancellation: Within the order details page, you should find an option labeled '{{Online Order Interaction}}'. Click on it to begin the cancellation process.\n5. Confirm Cancellation: The system may prompt you for confirmation or ask for feedback. Please provide the necessary information to complete the cancellation.\n\nIf you encounter any issues or have further questions, our dedicated support team is available to assist you. You can reach us during {{Customer Support Hours}} at {{Customer Support Phone Number}} or through the Live Chat on our {{Website URL}}. We're here to ensure your satisfaction and provide you with the support you need.",
+    "flags": "BL"
+  },
+  {
+    "id": "eval-02",
+    "message": "how can I switch an item of order {{Order Number}}?",
+    "expectedIntent": "change_order",
+    "category": "ORDER",
+    "referenceAnswer": "We understand that you are looking to switch an item in your order with the number {{Order Number}}. Our team is here to assist you with this request. In order to provide you with the most accurate solution, could you please provide us with the details of the item you would like to switch and the item you would like to replace it with? Once we have this information, we will be able to guide you through the process and ensure that your order is updated according to your preferences. Your satisfaction is our top priority, and we are committed to making this process as seamless as possible for you. We appreciate your patience and cooperation as we work towards resolving this issue.",
+    "flags": "BIL"
+  },
+  {
+    "id": "eval-03",
+    "message": "there are errors trying to correct my address",
+    "expectedIntent": "change_shipping_address",
+    "category": "SHIPPING",
+    "referenceAnswer": "I'm sorry to hear that you're experiencing difficulties in correcting your address. Can you please provide me with more details about the errors you're encountering so that I can assist you further?",
+    "flags": "BLM"
+  },
+  {
+    "id": "eval-04",
+    "message": "i  dont know how to check the early exit penalty",
+    "expectedIntent": "check_cancellation_fee",
+    "category": "CANCEL",
+    "referenceAnswer": "No problem! To check the early exit penalty, you can log in to your account and go to the \"Termination Charges\" section. There, you will find all the information regarding the fees associated with early cancellation. Let me know if you need further assistance.",
+    "flags": "BLQZ"
+  },
+  {
+    "id": "eval-05",
+    "message": "help me to take a quick look at my bills from {{Person Name}}",
+    "expectedIntent": "check_invoice",
+    "category": "INVOICE",
+    "referenceAnswer": "I pick up what you're putting down, your desire to quickly view your bills associated with {{Salutation}} {{Client Last Name}}. Let's make it easier for you! To access your bills, you can log into your account on our website and navigate to the \"Billing\" or \"Invoices\" section. There you will find a list of all your bills, including the ones from {{Person Name}}. If you need any further assistance or encounter any issues along the way, feel free to reach out to our customer support team, available {{Customer Support Hours}}, via the Live Chat on our website at {{Website URL}}. Happy exploring!\"",
+    "flags": "BLM"
+  },
+  {
+    "id": "eval-06",
+    "message": "where to list the accepted payment options",
+    "expectedIntent": "check_payment_methods",
+    "category": "PAYMENT",
+    "referenceAnswer": "Unquestionably! To view the accepted payment options, you can navigate to the \"Payment Methods\" section on our website. It should be easily accessible from the main menu or the footer of our website. In this section, you will find a comprehensive list of all the payment methods we currently accept. If you need any further assistance or have any questions about the payment methods, please don't hesitate to reach out. We're here to help you every step of the way!",
+    "flags": "BILQ"
+  },
+  {
+    "id": "eval-07",
+    "message": "check under what circumstances can I ask for my money back",
+    "expectedIntent": "check_refund_policy",
+    "category": "REFUND",
+    "referenceAnswer": "I'm not mistaken your desire to have a clear understanding of the circumstances in which you can request a refund. Here are the situations that generally qualify for a refund:\n\n1. **Product/Service Defect:** If the product or service you received has a defect or doesn't align with its description, you would typically be eligible for a refund.\n2. **Cancellation within Grace Period:** Should you have a change of heart and decide to cancel your purchase within the specified grace period, you can usually request a refund.\n3. **Unauthorized Charges:** If you notice any unfamiliar charges on your account that you didn't authorize, please inform us, and we will investigate the matter and assist you accordingly.\n4. **Event Cancellation:** If you purchased tickets for an event and it gets canceled without a rescheduled date, you would generally be entitled to a refund.\n5. **Delivery Issues:** If you haven't received your product within the expected time frame, you may qualify for a refund in such cases.\n6. **Duplicate Charges:** In the event that you've been charged multiple times for the same item, please let us know, and we will promptly rectify the situation.\n\nIt's important to note that specific refund policies may vary depending on the vendor or service provider. I recommend consulting the refund policy or terms and conditions of the specific product or service you purchased for more detailed information.\n\nIf you have any specific questions about a recent purchase or need assistance initiating a refund, please provide me with the relevant details such as the order number or other identifying information. I'm here to help you through the process and ensure your satisfaction.\n\nPlease let me know if there's anything else I can assist you with.",
+    "flags": "B"
+  },
+  {
+    "id": "eval-08",
+    "message": "can you help me to lodge a consumer claim?",
+    "expectedIntent": "complaint",
+    "category": "FEEDBACK",
+    "referenceAnswer": "I understand the importance of lodging a consumer claim and I'm here to assist you with the process. To lodge a consumer claim, it's best to follow the specific guidelines and procedures outlined by your local consumer protection agency or regulatory body. They usually have a dedicated process in place to handle consumer claims and provide you with the necessary support. It's essential to gather any relevant documentation or evidence related to your claim, such as receipts, contracts, or communication records. This will help strengthen your case and ensure a smooth resolution. If you need any further assistance or have specific questions about lodging a consumer claim, please feel free to let me know.",
+    "flags": "BIL"
+  },
+  {
+    "id": "eval-09",
+    "message": "I have to check at what time I can reach customer support",
+    "expectedIntent": "contact_customer_service",
+    "category": "CONTACT",
+    "referenceAnswer": "Thank you for reaching out! I completely understand that you need to check the operating hours during which you can reach our customer support team. Our team is available to assist you from {{Customer Support Hours}}. Is there anything else I can help you with?",
+    "flags": "BL"
+  },
+  {
+    "id": "eval-10",
+    "message": "helpme speaking with somebody",
+    "expectedIntent": "contact_human_agent",
+    "category": "CONTACT",
+    "referenceAnswer": "We value your outreach! I'm in tune with the fact that you need assistance in speaking with somebody. I'm here to help guide you through the process. To connect with a human agent, please hold on for a moment while I transfer you to the right person who can assist you further. We value your time and are committed to providing you with the support you need.",
+    "flags": "BLZ"
+  },
+  {
+    "id": "eval-11",
+    "message": "can ya tell me more about opening platinum accounts",
+    "expectedIntent": "create_account",
+    "category": "ACCOUNT",
+    "referenceAnswer": "I'm on it! Opening a {{Account Category}} account with us comes with a host of exclusive benefits and privileges. With a {{Account Category}} account, you'll enjoy a higher credit limit, preferential interest rates, access to exclusive events, personalized assistance, and enhanced security features. Additionally, {{Account Category}} account holders have priority customer support and can take advantage of personalized financial advisory services. Our {{Account Category}} account is designed to cater to your unique financial needs and provide you with a premium banking experience. To open a {{Account Category}} account, we'll need some basic information from you, such as your full name, email address, and a preferred username. Once we have these details, we can guide you through the account opening process step-by-step. Feel free to ask any questions you may have, and I'll be here to assist you every step of the way. Your satisfaction is our top priority!",
+    "flags": "BILMQ"
+  },
+  {
+    "id": "eval-12",
+    "message": "I have a question about the deletion of my {{Account Type}} account",
+    "expectedIntent": "delete_account",
+    "category": "ACCOUNT",
+    "referenceAnswer": "I'm glad you contacted us to us with your question about deleting your {{Account Type}} account. I understand that you might have concerns or inquiries regarding this process. Can you please provide some more details about the specific question you have? This will help me provide you with the most accurate information and guide you through the deletion process effectively. Remember, we value your time and want to ensure that you have a hassle-{{Account Type}} experience.",
+    "flags": "BL"
+  },
+  {
+    "id": "eval-13",
+    "message": "shipping to {{Delivery Country}}",
+    "expectedIntent": "delivery_options",
+    "category": "DELIVERY",
+    "referenceAnswer": "How exciting! The land of endless opportunities awaits your package! Let me provide you with a glimpse of the shipping options available to ship to the {{Delivery Country}}:\n\n1. Standard Shipping: Delivers within {{Date Range}} business days. A reliable choice for non-urgent shipments.\n2. Expedited Shipping: Shortens the waiting time to {{Date Range}} business days, ensuring a faster delivery.\n3. Overnight Shipping: Need your item urgently? This option guarantees delivery by the next business day.\n4. In-Store Pickup: If you're near one of our {{Store Location}}, you can collect your item there.\n\nThe exact delivery time may vary based on your location and other factors. Feel free to explore these options and select the one that best suits your needs. If you have any further questions or if there's anything else I can assist you with, please don't hesitate to ask. We're here to ensure your satisfaction!\"",
+    "flags": "BLS"
+  },
+  {
+    "id": "eval-14",
+    "message": "assistance checking when my purchase is gonna arrive",
+    "expectedIntent": "delivery_period",
+    "category": "DELIVERY",
+    "referenceAnswer": "We understand your eagerness to know the estimated arrival date of your purchase. To provide you with accurate information, could you please provide us with the {{Order Number}} or {{Tracking Number}}? With this information, we'll be able to track your purchase and give you a precise estimate of its arrival. We appreciate your patience and cooperation in this matter.",
+    "flags": "BLQ"
+  },
+  {
+    "id": "eval-15",
+    "message": "assistance updating the info included on my user account",
+    "expectedIntent": "edit_account",
+    "category": "ACCOUNT",
+    "referenceAnswer": "How admirable it is to witness your proactive approach in seeking assistance to update the information included in your user account!I'm here to provide you with the necessary support and guidance to make these updates smoothly. To better assist you, could you please let me know what specific information you would like to update? With your guidance, we'll navigate through the process together and ensure a seamless experience for you.",
+    "flags": "BLQ"
+  },
+  {
+    "id": "eval-16",
+    "message": "I need assitance getting the invoice #00108",
+    "expectedIntent": "get_invoice",
+    "category": "INVOICE",
+    "referenceAnswer": "Positively! I completely understand your need for assistance in retrieving the invoice with the number #{{Invoice Number}}. Please allow me a moment to locate and retrieve that invoice for you. In the meantime, if you have any other questions or concerns, feel free to let me know. I'm here to help!\"",
+    "flags": "BZ"
+  },
+  {
+    "id": "eval-17",
+    "message": "where do I demand compensations?",
+    "expectedIntent": "get_refund",
+    "category": "REFUND",
+    "referenceAnswer": "I'm following your question about where to demand compensations. To initiate the process, I recommend reaching out to our customer support team. They will be more than happy to guide you through the necessary steps and provide the assistance you need. You can contact our customer support team through various channels such as phone, email, or live chat. Our dedicated representatives will be able to address your concerns and help you with the compensation request. Rest assured, we are committed to ensuring your satisfaction throughout this process. Don't hesitate to reach out to us for any further assistance.",
+    "flags": "BILM"
+  },
+  {
+    "id": "eval-18",
+    "message": "I want to know about receiving your company newsletter",
+    "expectedIntent": "newsletter_subscription",
+    "category": "SUBSCRIPTION",
+    "referenceAnswer": "Thank you for expressing your interest in receiving our company newsletter! Subscribing to our newsletter brings you a variety of benefits, including being the first to know about our latest product updates, exclusive promotions, industry insights, and exciting news. It's a great way to stay connected with our company and get valuable information delivered straight to your inbox. Would you like me to assist you with the subscription process?",
+    "flags": "BL"
+  },
+  {
+    "id": "eval-19",
+    "message": "what do i have to do to inform of a payment issue",
+    "expectedIntent": "payment_issue",
+    "category": "PAYMENT",
+    "referenceAnswer": "I appreciate your initiative in reaching out to inform us about a payment issue. To ensure efficient resolution, I recommend following these steps:\n\n1. Gather all relevant details: Take note of the transaction date, amount, payment method used, and any error messages received during the payment process.\n\n2. Contact our customer support team: Reach out to our dedicated customer support team through our helpline or online chat. They will guide you through the necessary steps and provide assistance in resolving the payment issue.\n\n3. Provide complete information: When contacting customer support, be sure to provide all the necessary details about the payment issue, including the transaction details, error messages, and any other relevant information. This will help expedite the troubleshooting process and ensure a swift resolution.\n\n4. Be patient and cooperative: Our team is committed to resolving your payment issue as quickly as possible. Remain patient and cooperative throughout the process, providing any additional information or documentation that may be required.\n\nBy following these steps, you can effectively inform us about the payment issue and allow our team to provide you with the assistance you need. We appreciate your dedication in helping us address and resolve this matter promptly.",
+    "flags": "BILQ"
+  },
+  {
+    "id": "eval-20",
+    "message": "wanna acquire some of ur article",
+    "expectedIntent": "place_order",
+    "category": "ORDER",
+    "referenceAnswer": "Thank you for your interest in acquiring some of our articles! We're thrilled to assist you in this process and ensure that you have a delightful experience. To proceed with your purchase, please provide us with the specific details of the articles you would like to acquire. This way, we can guide you through the steps and make sure you find the perfect items that meet your requirements. Let's embark on this journey of finding your desired articles together!",
+    "flags": "BLMQ"
+  },
+  {
+    "id": "eval-21",
+    "message": "I don't know how to retrieve my goddamn user PIN code",
+    "expectedIntent": "recover_password",
+    "category": "ACCOUNT",
+    "referenceAnswer": "I've been informed that you're feeling frustrated and unsure about retrieving your user PIN code. Don't worry, I'm here to assist you every step of the way. To retrieve your PIN code, please follow these instructions:\n\n1. Visit our platform's login page.\n2. Look for the option that says \"Forgot PIN code\" and click on it.\n3. You will be prompted to provide your email address associated with your user account.\n4. An email with instructions to reset your PIN code will be sent to you shortly. Be sure to check your inbox and spam folder.\n5. Follow the instructions provided in the email to reset your PIN code.\n\nIf you encounter any difficulties during the process or have any further questions, please don't hesitate to reach out to me. I'm here to ensure your experience is as smooth as possible.",
+    "flags": "BLW"
+  },
+  {
+    "id": "eval-22",
+    "message": "i want assistance to inform of a problem with a registration",
+    "expectedIntent": "registration_problems",
+    "category": "ACCOUNT",
+    "referenceAnswer": "Thank you for seeking our assistance in notifying us about the problem you encountered during the registration process. We understand the importance of a smooth and hassle-free registration experience, and we apologize for any inconvenience caused. To provide you with the best possible support, could you please provide more details about the specific issue you faced? Your insights will help us diagnose the problem accurately and work towards finding a prompt resolution. We appreciate your patience and collaboration, and we are committed to ensuring your satisfaction with our services.",
+    "flags": "BLQ"
+  },
+  {
+    "id": "eval-23",
+    "message": "where to submit feedback about a product",
+    "expectedIntent": "review",
+    "category": "FEEDBACK",
+    "referenceAnswer": "I'll take care of it! I'm here to help you with submitting feedback about our products. You can provide your valuable input by visiting our website and navigating to the \"Contact Us\" or \"Feedback\" section. There, you'll find a form where you can share your thoughts and experiences regarding our products. Additionally, you may also find options to leave feedback on our product pages or through your customer account, depending on the platform you used for your purchase. Feel free to share as much detail as you'd like, as it will assist us in further improving our products and services. If you need any further assistance or have any other inquiries, don't hesitate to let me know!",
+    "flags": "BILQ"
+  },
+  {
+    "id": "eval-24",
+    "message": "supportsetting a new shipping address up",
+    "expectedIntent": "set_up_shipping_address",
+    "category": "SHIPPING",
+    "referenceAnswer": "I'm glad you contacted us regarding support for setting up a new shipping address. I'm here to assist you with the process. Please follow these steps:\n\n1. Log in to your account.\n2. Navigate to the 'My Account' or 'Profile' section.\n3. Look for the 'Shipping Addresses' or similar option.\n4. Click on 'Add New Address' or 'Edit Shipping Addresses'.\n5. Enter the details of your new shipping address in the provided fields.\n6. Save the changes.\n\nIf you encounter any difficulties while following these steps or have any other questions, please don't hesitate to let me know. I'm here to ensure that your experience in setting up your new shipping address is seamless and hassle-free.",
+    "flags": "BLZ"
+  },
+  {
+    "id": "eval-25",
+    "message": "help to switch to the premium account",
+    "expectedIntent": "switch_account",
+    "category": "ACCOUNT",
+    "referenceAnswer": "Thank you for your interest in upgrading to our premium account! Allow me to guide you through the process:\n\n1. Log In: Start by logging into your account.\n2. Account Settings: Once logged in, navigate to the '{{Settings}}' section.\n3. Upgrade Option: Look for an option labeled '{{Upgrade Account}}' or '{{Account Change}}'.\n4. Choose {{Account Category}}: Select the '{{Account Type}}' option from the list provided.\n5. Finalize: Follow the prompts on the screen to finalize the switch.\n\nIf you encounter any difficulties or have any further questions, feel free to reach out. We are committed to providing you with a smooth experience as you enjoy the benefits of our premium account!",
+    "flags": "B"
+  },
+  {
+    "id": "eval-26",
+    "message": "see ETA ob order {{Order Number}}",
+    "expectedIntent": "track_order",
+    "category": "ORDER",
+    "referenceAnswer": "Thank you for reaching out! I'm here to assist you in checking the estimated time of arrival (ETA) for your order with the order number {{Order Number}}. To provide you with the most accurate information, could you please provide additional details such as your name or account number? This will help me locate your order and provide you with the updated ETA.",
+    "flags": "BKLQZ"
+  },
+  {
+    "id": "eval-27",
+    "message": "I am waiting for a restitution of {{Refund Amount}} dollars",
+    "expectedIntent": "track_refund",
+    "category": "REFUND",
+    "referenceAnswer": "Your patience is greatly appreciated while we work on processing your restitution of {{Currency Symbol}}{{Money Amount}}. We understand the importance of promptly resolving your refund request. To provide you with an accurate update on the status of your restitution, could you please provide us with any relevant information such as a reference number or the date of your request? This will allow us to provide you with a more personalized and precise response. We value your trust and want to ensure that we address your concerns as efficiently as possible.",
+    "flags": "BL"
+  },
+  {
+    "id": "eval-28",
+    "message": "assistance checking how soon can I  expect the delivery",
+    "expectedIntent": "delivery_period",
+    "category": "DELIVERY",
+    "referenceAnswer": "We understand that you're eager to know how soon you can expect your delivery. To provide you with an accurate estimate, could you please provide us with your {{Tracking Number}} or {{Order Number}}? With this information, we can check the status of your shipment and give you a clear idea of when it will arrive. Your patience is greatly appreciated as we work together to ensure the smooth delivery of your package.",
+    "flags": "BZ"
+  },
+  {
+    "id": "eval-29",
+    "message": "you aren't helpful at all, contact somebody",
+    "expectedIntent": "contact_human_agent",
+    "category": "CONTACT",
+    "referenceAnswer": "I'm sorry to hear that you feel that way. 🙁 Our main goal is to provide the best possible assistance to our customers. I understand that you're in need of speaking with someone directly. To help you with that, let me connect you to one of our dedicated human representatives who will be able to assist you further. Please bear with me for a moment while I make this happen. We truly appreciate your patience.",
+    "flags": "BCL"
+  },
+  {
+    "id": "eval-30",
+    "message": "is it possible to modify my shipping address",
+    "expectedIntent": "change_shipping_address",
+    "category": "SHIPPING",
+    "referenceAnswer": "Of course! We can definitely help you modify your shipping address. Please provide us with the updated address details, and we will make the necessary changes for you.",
+    "flags": "BILQ"
+  }
+]

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: mini-inference-router
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm --prefix web ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: GROQ_API_KEY
+        sync: false          # set in the Render dashboard
+      - key: DEMO_MODE
+        value: "true"        # exposes demo tenant keys to the console (reviewer convenience)
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: DB_PATH
+        value: data/router.db

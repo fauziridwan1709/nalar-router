@@ -1,0 +1,10 @@
+node_modules
+dist
+web/node_modules
+web/dist
+data/raw
+*.db
+*.db-*
+.env
+eval/results/*.raw.json
+.DS_Store
