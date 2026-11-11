@@ -214,7 +214,7 @@ describe("chat completions endpoint", () => {
   it("streams OpenAI-compatible chunks with x_router metadata", async () => {
     const s = await startServer([new FakeBackend(cfg("f", "fast"), reply("Hello there"))]);
     close = s.close;
-    const res = await post(s.base, "/v1/chat/completions", "k-pro", { messages: [{ role: "user", content: "hi" }] });
+    const res = await post(s.base, "/v1/chat/completions", "k-pro", { messages: [{ role: "user", content: "hi" }], stream: true });
     const text = await res.text();
     const datas = text.split("\n\n").filter((l) => l.startsWith("data: ") && !l.includes("[DONE]")).map((l) => JSON.parse(l.slice(6)));
     expect(datas.map((d) => d.choices[0].delta.content ?? "").join("")).toBe("Hello there");
@@ -223,10 +223,56 @@ describe("chat completions endpoint", () => {
     expect(last.x_router.backend).toBe("f");
     expect(text.trim().endsWith("data: [DONE]")).toBe(true);
   });
-  it("validates messages", async () => {
+  it("validates messages, with OpenAI's error type", async () => {
     const s = await startServer([new FakeBackend(cfg("f", "fast"), reply("x"))]);
     close = s.close;
     const res = await post(s.base, "/v1/chat/completions", "k-pro", { messages: [{ role: "robot", content: "hi" }] });
     expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatchObject({ code: "invalid_request", type: "invalid_request_error", param: null });
+    const img = await post(s.base, "/v1/chat/completions", "k-pro", { messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "x" } }] }] });
+    expect((await img.json()).error.message).toContain("only text content parts are supported");
+    const n2 = await post(s.base, "/v1/chat/completions", "k-pro", { messages: [{ role: "user", content: "hi" }], n: 2 });
+    expect((await n2.json()).error.message).toContain("only n=1 is supported");
+  });
+
+  it("follows OpenAI's defaults: JSON unless stream is set, and its newer request fields", async () => {
+    const fake = new FakeBackend(cfg("f", "fast"), reply("Hello there"));
+    const s = await startServer([fake]);
+    close = s.close;
+    const res = await post(s.base, "/v1/chat/completions", "k-pro", {
+      model: "auto",
+      messages: [
+        { role: "developer", content: "Be brief." },
+        { role: "user", content: [{ type: "text", text: "hi" }, { type: "text", text: "there" }], name: "ana" },
+      ],
+      max_completion_tokens: 64, top_p: 0.9, stop: ["\n\n"], seed: 7, n: 1, user: "end-user-1", stream_options: null,
+    });
+    expect(res.headers.get("content-type")).toContain("application/json");
+    const j = await res.json();
+    expect(j).toMatchObject({ object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: "Hello there" }, finish_reason: "stop" }] });
+    expect(j.usage.total_tokens).toBe(120);
+    const seen = fake.seen[0];
+    expect(seen.messages).toEqual([{ role: "system", content: "Be brief." }, { role: "user", content: "hi\nthere" }]);
+    expect(seen.maxTokens).toBeLessThanOrEqual(64);
+    expect(seen.sampling).toEqual({ top_p: 0.9, stop: ["\n\n"], seed: 7, presence_penalty: undefined, frequency_penalty: undefined });
+  });
+
+  it("sends a usage-only chunk when stream_options.include_usage is set", async () => {
+    const s = await startServer([new FakeBackend(cfg("f", "fast"), reply("Hello there"))]);
+    close = s.close;
+    const res = await post(s.base, "/v1/chat/completions", "k-pro", { messages: [{ role: "user", content: "hi" }], stream: true, stream_options: { include_usage: true } });
+    const datas = (await res.text()).split("\n\n").filter((l) => l.startsWith("data: ") && !l.includes("[DONE]")).map((l) => JSON.parse(l.slice(6)));
+    expect(datas.at(-1)).toMatchObject({ choices: [], usage: { total_tokens: 120 } });
+  });
+
+  it("lists models the key's plan may use, in OpenAI's format", async () => {
+    const s = await startServer([new FakeBackend(cfg("f", "fast"), reply("x")), new FakeBackend(cfg("s", "strong"), reply("x"))]);
+    close = s.close;
+    const free = await (await fetch(`${s.base}/v1/models`, { headers: { authorization: "Bearer k-free" } })).json();
+    expect(free.object).toBe("list");
+    expect(free.data.map((m: any) => m.id)).toEqual(["auto", "fast", "f"]);
+    expect(free.data[0]).toMatchObject({ object: "model", owned_by: "nalar-router" });
+    const bad = await fetch(`${s.base}/v1/models`, { headers: { authorization: "Bearer nope" } });
+    expect((await bad.json()).error.type).toBe("authentication_error");
   });
 });

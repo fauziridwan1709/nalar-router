@@ -27,18 +27,57 @@ export const SupportBody = z
   })
   .strict();
 
+/**
+ * OpenAI chat message: `content` may be a string or an array of text parts, and `developer` is
+ * OpenAI's newer name for `system`. Both are normalised here, so everything downstream sees
+ * plain {role, content} strings. Images, audio and tool calls are rejected with a clear 400.
+ */
+const ChatContent = z
+  .unknown()
+  .transform((v, ctx) => {
+    if (typeof v === "string") return v;
+    if (Array.isArray(v) && v.length <= 50 && v.every((p) => p?.type === "text" && typeof p.text === "string"))
+      return v.map((p) => p.text as string).join("\n");
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: Array.isArray(v) ? "only text content parts are supported" : "expected a string or an array of text parts",
+    });
+    return z.NEVER;
+  })
+  .pipe(z.string().max(16_000));
+const ChatMessageIn = z
+  .object({
+    role: z.enum(["system", "developer", "user", "assistant"]),
+    content: ChatContent,
+    name: z.string().max(64).optional(),
+  })
+  .strict()
+  .transform((m) => ({ role: m.role === "developer" ? ("system" as const) : m.role, content: m.content }));
+
 export const ChatBody = z
   .object({
     messages: z
-      .array(z.object({ role: z.enum(["system", "user", "assistant"]), content: z.string().max(16_000) }).strict())
+      .array(ChatMessageIn)
       .min(1)
       .max(50)
       .refine((m) => m.some((x) => x.role === "user" && x.content.trim()), "at least one non-empty user message is required")
       .refine((m) => m.reduce((n, x) => n + x.content.length, 0) <= 32_000, "conversation too long (max 32k chars)"),
     model: z.string().max(64).optional(),
+    /** OpenAI's default: one JSON body unless the caller asks for a stream */
     stream: z.boolean().optional(),
-    max_tokens: z.number().int().min(1).max(4096).optional(),
-    temperature: z.number().min(0).max(2).optional(),
+    stream_options: z.object({ include_usage: z.boolean().optional() }).strict().nullish(),
+    max_tokens: z.number().int().min(1).max(4096).nullish(),
+    /** OpenAI's newer name for max_tokens; if both are sent, this one wins */
+    max_completion_tokens: z.number().int().min(1).max(4096).nullish(),
+    temperature: z.number().min(0).max(2).nullish(),
+    top_p: z.number().min(0).max(1).nullish(),
+    stop: z.union([z.string().max(200), z.array(z.string().max(200)).max(4)]).nullish(),
+    seed: z.number().int().nullish(),
+    presence_penalty: z.number().min(-2).max(2).nullish(),
+    frequency_penalty: z.number().min(-2).max(2).nullish(),
+    n: z.literal(1, { errorMap: () => ({ message: "only n=1 is supported" }) }).nullish(),
+    /** end-user id; accepted for compatibility, not stored */
+    user: z.string().max(256).optional(),
     include_reasoning: z.boolean().optional(),
   })
   .strict();
@@ -223,11 +262,22 @@ export function chatSpec(gw: Gateway, res: Response, rawBody: unknown) {
     return {
       estimatedPromptTokens,
       pii: guarded.pii,
-      requestedMaxTokens: body.max_tokens ?? 1024,
-      stream: body.stream ?? true,
-      makeSink: () => new ChatSseSink(res),
+      requestedMaxTokens: body.max_completion_tokens ?? body.max_tokens ?? 1024,
+      stream: body.stream ?? false,
+      makeSink: () => new ChatSseSink(res, { includeUsage: !!body.stream_options?.include_usage }),
       run: (ctx) =>
-        runChat(gw, plan, guarded.messages, { ...ctx, temperature: body.temperature, includeReasoning: body.include_reasoning }),
+        runChat(gw, plan, guarded.messages, {
+          ...ctx,
+          temperature: body.temperature ?? undefined,
+          includeReasoning: body.include_reasoning,
+          sampling: {
+            top_p: body.top_p ?? undefined,
+            stop: body.stop ?? undefined,
+            seed: body.seed ?? undefined,
+            presence_penalty: body.presence_penalty ?? undefined,
+            frequency_penalty: body.frequency_penalty ?? undefined,
+          },
+        }),
       respondJson: (s, done) => chatCompletionJson(s, done),
     };
   };

@@ -57,7 +57,7 @@
 - **Streaming:** Server-Sent Events, per-tenant API keys (stored only as SHA-256 hashes), strict input validation, and stable error codes.
 - **Monthly quota per tenant (tokens and requests):** each request pre-authorises its tokens in one atomic transaction, so two concurrent requests can't both spend the last tokens. The quota check fails closed: if it errors, the request gets 503 and no model is called. A request over quota gets 429 with `Retry-After`.
 - **Metering:** every request and every backend attempt is stored with the model, tokens (and whether they came from the provider or were estimated), latency, time to first token, estimated cost and outcome.
-- **OpenAI-compatible endpoint:** `/v1/chat/completions` for raw use, with an `x_router` block that explains routing.
+- **OpenAI-compatible endpoint:** `/v1/chat/completions` and `/v1/models` for raw use, tested with the official OpenAI SDK, with an `x_router` block that explains routing.
 
 ### Routing and fallback
 
@@ -105,7 +105,7 @@ The console follows the Claude Console's layout: a top bar with search (⌘K com
   - **Cost:** total, per 1,000 requests and per 1M tokens; cost stacked by backend or tenant; cost by tenant.
   - **Reliability:** answer rate, p95, fallback rate and rejections; a **Pareto** of why requests weren't answered (or of intents) with the 80% line; latency and fallback trends; traffic share. *Run sample traffic* sends 15 real requests.
   - **Logs:** every metered request, filterable by tenant, outcome, fallback and personal data, with a **route strip** and a drawer holding the routing decision and each attempt.
-  - **Quotas:** monthly token and request meters per tenant.
+  - **Quotas:** stat cards (tokens, requests, spend, tenants needing attention, the reset date), then one row per tenant with token and request meters, spend and a status. "Rejecting requests" shows as soon as a request is refused with 429, even below 100%, because each request reserves its prompt plus a minimum answer. A row opens to show what's left, model tiers, the company profile and outcomes.
 - **Security & data:**
   - **Guardrails:** PII policy, a live detector tester, and each built-in control with the file that enforces it.
   - **Access:** members and the role matrix.
@@ -361,7 +361,8 @@ curl -N http://localhost:3000/v1/support/answer \
 | endpoint | auth | what it does |
 |---|---|---|
 | `POST /v1/support/answer` | tenant key | The support capability. SSE events: `meta` → `route` → `retrieval` → `attempt`… → `intent` → `token`… → `done` (or `refusal` / `error`). Send `"stream": false` for a single JSON response. |
-| `POST /v1/chat/completions` | tenant key | Raw gateway, OpenAI-compatible chunks plus an `x_router` block |
+| `POST /v1/chat/completions` | tenant key | Raw gateway, OpenAI-compatible (works with the OpenAI SDKs; JSON by default, chunks with `stream: true`) plus an `x_router` block |
+| `GET /v1/models` | tenant key | OpenAI-format model list: `auto`, tiers and backends on the key's plan |
 | `GET /v1/backends` | tenant key | Every backend with its online/offline label, where it runs, and whether your plan may use it |
 | `GET /v1/usage` | tenant key | The calling tenant's usage and remaining quota |
 | `GET /v1/requests/:id` | tenant key | One of the tenant's own requests, with its attempts |

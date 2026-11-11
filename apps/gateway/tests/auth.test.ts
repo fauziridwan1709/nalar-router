@@ -161,6 +161,24 @@ describe("RBAC", () => {
   });
 });
 
+describe("console quotas", () => {
+  it("flags a tenant as rejecting once its newest request was refused for quota", async () => {
+    const s = await server();
+    const { call } = await signIn(s.base, "op@test.example", "op-pass-1");
+    const tiny = async () => ((await (await call("/api/console/usage")).json()) as any[]).find((u) => u.tenant === "tiny");
+    expect(await tiny()).toMatchObject({ quotaRejections: 0, rejecting: false });
+    for (let i = 0; i < 3; i++) {
+      await fetch(`${s.base}/v1/chat/completions`, {
+        method: "POST", headers: { authorization: "Bearer k-tiny", "content-type": "application/json" },
+        body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+      });
+    }
+    expect(await tiny()).toMatchObject({ requestsUsed: 2, quotaRejections: 1, rejecting: true });
+    await call("/api/console/tenants/tiny/reset-quota", { method: "POST" });
+    expect(await tiny()).toMatchObject({ requestsUsed: 0, quotaRejections: 0, rejecting: false });
+  });
+});
+
 describe("console playground", () => {
   it("runs the support pipeline as the user's tenant and meters it against that tenant", async () => {
     const s = await server();

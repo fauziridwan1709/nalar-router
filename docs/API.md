@@ -40,14 +40,29 @@ With `"stream": false` you get the same information as one JSON object, includin
 
 ## `POST /v1/chat/completions` (raw gateway, OpenAI-compatible)
 
+It follows OpenAI's Chat Completions contract, so the official OpenAI SDKs work by changing the base URL. It is checked against `openai` (Node) for: default JSON, `stream: true`, `stream_options.include_usage`, `max_completion_tokens`, text content parts, the `developer` role, sampling parameters, `models.list()` and a bad key raising `AuthenticationError`.
+
 ```bash
-curl -N http://localhost:3000/v1/chat/completions -H 'authorization: Bearer sk-acme-demo-7f3a9c' \
-  -H 'content-type: application/json' -d '{"messages":[{"role":"user","content":"hi"}],"model":"auto"}'
+curl http://localhost:3000/v1/chat/completions -H 'authorization: Bearer sk-acme-demo-7f3a9c' \
+  -H 'content-type: application/json' -d '{"model":"auto","messages":[{"role":"user","content":"hi"}]}'
 ```
 
-It streams standard `chat.completion.chunk`s. The final chunk carries `usage` and an `x_router` block with backend, fallback, cost and trace. Routing and attempt events also arrive as SSE comments (`: route {…}`, `: attempt {…}`, each with `t`, ms since the request started), which OpenAI clients ignore.
+- **`stream` defaults to `false`**, as in OpenAI: one `chat.completion` object. With `"stream": true` it sends `chat.completion.chunk`s and ends with `data: [DONE]`.
+- **Request fields:** `model` (`auto`, a tier such as `fast`, or a backend id; see `GET /v1/models`), `messages`, `stream`, `stream_options.include_usage`, `max_completion_tokens` (or the older `max_tokens`), `temperature`, `top_p`, `stop`, `seed`, `presence_penalty`, `frequency_penalty`, `n` (only 1) and `user` (accepted, not stored). Message `content` may be a string or an array of `text` parts; `developer` is treated as `system`.
+- **Not supported, rejected with a 400 that names the field:** tools and function calling, `response_format`, `logprobs`, and image or audio parts.
+- **Extensions:** an `x_router` block on the response (or on the final chunk) with backend, fallback, cost, route and attempts; `include_reasoning` to receive the model's reasoning (`delta.reasoning` while streaming); routing and attempt events as SSE comments (`: route {…}`, `: attempt {…}`, each with `t`, ms since the request started), which OpenAI clients ignore. The final content chunk also carries `usage`; with `stream_options.include_usage` a separate usage-only chunk (`choices: []`) follows, as OpenAI sends it.
+- **Errors** have OpenAI's shape: `{error: {message, type, param, code}}`, with `type` one of `invalid_request_error`, `authentication_error`, `permission_error`, `not_found_error`, `rate_limit_error`, `api_error`.
+- `id` is the gateway's request id (`req_…`) and `model` is the model that actually answered (for example `openai/gpt-oss-20b`), not the alias you sent.
 
-With `"stream": false` it returns one `chat.completion` object, with `x_router` (route, attempts, and reasoning when `include_reasoning` is set) alongside `choices` and `usage`. `/v1/support/answer` works the same way; `stream` defaults to `true` on both.
+This is OpenAI's format, not Anthropic's. Claude's Messages API (`POST /v1/messages`) returns `content` blocks, `stop_reason` and `usage.input_tokens`/`output_tokens`, and streams typed events (`message_start`, `content_block_delta`…). Claude models serve OpenAI-format clients only through Anthropic's separate OpenAI SDK compatibility layer.
+
+## `GET /v1/models`
+
+OpenAI's model list for the key's plan: `{object: "list", data: [{id, object: "model", created, owned_by}]}`. The ids are `auto`, then the tiers, then the backends the plan may use. It needs the `chat.completions` scope.
+
+```bash
+curl http://localhost:3000/v1/models -H 'authorization: Bearer sk-acme-demo-7f3a9c'
+```
 
 ## `GET /v1/backends`
 

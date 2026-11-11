@@ -5,11 +5,21 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface Sampling {
+  top_p?: number;
+  stop?: string | string[];
+  seed?: number;
+  presence_penalty?: number;
+  frequency_penalty?: number;
+}
+
 export interface BackendRequest {
   messages: ChatMessage[];
   maxTokens: number;
   temperature?: number;
   signal: AbortSignal;
+  /** OpenAI sampling parameters from the raw chat path; OpenAI-compatible backends forward them, the mock ignores them */
+  sampling?: Sampling;
   /** stream the model's reasoning ("thinking") as separate chunks, if the backend supports it */
   includeReasoning?: boolean;
   /**
