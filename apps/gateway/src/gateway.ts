@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { BackendConfig, Config } from "./config.js";
-import { openDb, type DB, type SeedTenant, DEMO_TENANTS } from "./db.js";
+import { openDb, type DB, type SeedTenant, type SeedUser, DEMO_TENANTS, DEMO_USERS } from "./db.js";
 import type { Backend } from "./backends/types.js";
 import { OpenAICompatBackend } from "./backends/openaiCompat.js";
 import { MockBackend } from "./backends/mock.js";
@@ -27,6 +27,14 @@ export function buildBackend(cfg: BackendConfig): Backend {
   return cfg.kind === "mock" ? new MockBackend(cfg) : new OpenAICompatBackend(cfg);
 }
 
+/** demo accounts only in demo mode; a real deployment bootstraps one operator from env vars */
+export function consoleUsers(config: Config): SeedUser[] {
+  const users = config.demoMode ? [...DEMO_USERS] : [];
+  const b = config.auth.bootstrapOperator;
+  if (b) users.push({ id: "usr_bootstrap_operator", tenantId: b.tenantId, email: b.email, name: "Operator", role: "operator", password: b.password });
+  return users;
+}
+
 export function createGateway(
   config: Config,
   overrides: Partial<{ db: DB; backends: Backend[]; kbEntries: KbEntry[]; seed: SeedTenant[]; chaos: ChaosRegistry }> = {},
@@ -38,7 +46,7 @@ export function createGateway(
   const intents = [...new Set(kbEntries.map((e) => e.intent))].sort();
   return {
     config,
-    db: overrides.db ?? openDb(config.dbPath, overrides.seed ?? DEMO_TENANTS),
+    db: overrides.db ?? openDb(config.dbPath, overrides.seed ?? DEMO_TENANTS, consoleUsers(config)),
     backends,
     breaker: new CircuitBreaker(config.breaker.failureThreshold, config.breaker.openMs),
     chaos,

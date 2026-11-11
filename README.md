@@ -41,6 +41,7 @@
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
 - [Demo tenants](#demo-tenants)
+- [Console sign-in, roles and API keys](#console-sign-in-roles-and-api-keys)
 - [API](#api)
 - [Evaluation](#evaluation)
 - [Testing](#testing)
@@ -80,10 +81,14 @@
 
 ### Console
 
-An operations console with a left nav, light and dark themes, and charts built to the dataviz method: validated palette, thin marks, one axis, a tooltip on every chart, and a table view for every chart.
+An operations console behind a **tenant sign-in with role-based access**. Controls (selects, menus, dialogs, tabs, switches, toasts) come from Meta's open-source [Astryx](https://astryx.atmeta.com/) design system, icons from Lucide. Light and dark themes. Charts are built to the dataviz method (validated palette, thin marks, one axis, a tooltip and a table view on every chart) and animate in once: lines draw, columns grow from the baseline, numbers count up. Motion is off under `prefers-reduced-motion`.
 
-- **Overview:** one filter row (15 m, 1 h, 24 h or 7 d, plus tenant) scopes a stat strip and six charts:
+- **Sign-in and roles:** four seeded accounts, one per tenant and one per role (operator, owner, developer, viewer). The server checks every permission; the console only hides what a role can't use. See [Console sign-in, roles and API keys](#console-sign-in-roles-and-api-keys).
+- **Feature guide:** a spotlight tour that walks a new user through the console, step by step, skipping what their role can't use. It starts on first sign-in and can be replayed from the help button.
+- **API keys:** create scoped, expiring keys (shown once), revoke them, and a quickstart with cURL, Python and Node examples for both endpoints.
+- **Overview:** one filter row (15 m, 1 h, 24 h or 7 d; operators also pick a tenant) scopes a stat strip and seven charts:
   - requests by outcome (stacked columns)
+  - a **Pareto** of why requests weren't answered (or of intents), with the 80% line
   - latency p50 and p95
   - tokens
   - fallback rate
@@ -91,7 +96,7 @@ An operations console with a left nav, light and dark themes, and charts built t
   - traffic share by backend
 
   **Run sample traffic** sends 14 real requests through the gateway. Nothing is synthetic.
-- **Playground:** live streaming plus an inspector panel showing the routing decision, the fallback trail, intent and confidence, retrieved entries, tokens, latency and cost.
+- **Playground:** a workbench layout (settings toolbar, prompt on the left, response and inspector on the right, **Get code** for the equivalent API call), with live streaming plus an inspector showing the routing decision, the fallback trail, intent and confidence, retrieved entries, tokens, latency and cost.
 - **Model reasoning:** an optional *thinking* panel streams the model's reasoning (gpt-oss on Groq, Qwen thinking on MLX), kept separate from the answer and labelled per attempt.
 - **Step trace:** a timeline of every step with server-side timings: auth and quota, routing, retrieval, scope gate, each attempt, header validation, the commit point, and done.
 - **Online/offline labels** on every backend, from live health probes plus the circuit breaker. On the cloud deployment the local model is listed as *offline: runs on a local machine*.
@@ -276,8 +281,13 @@ All settings are environment variables, read from `.env` at the repo root (or fr
 | `SUPPORT_PROMPT_VERSION` | `v3` | `v1` (minimal), `v2` (grounded), or `v3` (grounded, and tells the model which placeholders the gateway can fill) |
 | `MOCK_TOKEN_DELAY_MS` | `15` | Streaming speed of the mock backend |
 | `HEALTH_INTERVAL_MS` | `30000` | How often enabled backends are probed for the online/offline label |
-| `DEMO_MODE` | `true` | Exposes the demo keys to the console via `/api/demo-config`. **Turn off outside demos.** |
-| `ADMIN_TOKEN` | `admin-demo-token` | Protects `/admin/*` |
+| `DEMO_MODE` | `true` | Seeds the four demo console accounts and lists them (with passwords) on the sign-in page. **Turn off outside demos.** |
+| `DEMO_PASSWORD_OPERATOR` / `_OWNER` / `_DEVELOPER` / `_VIEWER` | see below | Override a demo account's password. An overridden password is never shown on the sign-in page. |
+| `BOOTSTRAP_OPERATOR_EMAIL` / `BOOTSTRAP_OPERATOR_PASSWORD` | — | Creates one operator account at boot. Outside demo mode this is the way in. |
+| `TRUST_PROXY` | `1` on Render, else `loopback` | Express `trust proxy`, so the client IP (sign-in rate limit) and HTTPS detection (Secure cookie, HSTS) are right |
+| `SECURE_COOKIES` | auto | `true` forces Secure cookies and HSTS even when the proxy doesn't say HTTPS |
+| `AUTH_MAX_FAILURES_ACCOUNT` / `AUTH_MAX_FAILURES_IP` / `AUTH_FAILURE_WINDOW_MS` | `5` / `20` / `900000` | Failed sign-ins allowed per account and per IP in the window |
+| `ADMIN_TOKEN` | `admin-demo-token` | Protects `/admin/*` (scripts and operations; the console uses sessions, not this token) |
 | `PORT` | `3000` | |
 | `DB_PATH` | `apps/gateway/var/router.db` | SQLite file |
 | `ACME_API_KEY`, `GLOBEX_API_KEY`, `INITECH_API_KEY`, `EVAL_API_KEY` | demo values | Override the seeded tenant keys |
@@ -290,6 +300,47 @@ All settings are environment variables, read from `.env` at the repo root (or fr
 | `globex` | `sk-globex-demo-41be02` | free → fast, local, degraded | 40k tokens / 100 requests |
 | `initech` | `sk-initech-demo-c0ffee` | trial → fast, degraded | **4k tokens / 5 requests**, so you can watch the quota run out |
 | `eval` | `sk-eval-demo-e7a1` | internal → all tiers | 5M tokens |
+
+## Console sign-in, roles and API keys
+
+### Demo accounts
+
+With `DEMO_MODE=true` the sign-in page lists these, and a click fills the form.
+
+| role | email | password | tenant | can |
+|---|---|---|---|---|
+| Operator | `ops@nalar.example` | `Nalar-Ops-2026!` | Nalar internal (`eval`) | everything, on every tenant: backends, fault injection, quota resets, all audit events |
+| Owner | `owner@acme.example` | `Acme-Owner-2026!` | Acme Corp | own tenant: dashboards, playground, all API keys, audit log |
+| Developer | `dev@globex.example` | `Globex-Dev-2026!` | Globex | own tenant: dashboards, playground, create keys, revoke the keys they created |
+| Viewer | `viewer@initech.example` | `Initech-View-2026!` | Initech | own tenant, read only: no playground (it spends quota), no keys |
+
+The full permission table is in [`apps/gateway/src/auth/rbac.ts`](apps/gateway/src/auth/rbac.ts).
+
+### How it's secured
+
+- **Passwords:** scrypt (N=2¹⁷, r=8, p=1, the OWASP setting) with a per-user salt. An unknown email still pays for one scrypt run, so timing doesn't reveal which accounts exist.
+- **Sign-in errors are generic:** a wrong password and an unknown account get the same `401 Invalid email or password.` Five failures on one account (or 20 from one IP) in 15 minutes pause sign-in with `429` and `Retry-After`. Every attempt goes to the audit log.
+- **Sessions:** a 256-bit token in an `HttpOnly`, `SameSite=Strict` cookie (`__Host-` prefixed and `Secure` over HTTPS). Only its SHA-256 is stored. Sessions end after 2 h idle or 12 h total and are rotated on every sign-in.
+- **CSRF:** every state-changing console call needs the session's CSRF token in `x-csrf-token` and a same-origin `Origin`.
+- **Tenant isolation:** non-operators are pinned to their own tenant on the server. Another tenant's request or key id returns the same `404` as a missing one.
+- **Least detail in errors:** `403 You don't have permission to do that.` never names the missing permission. Tenants see a short category for a failed attempt (`upstream model error`, `no first token in time`); upstream HTTP bodies and model-output fragments stay in the database for operators. Unknown routes return `Not found.` without echoing the path.
+- **Headers:** a strict CSP (`default-src 'self'`, no inline script, `frame-ancestors 'none'`), `nosniff`, `Referrer-Policy: no-referrer`, COOP/CORP, HSTS over HTTPS, and `Cache-Control: no-store` on every API response.
+- **The console never holds a secret it doesn't need.** The old `/api/demo-config` endpoint, which handed the admin token and every tenant key to any visitor, is gone. The playground runs through the session (`POST /api/console/playground/support`) and is metered against the user's tenant like any API call.
+
+### API keys
+
+- Format `nr_live_` + 192 random bits, so secret scanners can spot one. Only a SHA-256 digest is stored; the plaintext is shown **once**, in a dialog you have to acknowledge.
+- **Scopes:** `support.answer`, `chat.completions`, `usage.read`. A key without the route's scope gets `403 insufficient_scope`.
+- **Expiry:** 7, 30, 90 (default) or 365 days, or never (flagged as not recommended). Revoked, expired and unknown keys all get the same `401`.
+- At most 10 active keys per tenant. `last_used_at` is recorded, and each metered request records which key (or console user) made it.
+- The API keys page has a quickstart with cURL, Python (`requests` and the OpenAI SDK) and Node examples for both endpoints, and the error codes a caller should handle.
+
+```bash
+export NALAR_API_KEY=nr_live_…   # from the API keys page
+curl -N http://localhost:3000/v1/support/answer \
+  -H "Authorization: Bearer $NALAR_API_KEY" -H "Content-Type: application/json" \
+  -d '{"message":"how do I cancel order 123?"}'
+```
 
 ## API
 
@@ -305,9 +356,13 @@ All settings are environment variables, read from `.env` at the repo root (or fr
 | `GET /admin/metrics?range=15m\|1h\|24h\|7d&tenant=` | admin token | Time-bucketed requests by outcome, tokens, cost, p50/p95 latency and fallback rate, plus per-tenant and per-backend totals |
 | `GET /admin/evals` | admin token | Summaries of the committed eval runs |
 | `POST /admin/tenants/:id/reset-quota` | admin token | Demo helper |
+| `POST /api/auth/login` · `POST /api/auth/logout` · `GET /api/auth/session` | — / session | Console sign-in; returns the user, their permissions and a CSRF token |
+| `GET /api/console/*` | session + permission | Metrics, requests, usage, backends, evals, keys and audit log, scoped to the user's tenant |
+| `POST /api/console/keys` · `DELETE /api/console/keys/:id` | session + CSRF + permission | Create (secret returned once) and revoke API keys |
+| `POST /api/console/playground/support` | session + CSRF + `playground:run` | The support capability as the signed-in user's tenant |
 | `GET /healthz` | — | Liveness check |
 
-Error codes: `400 invalid_request`, `401 invalid_api_key`, `403 model_not_allowed`, `429 quota_exceeded`, `502 all_backends_failed`, `503 quota_unavailable`. Payload schemas and the full event reference are in **[docs/API.md](docs/API.md)**.
+Error codes: `400 invalid_request`, `401 invalid_api_key`, `403 insufficient_scope`, `403 model_not_allowed`, `429 quota_exceeded`, `502 all_backends_failed`, `503 quota_unavailable`. Payload schemas and the full event reference are in **[docs/API.md](docs/API.md)**.
 
 ## Evaluation
 

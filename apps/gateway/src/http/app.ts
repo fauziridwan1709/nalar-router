@@ -1,37 +1,31 @@
 import express, { type NextFunction, type Request, type Response } from "express";
-import { randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { z, ZodError } from "zod";
 import type { Gateway } from "../gateway.js";
 import { GatewayError } from "../errors.js";
-import { findTenantByKey, getTenant, listTenants, type Tenant } from "../tenants.js";
-import { admit, getUsage, resetQuota } from "../quota.js";
-import { finishRequest, getRequestDetail, listRequests, recordRejected } from "../metering.js";
-import { prepareSupport, runSupport, type RunResult } from "../support/assistant.js";
+import { getTenant, listTenants, type Tenant } from "../tenants.js";
+import { getUsage, resetQuota } from "../quota.js";
+import { getRequestDetail, listRequests } from "../metering.js";
 import { prepareChat, runChat } from "../chat.js";
-import { CollectSink, SseSink, type EventSink } from "./sink.js";
 import { ChatSseSink, chatCompletionJson } from "./chatFormat.js";
-import { DEMO_TENANTS } from "../db.js";
 import type { ChaosMode } from "../backends/chaos.js";
 import { computeMetrics, RANGES, type RangeKey } from "../metrics.js";
+import { authenticateKey, type ApiKeyRow, type KeyScope } from "../auth/apiKeys.js";
+import type { User } from "../auth/sessions.js";
+import { createCapabilityRunner, supportSpec, zodMessage } from "./capability.js";
+import { safeEq, securityHeaders } from "./security.js";
+import { mountConsole } from "./console.js";
+import { backendsFull, ChaosBody, listEvals } from "./shared.js";
 
 declare module "express-serve-static-core" {
   interface Request {
     tenant?: Tenant;
+    apiKey?: ApiKeyRow;
+    user?: User;
+    csrf?: string;
   }
 }
-
-const SupportBody = z
-  .object({
-    message: z.string().trim().min(1, "message must not be empty").max(2000, "message too long (max 2000 chars)"),
-    model: z.string().max(64).optional(),
-    prompt_version: z.enum(["v1", "v2", "v3"]).optional(),
-    placeholders: z.enum(["fill", "raw"]).optional(),
-    stream: z.boolean().optional(),
-    include_reasoning: z.boolean().optional(),
-  })
-  .strict();
 
 const ChatBody = z
   .object({
@@ -49,16 +43,6 @@ const ChatBody = z
   })
   .strict();
 
-function zodMessage(e: ZodError) {
-  return e.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; ");
-}
-
-const safeEq = (a: string, b: string) => {
-  const x = Buffer.from(a);
-  const y = Buffer.from(b);
-  return x.length === y.length && timingSafeEqual(x, y);
-};
-
 function bearer(req: Request): string | null {
   const h = req.header("authorization");
   if (h?.toLowerCase().startsWith("bearer ")) return h.slice(7).trim();
@@ -68,15 +52,26 @@ function bearer(req: Request): string | null {
 export function createApp(gw: Gateway) {
   const app = express();
   app.disable("x-powered-by");
+  // so req.ip / req.secure are the client's when running behind a proxy (Render)
+  const tp = gw.config.auth.trustProxy;
+  app.set("trust proxy", /^\d+$/.test(tp) ? Number(tp) : tp === "true" ? true : tp === "false" ? false : tp);
+  app.use(securityHeaders(gw.config));
   app.use(express.json({ limit: "64kb" }));
 
   // ---------- auth ----------
-  const tenantAuth = (req: Request, _res: Response, next: NextFunction) => {
+  /**
+   * Unknown, revoked and expired keys all get the same 401, so a caller can't probe which keys
+   * once existed. A key without the route's scope gets 403: the caller already proved possession.
+   */
+  const tenantAuth = (scope: KeyScope) => (req: Request, _res: Response, next: NextFunction) => {
     const key = bearer(req);
     if (!key) return next(new GatewayError(401, "missing_api_key", "Provide your tenant API key as 'Authorization: Bearer <key>'."));
-    const t = findTenantByKey(gw.db, key);
-    if (!t) return next(new GatewayError(401, "invalid_api_key", "API key is not recognised."));
+    const k = authenticateKey(gw.db, key);
+    const t = k && getTenant(gw.db, k.tenantId);
+    if (!k || !t) return next(new GatewayError(401, "invalid_api_key", "API key is not recognised."));
+    if (!k.scopes.includes(scope)) return next(new GatewayError(403, "insufficient_scope", "This API key is not allowed to call this endpoint."));
     req.tenant = t;
+    req.apiKey = k;
     next();
   };
   const adminAuth = (req: Request, _res: Response, next: NextFunction) => {
@@ -85,113 +80,7 @@ export function createApp(gw: Gateway) {
     next();
   };
 
-  // ---------- shared capability handler ----------
-  async function runCapability(
-    req: Request,
-    res: Response,
-    endpoint: string,
-    build: (tenant: Tenant) => {
-      estimatedPromptTokens: number;
-      requestedMaxTokens: number;
-      promptVersion?: string;
-      stream: boolean;
-      makeSink: () => EventSink;
-      run: (ctx: { maxCompletionTokens: number; sink: EventSink; clientSignal: AbortSignal; startedAt: number }) => Promise<RunResult>;
-      respondJson: (sink: CollectSink, done: any) => unknown;
-    },
-  ) {
-    const tenant = req.tenant!;
-    const requestId = `req_${randomUUID().replace(/-/g, "").slice(0, 20)}`;
-    res.setHeader("x-request-id", requestId);
-
-    let spec: ReturnType<typeof build>;
-    try {
-      spec = build(tenant);
-    } catch (e) {
-      const ge =
-        e instanceof ZodError
-          ? new GatewayError(400, "invalid_request", zodMessage(e))
-          : e instanceof GatewayError
-            ? e
-            : new GatewayError(500, "internal_error", "Failed to prepare request.");
-      try {
-        recordRejected(gw.db, requestId, tenant.id, endpoint, ge.status, ge.code, ge.message);
-      } catch {
-        /* metering failure must not mask the client error */
-      }
-      throw ge;
-    }
-
-    // quota pre-authorisation (throws 429 / 503, fail-closed)
-    const admission = admit(gw.db, tenant, {
-      requestId,
-      endpoint,
-      estimatedPromptTokens: spec.estimatedPromptTokens,
-      requestedMaxTokens: spec.requestedMaxTokens,
-      promptVersion: spec.promptVersion,
-    });
-
-    const startedAt = Date.now();
-    const client = new AbortController();
-    res.on("close", () => {
-      if (!res.writableFinished) client.abort();
-    });
-
-    const sink = spec.stream ? spec.makeSink() : new CollectSink();
-    sink.emit("meta", {
-      requestId,
-      tenant: tenant.id,
-      endpoint,
-      admission: {
-        maxCompletionTokens: admission.maxCompletionTokens,
-        tokensRemaining: admission.usage.tokensRemaining,
-        requestsRemaining: admission.usage.requestsRemaining,
-      },
-    });
-
-    let result: RunResult;
-    try {
-      result = await spec.run({ maxCompletionTokens: admission.maxCompletionTokens, sink, clientSignal: client.signal, startedAt });
-    } catch (e) {
-      console.error(`[${requestId}] unhandled`, e);
-      result = {
-        outcome: "internal_error", httpStatus: 500, attempts: [], latencyMs: Date.now() - startedAt,
-        errorCode: "internal_error", errorMessage: String((e as Error)?.message ?? e),
-      };
-      sink.emit("error", { code: "internal_error", message: "Internal error." });
-    }
-
-    let summary;
-    try {
-      summary = finishRequest(gw.db, requestId, result, result.attempts);
-    } catch (e) {
-      console.error(`[${requestId}] metering write failed`, e);
-    }
-    const usageAfter = getUsage(gw.db, tenant);
-    const done = {
-      requestId,
-      outcome: result.outcome,
-      backend: result.backend ?? null,
-      model: result.model ?? null,
-      fallbackUsed: summary?.fallbackUsed ?? result.attempts.length > 1,
-      attempts: result.attempts.length,
-      usage: summary
-        ? { promptTokens: summary.promptTokens, completionTokens: summary.completionTokens, totalTokens: summary.totalTokens, source: summary.usageSource }
-        : null,
-      costUsd: summary?.costUsd ?? null,
-      latencyMs: result.latencyMs,
-      ttftMs: result.ttftMs ?? null,
-      intent: result.intent ?? null,
-      confidence: result.confidence ?? null,
-      quota: { tokensRemaining: usageAfter.tokensRemaining, requestsRemaining: usageAfter.requestsRemaining },
-    };
-    sink.emit("done", done);
-
-    if (spec.stream) (sink as SseSink | ChatSseSink).end();
-    else if (!res.headersSent) {
-      res.status(result.httpStatus === 499 ? 200 : result.httpStatus).json(spec.respondJson(sink as CollectSink, done));
-    }
-  }
+  const runCapability = createCapabilityRunner(gw);
 
   // ---------- public API ----------
   app.get("/healthz", (_req, res) => {
@@ -202,44 +91,12 @@ export function createApp(gw: Gateway) {
     });
   });
 
-  app.post("/v1/support/answer", tenantAuth, async (req, res) => {
-    await runCapability(req, res, "support.answer", (tenant) => {
-      const body = SupportBody.parse(req.body ?? {});
-      const promptVersion = body.prompt_version ?? gw.config.support.defaultPromptVersion;
-      const prepared = prepareSupport(gw, tenant, {
-        message: body.message,
-        model: body.model,
-        promptVersion,
-        includeReasoning: body.include_reasoning,
-        placeholders: body.placeholders,
-      });
-      return {
-        estimatedPromptTokens: prepared.estimatedPromptTokens,
-        requestedMaxTokens:
-          gw.config.support.maxAnswerTokens + (body.include_reasoning ? gw.config.support.reasoningExtraTokens : 0),
-        promptVersion,
-        stream: body.stream ?? true,
-        makeSink: () => new SseSink(res),
-        run: (ctx) => runSupport(gw, prepared, ctx),
-        respondJson: (s, done) => ({
-          ...done,
-          attempts: s.all("attempt").filter((a: any) => a.status !== "started"),
-          answer: s.last("refusal")?.message ?? s.answer,
-          refused: !!s.last("refusal"),
-          refusal: s.last("refusal") ?? null,
-          intentDetail: s.last("intent") ?? null,
-          retrieved: s.last("retrieval"),
-          route: s.last("route"),
-          error: s.last("error") ?? null,
-          steps: s.all("step"),
-          reasoning: body.include_reasoning ? s.reasoning : undefined,
-        }),
-      };
-    });
+  app.post("/v1/support/answer", tenantAuth("support.answer"), async (req, res) => {
+    await runCapability(req, res, "support.answer", { tenant: req.tenant!, credential: req.apiKey!.id }, supportSpec(gw, res, req.body));
   });
 
-  app.post("/v1/chat/completions", tenantAuth, async (req, res) => {
-    await runCapability(req, res, "chat.completions", (tenant) => {
+  app.post("/v1/chat/completions", tenantAuth("chat.completions"), async (req, res) => {
+    await runCapability(req, res, "chat.completions", { tenant: req.tenant!, credential: req.apiKey!.id }, (tenant) => {
       const body = ChatBody.parse(req.body ?? {});
       const { plan, estimatedPromptTokens } = prepareChat(gw, tenant, body.messages, body.model);
       return {
@@ -255,7 +112,7 @@ export function createApp(gw: Gateway) {
   });
 
   // which backends exist, whether they're online, and whether this tenant's plan may use them
-  app.get("/v1/backends", tenantAuth, (req, res) => {
+  app.get("/v1/backends", tenantAuth("usage.read"), (req, res) => {
     res.json(
       gw.backends.map((b) => ({
         id: b.config.id,
@@ -269,17 +126,20 @@ export function createApp(gw: Gateway) {
     );
   });
 
-  app.get("/v1/usage", tenantAuth, (req, res) => {
+  app.get("/v1/usage", tenantAuth("usage.read"), (req, res) => {
     res.json({ tenant: req.tenant!.id, plan: req.tenant!.plan, ...getUsage(gw.db, req.tenant!) });
   });
 
-  app.get("/v1/requests/:id", tenantAuth, (req, res) => {
+  app.get("/v1/requests/:id", tenantAuth("usage.read"), (req, res) => {
     const d = getRequestDetail(gw.db, String(req.params.id));
     if (!d || d.tenant_id !== req.tenant!.id) throw new GatewayError(404, "not_found", "Request not found.");
     res.json(d);
   });
 
-  // ---------- admin / console ----------
+  // ---------- console (session auth + RBAC) ----------
+  mountConsole(app, gw, runCapability);
+
+  // ---------- admin: operator scripts with the admin token (the console uses sessions instead) ----------
   app.get("/admin/usage", adminAuth, (_req, res) => {
     res.json(
       listTenants(gw.db).map((t) => ({
@@ -305,24 +165,11 @@ export function createApp(gw: Gateway) {
     res.json(d);
   });
   app.get("/admin/backends", adminAuth, (_req, res) => {
-    res.json(
-      gw.backends.map((b) => ({
-        id: b.config.id, tier: b.config.tier, model: b.config.model, enabled: b.config.enabled,
-        location: b.config.location, health: gw.health.get(b.config.id),
-        priceInPerM: b.config.priceInPerM, priceOutPerM: b.config.priceOutPerM,
-        firstTokenTimeoutMs: b.config.firstTokenTimeoutMs, totalTimeoutMs: b.config.totalTimeoutMs,
-        breaker: gw.breaker.snapshot(b.config.id), chaos: gw.chaos.get(b.config.id),
-      })),
-    );
-  });
-  const ChaosBody = z.object({
-    failRate: z.number().min(0).max(1).optional(),
-    mode: z.enum(["error", "hang", "garbage", "slow_first_token"]).optional(),
-    addedLatencyMs: z.number().int().min(0).max(120_000).optional(),
+    res.json(backendsFull(gw));
   });
   app.put("/admin/chaos/:backend", adminAuth, (req, res) => {
     const id = String(req.params.backend);
-    if (!gw.backends.some((b) => b.config.id === id)) throw new GatewayError(404, "not_found", `Unknown backend ${id}`);
+    if (!gw.backends.some((b) => b.config.id === id)) throw new GatewayError(404, "not_found", "Backend not found.");
     const body = ChaosBody.parse(req.body ?? {});
     res.json(gw.chaos.set(id, body as { mode?: ChaosMode }));
   });
@@ -337,48 +184,23 @@ export function createApp(gw: Gateway) {
     resetQuota(gw.db, t.id);
     res.json(getUsage(gw.db, getTenant(gw.db, t.id)!));
   });
-
-  // committed eval runs (tools/eval/results/*.json), summaries only: the per-case rows stay in the files
   app.get("/admin/evals", adminAuth, (_req, res) => {
-    const dir = gw.config.evalResultsDir;
-    const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")).sort().reverse() : [];
-    res.json(
-      files.flatMap((f) => {
-        try {
-          const r = JSON.parse(readFileSync(resolve(dir, f), "utf8"));
-          return [{ file: f, stamp: r.stamp, judge: r.judge, n: r.n, configs: r.configs.map(({ rows: _rows, ...c }: any) => c) }];
-        } catch {
-          return [];
-        }
-      }),
-    );
-  });
-
-  // Demo convenience: lets the hosted console work without copy-pasting keys.
-  app.get("/api/demo-config", (_req, res) => {
-    if (!gw.config.demoMode) throw new GatewayError(404, "not_found", "Demo mode is off.");
-    res.json({
-      adminToken: gw.config.adminToken,
-      tenants: DEMO_TENANTS.map((t) => ({
-        id: t.id, name: t.name, plan: t.plan, apiKey: t.apiKey, allowedTiers: t.allowedTiers, profile: t.profile ?? {},
-      })),
-      // all backends, including ones not configured on this host, so the console can label them offline
-      backends: gw.backends.map((b) => ({
-        id: b.config.id, tier: b.config.tier, model: b.config.model, location: b.config.location, enabled: b.config.enabled,
-      })),
-      intents: gw.intents,
-    });
+    res.json(listEvals(gw));
   });
 
   // ---------- console static files ----------
   const webDist = gw.config.consoleDist;
   if (existsSync(webDist)) {
-    app.use(express.static(webDist));
-    app.get(/^\/(?!v1\/|admin\/|api\/|healthz).*/, (_req, res) => res.sendFile(resolve(webDist, "index.html")));
+    app.use(express.static(webDist, { index: false, maxAge: "1h" }));
+    app.get(/^\/(?!v1\/|admin\/|api\/|healthz).*/, (_req, res) => {
+      res.setHeader("cache-control", "no-cache");
+      res.sendFile(resolve(webDist, "index.html"));
+    });
   }
 
   // ---------- errors ----------
-  app.use((req: Request, _res: Response, next: NextFunction) => next(new GatewayError(404, "not_found", `No route ${req.method} ${req.path}`)));
+  // generic: don't echo the method or path back
+  app.use((_req: Request, _res: Response, next: NextFunction) => next(new GatewayError(404, "not_found", "Not found.")));
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     let ge: GatewayError;
     if (err instanceof GatewayError) ge = err;
@@ -403,8 +225,11 @@ export function createApp(gw: Gateway) {
     if (ge.status === 429 && typeof resetsAt === "string") {
       res.setHeader("retry-after", String(Math.max(1, Math.ceil((Date.parse(resetsAt) - Date.now()) / 1000))));
     }
+    const retryAfter = ge.details?.retryAfterSeconds;
+    if (ge.status === 429 && typeof retryAfter === "number") res.setHeader("retry-after", String(retryAfter));
     res.status(ge.status).json(ge.toJSON());
   });
 
   return app;
 }
+

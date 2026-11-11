@@ -74,6 +74,8 @@ export interface AdmitInput {
   estimatedPromptTokens: number;
   requestedMaxTokens: number;
   promptVersion?: string | null;
+  /** which credential made the call: an api key id, or user:<id> for the console playground */
+  credential?: string | null;
 }
 
 export interface Admission {
@@ -102,9 +104,9 @@ export function admit(db: DB, tenant: Tenant, input: AdmitInput, now = Date.now(
     }
     if (denial) {
       db.prepare(
-        `INSERT INTO requests (id, tenant_id, endpoint, created_at, finished_at, outcome, http_status, error_code, error_message, counts_against_quota, prompt_version)
-         VALUES (?, ?, ?, ?, ?, 'quota_exceeded', 429, 'quota_exceeded', ?, 0, ?)`,
-      ).run(input.requestId, tenant.id, input.endpoint, now, now, denial.message, input.promptVersion ?? null);
+        `INSERT INTO requests (id, tenant_id, endpoint, created_at, finished_at, outcome, http_status, error_code, error_message, counts_against_quota, prompt_version, credential)
+         VALUES (?, ?, ?, ?, ?, 'quota_exceeded', 429, 'quota_exceeded', ?, 0, ?, ?)`,
+      ).run(input.requestId, tenant.id, input.endpoint, now, now, denial.message, input.promptVersion ?? null, input.credential ?? null);
       db.exec("COMMIT");
       began = false;
       throw new GatewayError(429, "quota_exceeded", denial.message, {
@@ -118,8 +120,8 @@ export function admit(db: DB, tenant: Tenant, input: AdmitInput, now = Date.now(
       Math.min(input.requestedMaxTokens, usage.tokensRemaining - promptEst),
     );
     db.prepare(
-      `INSERT INTO requests (id, tenant_id, endpoint, created_at, outcome, prompt_version) VALUES (?, ?, ?, ?, 'in_progress', ?)`,
-    ).run(input.requestId, tenant.id, input.endpoint, now, input.promptVersion ?? null);
+      `INSERT INTO requests (id, tenant_id, endpoint, created_at, outcome, prompt_version, credential) VALUES (?, ?, ?, ?, 'in_progress', ?, ?)`,
+    ).run(input.requestId, tenant.id, input.endpoint, now, input.promptVersion ?? null, input.credential ?? null);
     db.prepare(`INSERT INTO reservations (request_id, tenant_id, tokens, created_at) VALUES (?, ?, ?, ?)`).run(
       input.requestId,
       tenant.id,
@@ -138,10 +140,9 @@ export function admit(db: DB, tenant: Tenant, input: AdmitInput, now = Date.now(
       }
     }
     if (err instanceof GatewayError) throw err;
-    // fail closed
-    throw new GatewayError(503, "quota_unavailable", "Quota check failed; request rejected (fail-closed).", {
-      cause: String((err as Error)?.message ?? err),
-    });
+    // fail closed. The cause is logged, not returned: it is a database error, not something the caller can act on.
+    console.error(`[${input.requestId}] quota check failed`, err);
+    throw new GatewayError(503, "quota_unavailable", "Quota check failed; request rejected (fail-closed).");
   }
 }
 

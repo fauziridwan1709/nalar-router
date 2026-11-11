@@ -101,6 +101,32 @@ Returns a summary of each committed eval run in `tools/eval/results/*.json`. Per
   - `POST /admin/tenants/:id/reset-quota`
 - `GET /healthz`
 
+## Console API (session auth)
+
+The console signs in with email and password and then uses a session cookie. Keys and the admin token never reach the browser.
+
+- `POST /api/auth/login` with `{email, password}` (strict). Returns `{user, csrfToken}` and sets the `HttpOnly`, `SameSite=Strict` session cookie. Errors: `400 invalid_request` (one generic message for any bad input), `401 invalid_credentials` (same for a wrong password and an unknown account), `429 too_many_attempts` with `Retry-After`, `403 csrf_failed` for a cross-origin request.
+- `GET /api/auth/session` returns `{user, csrfToken}` or `401 unauthenticated`. `POST /api/auth/logout` ends the session.
+- `GET /api/auth/demo-accounts` lists the demo accounts, only when `DEMO_MODE=true`.
+- Every `POST`, `PUT` and `DELETE` below needs the `x-csrf-token` header.
+- Non-operators are always scoped to their own tenant; operators may pass `?tenant=`. Another tenant's object returns `404`.
+
+| endpoint | permission |
+|---|---|
+| `GET /api/console/config` | signed in |
+| `GET /api/console/metrics?range=&tenant=` | `dashboard:read` (also returns `paretoIssues` and `paretoIntents`) |
+| `GET /api/console/requests?limit=&tenant=`, `GET /api/console/requests/:id` | `requests:read` |
+| `GET /api/console/usage?tenant=` | `usage:read` |
+| `GET /api/console/backends` | `backends:read` (probe details, breaker errors and chaos only for operators) |
+| `GET /api/console/evals` | `evals:read` |
+| `GET /api/console/keys?tenant=` | `keys:read` |
+| `POST /api/console/keys` with `{name, scopes[], expiresInDays: 7\|30\|90\|365\|null}` | `keys:create`. `201 {key, secret}`; the only response that carries the secret. `409 key_limit_reached` past 10 active keys. |
+| `DELETE /api/console/keys/:id` | `keys:revoke_any`, or `keys:revoke_own` for keys you created |
+| `GET /api/console/audit?tenant=` | `audit:read` |
+| `POST /api/console/tenants/:id/reset-quota` | `quota:reset` |
+| `PUT /api/console/chaos/:backend`, `DELETE /api/console/chaos` | `chaos:write` |
+| `POST /api/console/playground/support` | `playground:run`. Same body as `/v1/support/answer`, plus `tenant` for operators. |
+
 ## Errors
 
 Every error has the shape `{"error": {"code", "message", "details?"}}`.
@@ -108,9 +134,14 @@ Every error has the shape `{"error": {"code", "message", "details?"}}`.
 | status | code | when |
 |---|---|---|
 | 400 | `invalid_request` / `invalid_json` / `unknown_model` | bad input, with the field-level reason |
-| 401 | `missing_api_key` / `invalid_api_key` | |
+| 401 | `missing_api_key` / `invalid_api_key` | unknown, revoked and expired keys all get `invalid_api_key` |
+| 401 | `unauthenticated` / `invalid_credentials` | console: no session / sign-in failed |
+| 403 | `insufficient_scope` | the key lacks the endpoint's scope |
+| 403 | `forbidden` / `csrf_failed` | console: the role lacks the permission / missing CSRF token or cross-origin |
 | 403 | `model_not_allowed` | the tenant asked for a tier its plan doesn't include |
 | 413 | `payload_too_large` | body over 64 kB |
 | 429 | `quota_exceeded` | includes the remaining quota, `resetsAt` and `Retry-After` |
+| 429 | `too_many_attempts` | console sign-in paused after repeated failures; `Retry-After` |
+| 409 | `key_limit_reached` | the tenant already has 10 active keys |
 | 502 | `all_backends_failed` | every backend errored, timed out or returned unusable output |
 | 503 | `quota_unavailable` | the quota check itself failed, so the request is rejected (fail closed) |

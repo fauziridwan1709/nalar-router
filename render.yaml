@@ -12,6 +12,6 @@ services:
       - key: GROQ_API_KEY
         sync: false          # set in the Render dashboard
       - key: DEMO_MODE
-        value: "true"        # exposes demo tenant keys to the console (reviewer convenience)
+        value: "true"        # seeds the 4 demo console accounts and lists them on the sign-in page (reviewer convenience)
       - key: ADMIN_TOKEN
         generateValue: true

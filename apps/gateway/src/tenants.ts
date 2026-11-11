@@ -1,5 +1,4 @@
 import type { DB } from "./db.js";
-import { hashKey } from "./db.js";
 import type { Tier } from "./config.js";
 
 export interface Tenant {
@@ -24,11 +23,6 @@ function rowToTenant(r: any): Tenant {
     quotaResetAt: r.quota_reset_at,
     profile: r.profile ? JSON.parse(r.profile) : {},
   };
-}
-
-export function findTenantByKey(db: DB, apiKey: string): Tenant | null {
-  const r = db.prepare("SELECT * FROM tenants WHERE api_key_hash = ?").get(hashKey(apiKey));
-  return r ? rowToTenant(r) : null;
 }
 
 export function getTenant(db: DB, id: string): Tenant | null {

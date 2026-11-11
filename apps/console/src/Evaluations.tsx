@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { admin, fmtMs, type DemoConfig } from "./api";
+import { api, fmtMs } from "./api";
+import { Select } from "./ui";
 import { ChartPanel, HBars, TableView } from "./charts";
 
 interface Summary {
@@ -39,19 +40,19 @@ const PURPOSE: Record<string, string> = {
 
 const pct = (v: number) => `${(v * 100).toFixed(v === 1 ? 0 : 1)}%`;
 
-export function Evaluations({ cfg }: { cfg: DemoConfig }) {
+export function Evaluations() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [file, setFile] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
-    admin<Run[]>(cfg.adminToken, "/admin/evals")
+    api<Run[]>("/api/console/evals")
       .then((r) => {
         setRuns(r);
         const preferred = r.find((x) => x.stamp === "2026-11-10T04-32-12") ?? r[0];
         setFile(preferred?.file ?? "");
       })
-      .catch((e) => setErr(String(e)));
-  }, [cfg.adminToken]);
+      .catch((e) => setErr((e as Error).message));
+  }, []);
   const run = useMemo(() => runs.find((r) => r.file === file), [runs, file]);
 
   if (err) return <div className="banner error">{err}</div>;
@@ -62,13 +63,8 @@ export function Evaluations({ cfg }: { cfg: DemoConfig }) {
   return (
     <>
       <div className="filters">
-        <select value={file} onChange={(e) => setFile(e.target.value)} aria-label="Evaluation run" style={{ minWidth: 420 }}>
-          {runs.map((r) => (
-            <option key={r.file} value={r.file}>
-              {r.stamp.replace("T", " ").slice(0, 16)}: {PURPOSE[r.stamp] ?? r.configs.map((x) => x.config).join(" vs ")}
-            </option>
-          ))}
-        </select>
+        <Select label="Evaluation run" width={520} value={file} onChange={setFile} search
+          options={runs.map((r) => ({ value: r.file, label: PURPOSE[r.stamp] ?? r.configs.map((x) => x.config).join(" vs "), description: r.stamp.replace("T", " ").slice(0, 16) }))} />
         <span className="muted small">
           {run.n.inDomain} held-out Bitext cases + {run.n.ood} out-of-domain, through the real gateway. Judge: {run.judge ?? "none"}.
         </span>
