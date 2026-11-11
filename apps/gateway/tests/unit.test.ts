@@ -17,7 +17,7 @@ const tenant = (id: string) => {
   const t = TENANTS.find((x) => x.id === id)!;
   return {
     id: t.id, name: t.name, plan: t.plan, allowedTiers: t.allowedTiers, tokenQuota: t.tokenQuota, requestQuota: t.requestQuota,
-    quotaResetAt: 0, profile: t.profile ?? {},
+    quotaResetAt: 0, profile: t.profile ?? {}, piiPolicy: { mode: "mask" as const, types: [] },
   };
 };
 
