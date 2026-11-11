@@ -14,6 +14,11 @@ apps/gateway/     Node ≥22.13 + Express 5 API (TypeScript → dist/). Serves t
   src/backends/      openaiCompat.ts (Groq, MLX, Ollama…), mock.ts (extractive), chaos.ts (fault injection)
   src/support/       retrieval.ts (BM25 + typo correction), prompt.ts (v1/v2/v3), parser.ts (header validation),
                      placeholders.ts (slot filling), assistant.ts
+  src/auth/          passwords.ts (scrypt), sessions.ts (users, sessions, audit), rbac.ts (roles → permissions),
+                     apiKeys.ts (scoped, expiring keys; digest only), rateLimit.ts (sign-in failures)
+  src/http/console.ts  session-authed console API: sign-in, RBAC, tenant scoping, keys, playground
+  src/http/capability.ts  the shared validate → admit → run → meter path (API key and console both use it)
+  src/http/security.ts    CSP and security headers, cookies, CSRF / origin checks
   src/quota.ts       fail-closed admission + token reservations
   src/metering.ts    requests/attempts rows
   src/db.ts          node:sqlite schema + demo tenant seed
@@ -23,8 +28,10 @@ tools/eval/       prepare-data.ts, retrieval-eval.ts, eval.ts, probe.ts; results
 data/             kb.json (2,160 KB entries), eval.json (30 held-out), eval-ood.json, eval-hard.json, retrieval-holdout.json
 docs/             REPORT.md (design + results), EVALUATION.md (all eval runs), ARCHITECTURE.md (Mermaid diagrams),
                   API.md, assets/ (banner, screenshots)
-apps/console/src  main.tsx (shell, nav, theme), Overview (dashboard), Playground, Requests (route strip), Tenants,
-                  Backends, Evaluations; charts.tsx (SVG chart primitives), ui.tsx (status, route strip, icons)
+apps/console/src  main.tsx (Astryx Theme, sign-in gate, role-aware shell), SignIn, Tour (feature guide), context.tsx (pages + perms),
+                  Overview (dashboard + Pareto), Playground (workbench + Get code), ApiKeys, AuditLog, Requests, Tenants,
+                  Backends, Evaluations; charts.tsx (animated SVG charts), ui.tsx (Astryx Select wrapper, Lucide icons),
+                  snippets.ts (API call samples), layers.css (cascade order vs Astryx)
 ```
 
 ## Commands (run from the repo root)
@@ -53,10 +60,14 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 - **Every attempt is metered,** including failed ones. `usage_source` is `provider` only when the provider actually reported usage. Otherwise it is `estimated`, or `none` when the provider rejected the call outright.
 - **Routing reasons are data.** If you add a rule, give it a `rule` id and a human-readable `reason` in `planRoute`, and add a test.
 - Prices and thresholds belong in `config.ts`, not inline.
+- **The server enforces access.** Every console route checks a permission from `auth/rbac.ts`; the console hiding a control is not the control. Non-operators are pinned to their own tenant, and another tenant's object returns the same 404 as a missing one.
+- **The browser never gets a tenant API key or the admin token.** The console uses the session cookie + CSRF token; the playground goes through `/api/console/playground/support`.
+- **Errors carry the least detail that still helps the caller.** Same 401 for unknown/revoked/expired keys and for wrong password/unknown account; 403 doesn't name the permission; upstream error text stays in the DB (operators only); 404 doesn't echo the path.
+- **A key's plaintext leaves the server once,** in the `POST /api/console/keys` response. Only its SHA-256 is stored.
 
 ## Agent skills (`.agents/skills`, linked in `.claude/skills`)
 
-- **Console UI work:** read `frontend-design` and `web-design-guidelines`; for React specifics, `vercel-react-best-practices`. Every chart follows the dataviz rules already in `apps/console/src/charts.tsx`: validated palette, one axis, a tooltip, and a table view.
+- **Console UI work:** read `frontend-design` and `web-design-guidelines`; for React specifics, `vercel-react-best-practices`. Use Astryx components (`@astryxdesign/core/*`, pinned 0.7.13) for controls before hand-rolling one, and Lucide for icons. Every chart follows the dataviz rules already in `apps/console/src/charts.tsx`: validated palette, one axis, a tooltip, and a table view.
 - **Gateway and API work:** `nodejs-backend-patterns` and `api-and-interface-design`. Keep the error shape and the invariants above.
 - **Always:** `karpathy-guidelines` (surgical changes, verifiable success criteria).
 - **Verifying the running console:** `webapp-testing`. To record the demo video: `product-demo`.
@@ -68,4 +79,4 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 - Errors use `GatewayError(status, code, message, details)` and come out as `{error:{code,message,details}}`.
 - New backends implement `Backend.stream()` and yield `{type:"text"}` and `{type:"usage"}` chunks. They must honour `req.signal`.
 - When you change routing, prompts or retrieval, re-run `npm run retrieval-eval` and a short `npm run eval -- --limit 10`, and update `docs/REPORT.md` if the numbers move.
-- Secrets live only in `.env` or the Render dashboard. The `DEMO_MODE` keys are fake demo keys.
+- Secrets live only in `.env` or the Render dashboard. The `DEMO_MODE` keys and demo account passwords are public demo values.
