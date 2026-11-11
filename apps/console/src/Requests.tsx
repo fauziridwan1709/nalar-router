@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { admin, fmtMs, fmtN, fmtUsd, type DemoConfig } from "./api";
-import { GROUP, Outcome, RouteStrip, groupOf, type Group } from "./ui";
+import { Switch } from "@astryxdesign/core/Switch";
+import { ListTree, X } from "lucide-react";
+import { api, fmtMs, fmtN, fmtUsd, qs } from "./api";
+import { Empty, GROUP, Outcome, RouteStrip, Select, groupOf, type Group } from "./ui";
+import { useApp } from "./context";
 
-export function Requests({ cfg }: { cfg: DemoConfig }) {
+export function Requests() {
+  const { scope: tenant, can } = useApp();
   const [rows, setRows] = useState<any[]>([]);
-  const [tenant, setTenant] = useState("");
   const [group, setGroup] = useState<"" | Group>("");
   const [onlyFallback, setOnlyFallback] = useState(false);
   const [detail, setDetail] = useState<any | null>(null);
@@ -12,12 +15,13 @@ export function Requests({ cfg }: { cfg: DemoConfig }) {
 
   const load = useCallback(async () => {
     try {
-      setRows(await admin(cfg.adminToken, `/admin/requests?limit=300${tenant ? `&tenant=${tenant}` : ""}`));
+      setRows(await api(`/api/console/requests${qs({ limit: 300, tenant })}`));
       setErr(null);
     } catch (e) {
-      setErr(String(e));
+      setErr((e as Error).message);
     }
-  }, [cfg.adminToken, tenant]);
+  }, [tenant]);
+  const open = (id: string) => api(`/api/console/requests/${encodeURIComponent(id)}`).then(setDetail).catch((e) => setErr((e as Error).message));
   useEffect(() => {
     load();
     const t = setInterval(load, 6000);
@@ -32,17 +36,9 @@ export function Requests({ cfg }: { cfg: DemoConfig }) {
   return (
     <>
       <div className="filters">
-        <select value={tenant} onChange={(e) => setTenant(e.target.value)} aria-label="Tenant">
-          <option value="">All tenants</option>
-          {cfg.tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        <select value={group} onChange={(e) => setGroup(e.target.value as Group | "")} aria-label="Outcome">
-          <option value="">All outcomes</option>
-          {(Object.keys(GROUP) as Group[]).map((g) => <option key={g} value={g}>{GROUP[g].label}</option>)}
-        </select>
-        <label className="check small">
-          <input type="checkbox" checked={onlyFallback} onChange={(e) => setOnlyFallback(e.target.checked)} /> Only requests that fell back
-        </label>
+        <Select label="Outcome" width={220} value={group || "*"} onChange={(v) => setGroup(v === "*" ? "" : (v as Group))}
+          options={[{ value: "*", label: "All outcomes" }, ...(Object.keys(GROUP) as Group[]).map((g) => ({ value: g, label: GROUP[g].label }))]} />
+        <Switch label="Only requests that fell back" value={onlyFallback} onChange={setOnlyFallback} size="sm" />
         <span className="muted small">{fmtN(shown.length)} of the latest {fmtN(rows.length)}</span>
       </div>
       {err && <div className="banner error">{err}</div>}
@@ -51,16 +47,16 @@ export function Requests({ cfg }: { cfg: DemoConfig }) {
         <table className="tbl click">
           <thead>
             <tr>
-              <th>Time</th><th>Tenant</th><th>Outcome</th><th>Route (attempts in order)</th><th>Intent</th>
+              <th>Time</th>{can("tenants:all") && <th>Tenant</th>}<th>Credential</th><th>Outcome</th><th>Route (attempts in order)</th><th>Intent</th>
               <th className="r">Tokens</th><th className="r">Latency</th><th className="r">First token</th><th className="r">Cost</th>
             </tr>
           </thead>
           <tbody>
             {shown.map((r) => (
-              <tr key={r.id} onClick={() => admin(cfg.adminToken, `/admin/requests/${r.id}`).then(setDetail)} tabIndex={0}
-                onKeyDown={(e) => e.key === "Enter" && admin(cfg.adminToken, `/admin/requests/${r.id}`).then(setDetail)}>
+              <tr key={r.id} onClick={() => open(r.id)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && open(r.id)}>
                 <td className="num">{new Date(r.created_at).toLocaleTimeString()}</td>
-                <td>{r.tenant_id}</td>
+                {can("tenants:all") && <td>{r.tenant_id}</td>}
+                <td className="small">{r.credential?.startsWith("user:") ? <span className="tag">console</span> : r.credential_name ? <span title={r.credential}>{r.credential_name}</span> : <span className="muted">–</span>}</td>
                 <td><Outcome outcome={r.outcome} /></td>
                 <td><RouteStrip trail={r.attempt_trail} /></td>
                 <td className="small">{r.intent ?? <span className="muted">–</span>}</td>
@@ -74,7 +70,7 @@ export function Requests({ cfg }: { cfg: DemoConfig }) {
               </tr>
             ))}
             {!shown.length && (
-              <tr><td colSpan={9} className="muted" style={{ padding: 24, textAlign: "center" }}>No requests match these filters.</td></tr>
+              <tr><td colSpan={11}><Empty icon={ListTree} title="No requests match these filters">Requests appear here as soon as they are metered.</Empty></td></tr>
             )}
           </tbody>
         </table>
@@ -98,7 +94,7 @@ export function RequestDrawer({ detail, onClose }: { detail: any; onClose: () =>
         <h3>
           <span className="mono">{detail.id}</span>
           <span style={{ flex: 1 }} />
-          <button className="btn ghost sm" onClick={onClose}>Close</button>
+          <button className="icon-btn" onClick={onClose} aria-label="Close"><X size={16} /></button>
         </h3>
         <div className="filters small" style={{ marginBottom: 10 }}>
           <Outcome outcome={detail.outcome} />

@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { admin, fmtMs, fmtN, fmtUsd, type DemoConfig } from "./api";
-import { ChartPanel, HBars, Legend, LineChart, SegmentedBar, Sparkline, StackedColumns, TableView } from "./charts";
-import { GROUP, type Group } from "./ui";
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { Activity, Play, Square } from "lucide-react";
+import { api, fmtMs, fmtN, fmtUsd, qs } from "./api";
+import { ChartPanel, HBars, Legend, LineChart, Pareto, SegmentedBar, Sparkline, StackedColumns, TableView, useCountUp, type ParetoRow } from "./charts";
+import { Empty, GROUP, type Group } from "./ui";
+import { useApp } from "./context";
 
 type Range = "15m" | "1h" | "24h" | "7d";
 const RANGE_LABEL: Record<Range, string> = { "15m": "last 15 minutes", "1h": "last hour", "24h": "last 24 hours", "7d": "last 7 days" };
@@ -35,6 +38,8 @@ interface Metrics {
   buckets: Bucket[];
   byTenant: { tenant: string; requests: number; tokens: number; costUsd: number }[];
   byBackend: { backend: string; requests: number; share: number }[];
+  paretoIntents: ParetoRow[];
+  paretoIssues: ParetoRow[];
 }
 
 /** backend → categorical slot, fixed by identity (never by rank) */
@@ -65,9 +70,10 @@ const SAMPLE: { tenant: string; message: string; model?: string }[] = [
   { tenant: "globex", message: "tell me a joke" },
 ];
 
-export function Overview({ cfg, go }: { cfg: DemoConfig; go: (tab: string) => void }) {
+export function Overview() {
+  const { cfg, can, go, scope: tenant, tenantName, user } = useApp();
   const [range, setRange] = useState<Range>("1h");
-  const [tenant, setTenant] = useState("");
+  const [paretoOf, setParetoOf] = useState<"issues" | "intents">("issues");
   const [m, setM] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -77,14 +83,14 @@ export function Overview({ cfg, go }: { cfg: DemoConfig; go: (tab: string) => vo
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setM(await admin<Metrics>(cfg.adminToken, `/admin/metrics?range=${range}${tenant ? `&tenant=${tenant}` : ""}`));
+      setM(await api<Metrics>(`/api/console/metrics${qs({ range, tenant })}`));
       setErr(null);
     } catch (e) {
-      setErr(String(e));
+      setErr((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [cfg.adminToken, range, tenant]);
+  }, [range, tenant]);
 
   useEffect(() => {
     load();
@@ -92,16 +98,18 @@ export function Overview({ cfg, go }: { cfg: DemoConfig; go: (tab: string) => vo
     return () => clearInterval(t);
   }, [load, range]);
 
+  // operators spread the sample over every demo tenant; everyone else sends it as their own tenant
+  const canRun = can("playground:run");
   async function sampleTraffic() {
     stop.current = false;
     setRun({ done: 0, total: SAMPLE.length });
+    const multi = can("tenants:all");
     for (let i = 0; i < SAMPLE.length && !stop.current; i++) {
       const s = SAMPLE[i];
-      const key = cfg.tenants.find((t) => t.id === s.tenant)!.apiKey;
-      await fetch("/v1/support/answer", {
+      const tenantId = multi && cfg.tenants.some((t) => t.id === s.tenant) ? s.tenant : user.tenant?.id;
+      await api("/api/console/playground/support", {
         method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-        body: JSON.stringify({ message: s.message, model: s.model, stream: false }),
+        json: { message: s.message, model: s.model, stream: false, ...(multi ? { tenant: tenantId } : {}) },
       }).catch(() => {});
       setRun({ done: i + 1, total: SAMPLE.length });
       if (i % 3 === 2) load();
@@ -119,54 +127,55 @@ export function Overview({ cfg, go }: { cfg: DemoConfig; go: (tab: string) => vo
   const tot = m?.totals;
   const empty = m && tot!.requests === 0;
   const groups = Object.keys(GROUP) as Group[];
-  const tenantName = (id: string) => cfg.tenants.find((t) => t.id === id)?.name.split(" (")[0] ?? id;
+  const pareto = paretoOf === "issues" ? m?.paretoIssues ?? [] : m?.paretoIntents ?? [];
 
   return (
     <>
       <div className="filters" role="group" aria-label="Filters for every chart below">
-        <div className="seg" role="group" aria-label="Time range">
-          {(["15m", "1h", "24h", "7d"] as Range[]).map((r) => (
-            <button key={r} aria-pressed={range === r} onClick={() => setRange(r)}>{r}</button>
-          ))}
-        </div>
-        <select value={tenant} onChange={(e) => setTenant(e.target.value)} aria-label="Tenant">
-          <option value="">All tenants</option>
-          {cfg.tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        <span className="muted small">{RANGE_LABEL[range]} · refreshes automatically</span>
+        <SegmentedControl label="Time range" value={range} onChange={(v) => setRange(v as Range)} size="sm">
+          {(["15m", "1h", "24h", "7d"] as Range[]).map((r) => <SegmentedControlItem key={r} value={r} label={r} />)}
+        </SegmentedControl>
+        <span className="muted small live"><span className="pulse ok" aria-hidden /> {RANGE_LABEL[range]} · {tenant ? tenantName(tenant) : can("tenants:all") ? "all tenants" : tenantName(user.tenant!.id)} · live</span>
         <span style={{ flex: 1 }} />
-        {run ? (
+        {canRun && (run ? (
           <>
             <span className="small ink2">Sending sample traffic {run.done}/{run.total}…</span>
-            <button className="btn sm" onClick={() => (stop.current = true)}>Stop</button>
+            <div className="progress" style={{ width: 120 }}><div style={{ width: `${(run.done / run.total) * 100}%` }} /></div>
+            <button className="btn sm" onClick={() => (stop.current = true)}><Square size={13} /> Stop</button>
           </>
         ) : (
-          <button className="btn" onClick={sampleTraffic} title="Sends 14 real requests through the gateway with the demo tenants">
-            Run sample traffic
+          <button className="btn" onClick={sampleTraffic} title="Sends 14 real requests through the gateway">
+            <Play size={14} /> Run sample traffic
           </button>
-        )}
+        ))}
       </div>
 
       {err && <div className="banner error">{err}</div>}
 
-      <div className="stats" aria-label="Totals for the selected range">
-        <Stat k="Requests" v={fmtN(tot?.requests ?? 0)} d={tot ? `${fmtN(tot.modelCalls)} reached a model` : ""} trend={m?.buckets.map((b) => b.requests)} />
-        <Stat k="Answered" v={pct(tot?.successRate ?? null)} d={tot ? `${fmtN(tot.outcomes.refused)} refused · ${fmtN(tot.outcomes.failed)} failed` : ""} />
-        <Stat k="Latency p95" v={fmtMs(tot?.p95 ?? null)} d={`p50 ${fmtMs(tot?.p50 ?? null)}`} trend={m?.buckets.map((b) => b.p95)} />
-        <Stat k="Fallback rate" v={pct(tot?.fallbackRate ?? null)} d="of requests that reached a model" trend={m?.buckets.map((b) => b.fallbackRate)} />
-        <Stat k="Estimated cost" v={fmtUsd(tot?.costUsd ?? 0)} d={tot ? `${fmtN(tot.tokens)} tokens` : ""} trend={m?.buckets.map((b) => b.costUsd)} />
+      <div className="stats" aria-label="Totals for the selected range" data-tour="stats">
+        <Stat k="Requests" value={tot?.requests ?? 0} fmt={(v) => fmtN(Math.round(v))} d={tot ? `${fmtN(tot.modelCalls)} reached a model` : ""} trend={m?.buckets.map((b) => b.requests)} />
+        <Stat k="Answered" value={tot?.successRate ?? null} fmt={(v) => pct(v)} d={tot ? `${fmtN(tot.outcomes.refused)} refused · ${fmtN(tot.outcomes.failed)} failed` : ""} />
+        <Stat k="Latency p95" value={tot?.p95 ?? null} fmt={(v) => fmtMs(Math.round(v))} d={`p50 ${fmtMs(tot?.p50 ?? null)}`} trend={m?.buckets.map((b) => b.p95)} />
+        <Stat k="Fallback rate" value={tot?.fallbackRate ?? null} fmt={(v) => pct(v)} d="of requests that reached a model" trend={m?.buckets.map((b) => b.fallbackRate)} />
+        <Stat k="Estimated cost" value={tot?.costUsd ?? 0} fmt={(v) => fmtUsd(v)} d={tot ? `${fmtN(tot.tokens)} tokens` : ""} trend={m?.buckets.map((b) => b.costUsd)} />
       </div>
 
       {empty ? (
-        <section className="panel">
-          <div className="empty">
-            <b>No traffic in the {RANGE_LABEL[range]}</b>
-            <p>Charts fill in as requests are metered. Send a message from the playground, or run a sample of real traffic.</p>
-            <div className="filters" style={{ justifyContent: "center" }}>
-              <button className="btn primary" onClick={sampleTraffic} disabled={!!run}>Run sample traffic</button>
-              <button className="btn" onClick={() => go("playground")}>Open playground</button>
-            </div>
-          </div>
+        <section className="panel" data-tour="pareto">
+          <Empty
+            icon={Activity}
+            title={`No traffic in the ${RANGE_LABEL[range]}`}
+            action={canRun ? (
+              <div className="filters" style={{ justifyContent: "center" }}>
+                <button className="btn primary" onClick={sampleTraffic} disabled={!!run}><Play size={14} /> Run sample traffic</button>
+                <button className="btn" onClick={() => go("playground")}>Open playground</button>
+              </div>
+            ) : undefined}
+          >
+            {canRun
+              ? "Charts fill in as requests are metered. Send a message from the playground, or run a sample of real traffic."
+              : "Charts fill in as your services call the gateway. Your role is read-only, so ask a developer or owner to send traffic."}
+          </Empty>
         </section>
       ) : m ? (
         <>
@@ -205,6 +214,27 @@ export function Overview({ cfg, go }: { cfg: DemoConfig; go: (tab: string) => vo
               />
             </ChartPanel>
           </div>
+
+          <ChartPanel
+            tour="pareto"
+            title={paretoOf === "issues" ? "Where unanswered requests come from" : "What customers ask about"}
+            sub={paretoOf === "issues"
+              ? "Pareto of every request that wasn't answered, by cause. Fix the bars left of the 80% line first."
+              : "Pareto of answered and refused requests by detected intent"}
+            tools={
+              <SegmentedControl label="Pareto of" value={paretoOf} onChange={(v) => setParetoOf(v as "issues" | "intents")} size="sm">
+                <SegmentedControlItem value="issues" label="Issues" />
+                <SegmentedControlItem value="intents" label="Intents" />
+              </SegmentedControl>
+            }
+            table={<TableView rows={pareto} cols={[{ label: paretoOf === "issues" ? "Cause" : "Intent", get: (r) => r.label }, { label: "Requests", get: (r) => fmtN(r.count) }, { label: "Share", get: (r) => pct(r.share) }, { label: "Cumulative", get: (r) => pct(r.cumulative) }]} />}
+          >
+            {pareto.length ? (
+              <Pareto key={paretoOf} rows={pareto} unit="requests" />
+            ) : (
+              <div className="muted small pad">{paretoOf === "issues" ? "Every request in this range was answered." : "No intents detected in this range."}</div>
+            )}
+          </ChartPanel>
 
           <div className="grid c3">
             <ChartPanel
@@ -261,11 +291,12 @@ export function Overview({ cfg, go }: { cfg: DemoConfig; go: (tab: string) => vo
   );
 }
 
-function Stat({ k, v, d, trend }: { k: string; v: string; d?: string; trend?: (number | null)[] }) {
+function Stat({ k, value, fmt, d, trend }: { k: string; value: number | null; fmt: (v: number) => string; d?: string; trend?: (number | null)[] }) {
+  const v = useCountUp(value ?? 0);
   return (
     <div className="stat">
       <div className="k">{k}</div>
-      <div className="v">{v}</div>
+      <div className="v num">{value == null ? "–" : fmt(v)}</div>
       {d && <div className="d">{d}</div>}
       {trend && trend.length > 1 && <Sparkline values={trend.slice(-12)} />}
     </div>

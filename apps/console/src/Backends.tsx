@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { admin, fmtMs, type BackendStatus, type DemoConfig } from "./api";
+import { api, fmtMs, type BackendStatus } from "./api";
+import { useApp } from "./context";
+import { Select } from "./ui";
 import { LOCATION_LABEL, StatusBadge } from "./StatusBadge";
 import { BACKEND_COLOR } from "./Overview";
 
@@ -10,12 +12,14 @@ const MODES: { id: string; label: string }[] = [
   { id: "slow_first_token", label: "Slow first token" },
 ];
 
-export function Backends({ cfg }: { cfg: DemoConfig }) {
+export function Backends() {
+  const { can } = useApp();
+  const operator = can("chaos:write");
   const [list, setList] = useState<BackendStatus[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const refresh = useCallback(
-    () => admin<BackendStatus[]>(cfg.adminToken, "/admin/backends").then((l) => (setList(l), setErr(null))).catch((e) => setErr(String(e))),
-    [cfg.adminToken],
+    () => api<BackendStatus[]>("/api/console/backends").then((l) => (setList(l), setErr(null))).catch((e) => setErr((e as Error).message)),
+    [],
   );
   useEffect(() => {
     refresh();
@@ -23,8 +27,8 @@ export function Backends({ cfg }: { cfg: DemoConfig }) {
     return () => clearInterval(t);
   }, [refresh]);
   const setChaos = (id: string, patch: object) =>
-    admin(cfg.adminToken, `/admin/chaos/${id}`, { method: "PUT", body: JSON.stringify(patch) }).then(refresh).catch((e) => setErr(String(e)));
-  const anyChaos = list.some((b) => b.chaos.failRate > 0 || b.chaos.addedLatencyMs > 0);
+    api(`/api/console/chaos/${encodeURIComponent(id)}`, { method: "PUT", json: patch }).then(refresh).catch((e) => setErr((e as Error).message));
+  const anyChaos = list.some((b) => b.chaos && (b.chaos.failRate > 0 || b.chaos.addedLatencyMs > 0));
 
   return (
     <>
@@ -33,15 +37,15 @@ export function Backends({ cfg }: { cfg: DemoConfig }) {
         <header>
           <div>
             <h2>Backends</h2>
-            <p>Availability comes from a probe every 30 s plus the circuit breaker (3 consecutive failures open it for 30 s).</p>
+            <p>Availability comes from a probe every 30 s plus the circuit breaker (3 consecutive failures open it for 30 s).{!operator && " Probe details and fault injection are visible to operators."}</p>
           </div>
         </header>
         <div className="body" style={{ overflow: "auto" }}>
           <table className="tbl">
             <thead>
               <tr>
-                <th>Backend</th><th>Status</th><th>Model</th><th>Tier</th><th className="r">Price in / out per 1M</th>
-                <th className="r">Timeouts (first token / total)</th><th>Circuit breaker</th>
+                <th>Backend</th><th>Status</th><th>Model</th><th>Tier</th>
+                {operator && <><th className="r">Price in / out per 1M</th><th className="r">Timeouts (first token / total)</th></>}<th>Circuit breaker</th>
               </tr>
             </thead>
             <tbody>
@@ -63,11 +67,11 @@ export function Backends({ cfg }: { cfg: DemoConfig }) {
                   </td>
                   <td className="mono small">{b.model}</td>
                   <td>{b.tier}</td>
-                  <td className="r">${b.priceInPerM} / ${b.priceOutPerM}</td>
-                  <td className="r">{fmtMs(b.firstTokenTimeoutMs)} / {fmtMs(b.totalTimeoutMs)}</td>
+                  {operator && <><td className="r">${b.priceInPerM} / ${b.priceOutPerM}</td>
+                  <td className="r">{fmtMs(b.firstTokenTimeoutMs)} / {fmtMs(b.totalTimeoutMs)}</td></>}
                   <td>
                     <span className={`tag ${b.breaker.state === "closed" ? "good" : b.breaker.state === "open" ? "bad" : "warn"}`}>{b.breaker.state}</span>
-                    {b.breaker.state === "open" && <div className="muted small">reopens in {fmtMs(b.breaker.reopensInMs)}</div>}
+                    {b.breaker.state === "open" && b.breaker.reopensInMs != null && <div className="muted small">reopens in {fmtMs(b.breaker.reopensInMs)}</div>}
                     {b.breaker.lastError && <div className="muted small" title={b.breaker.lastError}>{b.breaker.lastError.slice(0, 70)}</div>}
                   </td>
                 </tr>
@@ -77,14 +81,14 @@ export function Backends({ cfg }: { cfg: DemoConfig }) {
         </div>
       </section>
 
-      <section className="panel">
+      {operator && <section className="panel">
         <header>
           <div>
             <h2>Fault injection</h2>
             <p>Break a backend on purpose, then send a message from the playground and watch the router fall back.</p>
           </div>
           <div className="tools">
-            <button className="btn sm" disabled={!anyChaos} onClick={() => admin(cfg.adminToken, "/admin/chaos", { method: "DELETE" }).then(refresh)}>
+            <button className="btn sm" disabled={!anyChaos} onClick={() => api("/api/console/chaos", { method: "DELETE" }).then(refresh).catch((e) => setErr((e as Error).message))}>
               Clear all faults and reset breakers
             </button>
           </div>
@@ -97,26 +101,23 @@ export function Backends({ cfg }: { cfg: DemoConfig }) {
                 <tr key={b.id} className={b.enabled ? "" : "disabled"}>
                   <td className="mono">{b.id}</td>
                   <td>
-                    <select value={b.chaos.failRate} disabled={!b.enabled} aria-label={`${b.id} failure rate`} onChange={(e) => setChaos(b.id, { failRate: Number(e.target.value) })}>
-                      {[0, 0.25, 0.5, 1].map((r) => <option key={r} value={r}>{r === 0 ? "Off" : `${r * 100}% of calls`}</option>)}
-                    </select>
+                    <Select label={`${b.id} failure rate`} width={170} disabled={!b.enabled} value={String(b.chaos!.failRate)} onChange={(v) => setChaos(b.id, { failRate: Number(v) })}
+                      options={[0, 0.25, 0.5, 1].map((r) => ({ value: String(r), label: r === 0 ? "Off" : `${r * 100}% of calls` }))} />
                   </td>
                   <td>
-                    <select value={b.chaos.mode} disabled={!b.enabled} aria-label={`${b.id} failure mode`} onChange={(e) => setChaos(b.id, { mode: e.target.value })}>
-                      {MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                    </select>
+                    <Select label={`${b.id} failure mode`} width={210} disabled={!b.enabled} value={b.chaos!.mode} onChange={(v) => setChaos(b.id, { mode: v })}
+                      options={MODES.map((m) => ({ value: m.id, label: m.label }))} />
                   </td>
                   <td>
-                    <select value={b.chaos.addedLatencyMs} disabled={!b.enabled} aria-label={`${b.id} added latency`} onChange={(e) => setChaos(b.id, { addedLatencyMs: Number(e.target.value) })}>
-                      {[0, 500, 2000, 5000, 10000].map((r) => <option key={r} value={r}>{r ? `+${fmtMs(r)}` : "None"}</option>)}
-                    </select>
+                    <Select label={`${b.id} added latency`} width={150} disabled={!b.enabled} value={String(b.chaos!.addedLatencyMs)} onChange={(v) => setChaos(b.id, { addedLatencyMs: Number(v) })}
+                      options={[0, 500, 2000, 5000, 10000].map((r) => ({ value: String(r), label: r ? `+${fmtMs(r)}` : "None" }))} />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </section>
+      </section>}
     </>
   );
 }

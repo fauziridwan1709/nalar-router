@@ -1,4 +1,15 @@
-import type { ReactNode } from "react";
+/**
+ * Shared console UI. Interactive controls come from the Astryx design system (Selector,
+ * DropdownMenu, Dialog, Tooltip, Toast…); icons are Lucide, the set Astryx's neutral theme uses.
+ * Status is never colour alone: an icon and a word go with it.
+ */
+import { useState, type ReactNode } from "react";
+import { Selector } from "@astryxdesign/core/Selector";
+import { useToast } from "@astryxdesign/core/Toast";
+import {
+  Activity, BarChart3, Boxes, Check, CircleAlert, CircleCheck, CircleMinus, CircleX, Copy, FlaskConical, KeyRound,
+  LayoutDashboard, ListTree, MessageSquareText, ServerCog, ShieldCheck, Users, type LucideIcon,
+} from "lucide-react";
 
 export type Group = "success" | "refused" | "rejected" | "failed";
 
@@ -10,26 +21,32 @@ export function groupOf(outcome: string): Group {
 }
 
 /** outcome groups use the reserved status palette, always with an icon + a text label */
-export const GROUP: Record<Group, { label: string; color: string; icon: ReactNode }> = {
-  success: { label: "Answered", color: "var(--good)", icon: <Icon d="M3 8.5l3 3 7-7" /> },
-  refused: { label: "Refused / handed off", color: "var(--warning)", icon: <Icon d="M4 12L12 4M8 14A6 6 0 108 2a6 6 0 000 12z" /> },
-  rejected: { label: "Rejected (quota, input)", color: "var(--serious)", icon: <Icon d="M4 8h8M8 14A6 6 0 108 2a6 6 0 000 12z" /> },
-  failed: { label: "Failed", color: "var(--critical)", icon: <Icon d="M4 4l8 8M12 4l-8 8" /> },
+export const GROUP: Record<Group, { label: string; color: string; Icon: LucideIcon }> = {
+  success: { label: "Answered", color: "var(--good)", Icon: CircleCheck },
+  refused: { label: "Refused / handed off", color: "var(--warning)", Icon: CircleAlert },
+  rejected: { label: "Rejected (quota, input)", color: "var(--serious)", Icon: CircleMinus },
+  failed: { label: "Failed", color: "var(--critical)", Icon: CircleX },
 };
 
-export function Icon({ d, size = 14 }: { d: string; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d={d} />
-    </svg>
-  );
-}
+export const NAV: Record<string, LucideIcon> = {
+  overview: LayoutDashboard,
+  playground: MessageSquareText,
+  requests: ListTree,
+  keys: KeyRound,
+  tenants: Users,
+  backends: ServerCog,
+  evaluations: FlaskConical,
+  audit: ShieldCheck,
+  activity: Activity,
+  charts: BarChart3,
+  boxes: Boxes,
+};
 
 export function Outcome({ outcome }: { outcome: string }) {
   const g = GROUP[groupOf(outcome)];
   return (
     <span className="state" title={g.label}>
-      <span style={{ color: g.color }}>{g.icon}</span>
+      <g.Icon size={14} color={g.color} aria-hidden />
       {outcome.replace(/_/g, " ")}
     </span>
   );
@@ -59,23 +76,109 @@ export function RouteStrip({ trail }: { trail: string | null | undefined }) {
   );
 }
 
-export const NAV_ICONS = {
-  overview: "M2 13h12M4 13V8M8 13V3M12 13V6",
-  playground: "M3 3h10v7H8l-3 3v-3H3z",
-  requests: "M3 4h10M3 8h10M3 12h6",
-  tenants: "M5.5 7a2 2 0 100-4 2 2 0 000 4zM2 13c0-2 1.6-3.5 3.5-3.5S9 11 9 13M11 7.5a1.6 1.6 0 100-3.2M11.5 9.5c1.4.3 2.5 1.6 2.5 3.5",
-  backends: "M3 3h10v4H3zM3 9h10v4H3zM5.5 5h.01M5.5 11h.01",
-  evaluations: "M3 13V9M7 13V5M11 13V7M2 13.5h12M10 3l1.5 1.5L14 2",
-  sun: "M8 11a3 3 0 100-6 3 3 0 000 6zM8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1",
-  moon: "M13 9.5A5.5 5.5 0 016.5 3 5.5 5.5 0 1013 9.5z",
-};
+export interface Option {
+  value: string;
+  label: string;
+  description?: string;
+  disabled?: boolean;
+}
 
-export function Logo() {
+/** the Astryx Selector, with the props this console uses */
+export function Select({
+  label, value, onChange, options, hideLabel = true, size = "sm", width, search, variant = "input", tour, disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: Option[];
+  hideLabel?: boolean;
+  size?: "sm" | "md";
+  width?: number | string;
+  search?: boolean;
+  variant?: "input" | "secondary" | "ghost";
+  tour?: string;
+  disabled?: boolean;
+}) {
   return (
-    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
-      <rect width="28" height="28" rx="7" fill="var(--accent)" />
+    <div className="select" data-tour={tour} style={width ? { width } : undefined}>
+      <Selector
+        label={label}
+        isLabelHidden={hideLabel}
+        size={size}
+        variant={variant}
+        value={value}
+        onChange={(v) => onChange(v)}
+        options={options}
+        hasSearch={search}
+        isDisabled={disabled}
+        width="100%"
+      />
+    </div>
+  );
+}
+
+export function CopyButton({ text, label = "Copy", what = "Copied to clipboard" }: { text: string; label?: string; what?: string }) {
+  const toast = useToast();
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      className="btn sm"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setDone(true);
+          toast({ body: what, type: "info" });
+          setTimeout(() => setDone(false), 1500);
+        } catch {
+          toast({ body: "Couldn't copy. Select the text and copy it by hand.", type: "error" });
+        }
+      }}
+    >
+      {done ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+      {done ? "Copied" : label}
+    </button>
+  );
+}
+
+export function Empty({ icon: I, title, children, action }: { icon?: LucideIcon; title: string; children?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="empty">
+      {I && (
+        <div className="empty-icon">
+          <I size={20} aria-hidden />
+        </div>
+      )}
+      <b>{title}</b>
+      {children && <p>{children}</p>}
+      {action}
+    </div>
+  );
+}
+
+export const ROLE_LABEL: Record<string, string> = { operator: "Operator", owner: "Owner", developer: "Developer", viewer: "Viewer" };
+
+export function Logo({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 28 28" aria-hidden="true">
+      <defs>
+        <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="var(--accent)" />
+          <stop offset="1" stopColor="color-mix(in srgb, var(--accent) 60%, #7b4dff)" />
+        </linearGradient>
+      </defs>
+      <rect width="28" height="28" rx="8" fill="url(#lg)" />
       <path d="M7 14h5M15 14c3 0 3-6 6-6M15 14c3 0 3 6 6 6M15 14h6" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round" />
       <circle cx="13.5" cy="14" r="2" fill="#fff" />
     </svg>
   );
 }
+
+export const timeAgo = (t: number | null | undefined) => {
+  if (!t) return "never";
+  const s = Math.round((Date.now() - t) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return `${Math.floor(s / 86400)} d ago`;
+};

@@ -1,0 +1,2 @@
+/* Cascade order, declared before any other CSS: our element resets lose to Astryx, our component classes win. */
+@layer app-base, reset, astryx-base, astryx-theme, app;

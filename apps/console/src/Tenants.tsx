@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { admin, fmtN, fmtUsd, type DemoConfig } from "./api";
+import { useToast } from "@astryxdesign/core/Toast";
+import { RotateCcw } from "lucide-react";
+import { api, fmtN, fmtUsd, qs } from "./api";
 import { GROUP, groupOf, type Group } from "./ui";
+import { useApp } from "./context";
 
 /** meter: fill carries severity (accent → warning → critical); the track is a lighter step */
 function Meter({ used, total, label }: { used: number; total: number; label: string }) {
@@ -15,18 +18,20 @@ function Meter({ used, total, label }: { used: number; total: number; label: str
         </span>
       </div>
       <div className={`meter ${cls}`} role="meter" aria-valuenow={used} aria-valuemin={0} aria-valuemax={total} aria-label={label}>
-        <div style={{ width: `${p * 100}%` }} />
+        <div className="anim-meter" style={{ width: `${p * 100}%` }} />
       </div>
     </div>
   );
 }
 
-export function Tenants({ cfg }: { cfg: DemoConfig }) {
+export function Tenants() {
+  const { scope, can } = useApp();
+  const toast = useToast();
   const [usage, setUsage] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const load = useCallback(
-    () => admin<any[]>(cfg.adminToken, "/admin/usage").then((u) => (setUsage(u), setErr(null))).catch((e) => setErr(String(e))),
-    [cfg.adminToken],
+    () => api<any[]>(`/api/console/usage${qs({ tenant: scope })}`).then((u) => (setUsage(u), setErr(null))).catch((e) => setErr((e as Error).message)),
+    [scope],
   );
   useEffect(() => {
     load();
@@ -42,10 +47,9 @@ export function Tenants({ cfg }: { cfg: DemoConfig }) {
       </p>
       <div className="grid c2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(420px, 1fr))" }}>
         {usage.map((u) => {
-          const t = cfg.tenants.find((x) => x.id === u.tenant);
           const outcomes: Record<Group, number> = { success: 0, refused: 0, rejected: 0, failed: 0 };
           for (const o of u.outcomes) outcomes[groupOf(o.outcome)] += o.n;
-          const profileN = Object.keys(t?.profile ?? {}).length;
+          const profileN = u.profileFields ?? 0;
           return (
             <section className="panel" key={u.tenant}>
               <header>
@@ -55,11 +59,17 @@ export function Tenants({ cfg }: { cfg: DemoConfig }) {
                     <span className="mono">{u.tenant}</span> · {u.plan} plan · tiers {u.allowedTiers.join(", ")}
                   </p>
                 </div>
-                <div className="tools">
-                  <button className="btn sm" onClick={() => admin(cfg.adminToken, `/admin/tenants/${u.tenant}/reset-quota`, { method: "POST" }).then(load)}>
-                    Reset quota
-                  </button>
-                </div>
+                {can("quota:reset") && (
+                  <div className="tools">
+                    <button className="btn sm" onClick={() =>
+                      api(`/api/console/tenants/${encodeURIComponent(u.tenant)}/reset-quota`, { method: "POST" })
+                        .then(() => (toast({ body: `Quota reset for ${u.name}`, type: "info" }), load()))
+                        .catch((e) => toast({ body: (e as Error).message, type: "error" }))
+                    }>
+                      <RotateCcw size={13} /> Reset quota
+                    </button>
+                  </div>
+                )}
               </header>
               <div className="body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <Meter label="Tokens this month" used={u.tokenQuota - u.tokensRemaining} total={u.tokenQuota} />
@@ -72,7 +82,7 @@ export function Tenants({ cfg }: { cfg: DemoConfig }) {
                 <div className="filters small">
                   {(Object.keys(GROUP) as Group[]).map((g) => (
                     <span className="state" key={g}>
-                      <span style={{ color: GROUP[g].color }}>{GROUP[g].icon}</span>
+                      {(() => { const I = GROUP[g].Icon; return <I size={14} color={GROUP[g].color} aria-hidden />; })()}
                       {GROUP[g].label} <b className="num">{fmtN(outcomes[g])}</b>
                     </span>
                   ))}
