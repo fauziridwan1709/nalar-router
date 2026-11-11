@@ -161,15 +161,15 @@ export function Empty({ icon: I, title, children, action }: { icon?: LucideIcon;
 
 export const ROLE_LABEL: Record<string, string> = { operator: "Operator", owner: "Owner", developer: "Developer", viewer: "Viewer" };
 
-/** the mark: one input fanning out to three backends, on the accent gradient */
+/** the mark: one input fanning out to three backends, on the brand-orange gradient */
 export function Logo({ size = 22 }: { size?: number }) {
   const id = `nlg${useId().replace(/[^\w-]/g, "")}`; // several logos can be on screen at once; gradient ids must not collide
   return (
     <svg width={size} height={size} viewBox="0 0 28 28" aria-hidden="true" style={{ flex: "none" }}>
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="var(--accent)" />
-          <stop offset="1" stopColor="color-mix(in srgb, var(--accent) 60%, #7b4dff)" />
+          <stop offset="0" stopColor="#e8916f" />
+          <stop offset="1" stopColor="#c4552f" />
         </linearGradient>
       </defs>
       <rect width="28" height="28" rx="8" fill={`url(#${id})`} />
