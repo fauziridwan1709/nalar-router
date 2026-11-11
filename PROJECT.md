@@ -1,6 +1,6 @@
 # PROJECT.md: state of the work, and how to pick it up
 
-This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-11 (PR #2 open: PII guardrail and the Claude-Console redesign).
+This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-11 (PR #2 merged; PR #3 open: chat completions in the playground, `stream` toggle, original logo back).
 
 ## What this is
 
@@ -29,7 +29,8 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - [ ] **Video demo**, owned by the user. Use the `product-demo` skill, or record by hand. Suggested 5-minute flow is below.
 - [ ] **Invite the assessors** to the private repo (GitHub → Settings → Collaborators), or make it public
 - [ ] **Rotate the Groq API key.** It was printed in a session transcript on 2026-11-10. Update `.env` and the Render env var.
-- [ ] **Merge PR #2** (https://github.com/fauziridwan1709/nalar-router/pull/2, CI green). Merging redeploys Render; keep `DEMO_MODE=true` there or nobody can sign in.
+- [x] **Merge PR #2** (PII guardrail, Claude-Console redesign). Merged 2026-11-11.
+- [ ] **Merge PR #3** (chat completions + `stream` toggle in the playground, logo reverted). Merging redeploys Render; keep `DEMO_MODE=true` there or nobody can sign in.
 - [ ] Before recording or submitting, sign in on the live console as `ops@nalar.example` and click **Run sample traffic** on the Reliability page. The Render disk is ephemeral, so metering is empty after every redeploy.
 - [ ] Add a short "Beyond the brief" section to `docs/REPORT.md`: sign-in/RBAC, API key management, PII guardrail, console redesign. Say why each was added and what it cost, so it reads as judgement rather than scope creep.
 - [ ] Submit: repo link, live URL, video link
@@ -74,7 +75,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - **Code:**
   - npm-workspaces monorepo: `apps/gateway` (Express 5, TypeScript, `node:sqlite`), `apps/console` (React 19, Vite 8, Astryx 0.7.13, hand-rolled SVG charts), `tools/eval`
   - **72 gateway tests** pass (incl. sign-in, sessions, CSRF, RBAC, tenant isolation, API keys, PII guardrail and error hygiene); CI (GitHub Actions) runs typecheck, tests, build and the retrieval eval
-- **Branches:** `main` has PR #1 (auth, RBAC, keys, first redesign). PR #2 (`feat/guardrails-console-redesign`) adds the PII guardrail, the governance pages and the Claude-Console layout. Not merged yet.
+- **Branches:** `main` has PR #1 (auth, RBAC, keys, first redesign). PR #2 (PII guardrail, governance pages, Claude-Console layout) is merged. PR #3 (`feat/console-completions-playground`) is open.
 - **Default prompt is v3:** it tells the model which placeholders the gateway can fill. v1 and v2 are kept for reproducible comparisons.
 - **Tenants:**
   - `acme` (pro), `globex` (free), `initech` (trial: 4k tokens / 5 requests, to demo exhausting the quota) and `eval` (shown as "Nalar internal", the operator's home tenant)
@@ -93,6 +94,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
   - Claude-Console layout: a top bar with a ⌘K palette, notifications and docs, and a sectioned sidebar.
   - Pages: Dashboard; Usage / Cost / Reliability (Pareto) / Logs / Quotas; a workbench playground with templates; Guardrails / Access / Audit log; Backends / Evaluations.
   - Dark by default; Inter + Source Serif 4. Sign-in has the SparkTrail from the user's stackbyte website.
+  - PR #3: the playground calls support answer or chat completions, with a `stream: true|false` toggle and a Raw tab; the original gradient logo is back.
 - **Headline numbers:**
   - groq-fast vs groq-strong: intent accuracy 100% vs 100%, judge 4.47 vs 4.53, cost $0.092 vs $0.185 per 1k requests
   - answers showing raw placeholders: 15/30 → 0/30
@@ -143,6 +145,8 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 | PII detectors are conservative | a masked order number would break answers; checksums and context keep false positives at 0 on the dataset. No name detection (needs NER). |
 | Astryx for controls, our own CSS for layout | the user asked for Astryx; versions are pinned (beta). `layers.css` sets cascade order so our resets lose to Astryx and our classes win. |
 | Claude-Console look | the user supplied Claude Console screenshots as the reference: dark default, chips, stat cards, workbench playground. |
+| Original logo, not the spark mark | the spark mark from PR #2 looked too close to the Claude Console's. The layout stays; only the mark went back to the gradient fan-out. |
+| Playground covers both endpoints and `stream` | the completions endpoint had no place in the console; the playground now calls either one, streamed or as JSON, and the Raw tab shows the exact wire body. Still session-authed: the console twin of each `/v1` route uses the same spec. |
 
 ## Known issues and limitations
 
@@ -160,7 +164,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 
 ## Next steps (in priority order)
 
-- [ ] Merge PR #2, check the live sign-in and the PII template on Render.
+- [ ] Merge PR #3, check the live sign-in, the PII template and a chat run with `stream: false` on Render.
 - [ ] REPORT.md "Beyond the brief" section (see the checklist above).
 - [ ] Record the video demo (user). Optionally script it with `.agents/skills/product-demo` (writes to `out/product-demo/`).
 - [ ] Invite the assessors; rotate the Groq key.
@@ -199,6 +203,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 |---|
 | Console sign-in, sessions, CSRF, RBAC (4 roles), tenant isolation, audit log, scoped expiring API keys with a quickstart; security headers and error hygiene; removed `/api/demo-config`. Astryx controls, Lucide icons, animated charts, Pareto, feature tour. PR #1, merged. |
 | PII guardrail (mask / block / off), governance API, Guardrails / Access / Audit log pages, cross-tenant read audit, CSV export. Two leaks caught by tests and fixed (PII in a trace event; lead-in words causing scope refusals). |
-| Claude-Console redesign (top bar, ⌘K, sectioned sidebar, Dashboard, Usage / Cost / Reliability / Logs / Quotas, workbench playground), sign-in focus-ring fix, SparkTrail on sign-in, refreshed README screenshots. PR #2, open. |
+| Claude-Console redesign (top bar, ⌘K, sectioned sidebar, Dashboard, Usage / Cost / Reliability / Logs / Quotas, workbench playground), sign-in focus-ring fix, SparkTrail on sign-in, refreshed README screenshots. PR #2, merged. |
+| Playground calls either public endpoint: an Endpoint picker (support answer / chat completions), the `POST` path beside the title, a `stream: true\|false` toggle, an editable system prompt for chat, a Raw tab with the exact SSE or JSON body, and stream-aware Get code. Console route `/api/console/playground/chat`; chat SSE trace comments now carry `t`. Logo reverted to the original gradient fan-out mark (the spark mark looked too much like the Claude Console). PR #3. |
 
 The full commit history is in `git log`. Every commit since 14:19 on 2026-11-10 is scoped.

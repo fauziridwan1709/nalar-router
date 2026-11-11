@@ -99,7 +99,7 @@ The console follows the Claude Console's layout: a top bar with search (⌘K com
 
 - **Sign-in:** a dark split page with the cursor-following spark trail (WebGL2, off for touch and reduced motion). It lists four seeded accounts, one per tenant and one per role. See [Console sign-in, roles and API keys](#console-sign-in-roles-and-api-keys).
 - **Dashboard:** a greeting with *Get API key* and *Open playground*, three headline cards (requests with the change against the day before, token volume, PII-masked requests), the backends as cards, and resource shortcuts.
-- **Playground:** *Build your request* on the left (Form or Code, tenant, routing, prompt version, reasoning, the managed system prompt, the user message); on the right, six templates (placeholders, PII masking, typos, routing, refusal, prompt injection) or the streamed answer with an inspector. The inspector has tabs for Overview (incl. PII guardrail), Trace, Routing and Retrieval. History and *Get code* sit in the header.
+- **Playground:** *Build your request* on the left: the endpoint (support answer or chat completions, with its `POST` path next to the title), Form or Code, tenant, routing, prompt version, a `stream: true|false` toggle, reasoning, the system prompt (managed by the gateway for support, editable for chat) and the user message. On the right: templates for each endpoint, or the answer with an inspector. The inspector has tabs for Overview (incl. PII guardrail), Trace, Routing, Retrieval (support only) and Raw, which shows the exact SSE stream or JSON body an API client would receive. History and *Get code* sit in the header.
 - **Monitor:**
   - **Usage:** tokens in and out, requests; token usage stacked by backend or tenant; requests by outcome.
   - **Cost:** total, per 1,000 requests and per 1M tokens; cost stacked by backend or tenant; cost by tenant.
@@ -339,7 +339,7 @@ The full permission table is in [`apps/gateway/src/auth/rbac.ts`](apps/gateway/s
 - **Tenant isolation:** non-operators are pinned to their own tenant on the server. Another tenant's request or key id returns the same `404` as a missing one.
 - **Least detail in errors:** `403 You don't have permission to do that.` never names the missing permission. Tenants see a short category for a failed attempt (`upstream model error`, `no first token in time`); upstream HTTP bodies and model-output fragments stay in the database for operators. Unknown routes return `Not found.` without echoing the path.
 - **Headers:** a strict CSP (`default-src 'self'`, no inline script, `frame-ancestors 'none'`), `nosniff`, `Referrer-Policy: no-referrer`, COOP/CORP, HSTS over HTTPS, and `Cache-Control: no-store` on every API response.
-- **The console never holds a secret it doesn't need.** The old `/api/demo-config` endpoint, which handed the admin token and every tenant key to any visitor, is gone. The playground runs through the session (`POST /api/console/playground/support`) and is metered against the user's tenant like any API call.
+- **The console never holds a secret it doesn't need.** The old `/api/demo-config` endpoint, which handed the admin token and every tenant key to any visitor, is gone. The playground runs through the session (`POST /api/console/playground/support` and `/chat`) and is metered against the user's tenant like any API call.
 
 ### API keys
 
@@ -373,7 +373,7 @@ curl -N http://localhost:3000/v1/support/answer \
 | `POST /api/auth/login` · `POST /api/auth/logout` · `GET /api/auth/session` | — / session | Console sign-in; returns the user, their permissions and a CSRF token |
 | `GET /api/console/*` | session + permission | Metrics, requests, usage, backends, evals, keys and audit log, scoped to the user's tenant |
 | `POST /api/console/keys` · `DELETE /api/console/keys/:id` | session + CSRF + permission | Create (secret returned once) and revoke API keys |
-| `POST /api/console/playground/support` | session + CSRF + `playground:run` | The support capability as the signed-in user's tenant |
+| `POST /api/console/playground/support` · `POST /api/console/playground/chat` | session + CSRF + `playground:run` | The support capability or raw chat completions, streamed or not, as the signed-in user's tenant |
 | `GET /api/console/governance` · `PUT /api/console/governance/pii` · `POST /api/console/governance/pii/test` | session (+ CSRF, `governance:write` to change) | PII policy, stats, and a dry-run detector |
 | `GET /api/console/members` | session + `members:read` | Who can sign in to the tenant |
 | `GET /healthz` | — | Liveness check |
