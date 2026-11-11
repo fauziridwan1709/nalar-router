@@ -118,6 +118,8 @@ describe("RBAC", () => {
     expect((await call("/api/console/metrics?range=1h")).status).toBe(200);
     const pg = await call("/api/console/playground/support", { method: "POST", json: { message: "cancel my order", stream: false } });
     expect(pg.status).toBe(403);
+    const pgChat = await call("/api/console/playground/chat", { method: "POST", json: { messages: [{ role: "user", content: "hi" }], stream: false } });
+    expect(pgChat.status).toBe(403);
     expect((await pg.json()).error).toEqual({ code: "forbidden", message: "You don't have permission to do that." });
     expect((await call("/api/console/keys")).status).toBe(403);
     expect((await call("/api/console/chaos/f", { method: "PUT", json: { failRate: 1 } })).status).toBe(403);
@@ -170,6 +172,29 @@ describe("console playground", () => {
     // only operators may act as another tenant
     const asOther = await call("/api/console/playground/support", { method: "POST", json: { message: "x", tenant: "free", stream: false } });
     expect(asOther.status).toBe(404);
+  });
+
+  it("runs chat completions as the user's tenant, as JSON or as an OpenAI-style stream", async () => {
+    const s = await server();
+    const { call } = await signIn(s.base, "dev@test.example", "dev-pass-1");
+    const messages = [{ role: "user", content: "hi" }];
+    const j = await (await call("/api/console/playground/chat", { method: "POST", json: { messages, stream: false } })).json();
+    expect(j.object).toBe("chat.completion");
+    expect(j.choices[0].message.role).toBe("assistant");
+    expect(j.x_router.outcome).toBe("success");
+    const row = s.gw.db.prepare("SELECT tenant_id, endpoint, credential FROM requests WHERE id = ?").get(j.id) as any;
+    expect(row).toEqual({ tenant_id: "pro", endpoint: "chat.completions", credential: "user:u_dev" });
+
+    const res = await call("/api/console/playground/chat", { method: "POST", json: { messages, stream: true } });
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+    const text = await res.text();
+    expect(text).toMatch(/^: route \{.*"t":\d+/m); // trace comments carry the server-side elapsed time
+    expect(text.trim().endsWith("data: [DONE]")).toBe(true);
+
+    const asOther = await call("/api/console/playground/chat", { method: "POST", json: { messages, tenant: "free", stream: false } });
+    expect(asOther.status).toBe(404);
+    const bad = await call("/api/console/playground/chat", { method: "POST", json: { messages: [{ role: "robot", content: "hi" }] } });
+    expect(bad.status).toBe(400);
   });
 });
 
