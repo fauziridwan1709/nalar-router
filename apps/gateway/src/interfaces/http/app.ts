@@ -178,7 +178,9 @@ export function createApp(gw: Gateway) {
   }
 
   // ---------- errors ----------
-  // generic: don't echo the method or path back
+  // Every failure ends here (Express 5 forwards rejected async handlers too) and leaves as the
+  // documented shape; see domain/errors.ts and docs/ERRORS.md.
+  // Unknown routes don't echo the method or path back.
   app.use((_req: Request, _res: Response, next: NextFunction) => next(new GatewayError(404, "not_found", "Not found.")));
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     let ge: GatewayError;
@@ -187,16 +189,21 @@ export function createApp(gw: Gateway) {
     else if (err?.type === "entity.parse.failed") ge = new GatewayError(400, "invalid_json", "Request body is not valid JSON.");
     else if (err?.type === "entity.too.large") ge = new GatewayError(413, "payload_too_large", "Request body exceeds 64kb.");
     else {
-      console.error("unhandled error", err);
+      // log the cause with the request id the client also has; the response says nothing about it
+      console.error(`[${res.getHeader("x-request-id") ?? "-"}] unhandled error on ${req.method} ${req.path}`, err);
       ge = new GatewayError(500, "internal_error", "Internal error.");
     }
+    if (ge.status >= 500 && ge.code !== "internal_error") {
+      console.warn(`[${res.getHeader("x-request-id") ?? "-"}] ${ge.status} ${ge.code} on ${req.method} ${req.path}`);
+    }
     if (res.headersSent) {
-      // already streaming: best effort error event
+      // already streaming: end the stream with an error in that stream's own format
       try {
-        res.write(`event: error\ndata: ${JSON.stringify(ge.toJSON().error)}\n\n`);
+        const body = JSON.stringify(ge.toJSON().error);
+        res.write(req.path === "/v1/chat/completions" ? `data: ${JSON.stringify({ error: ge.toJSON().error })}\n\ndata: [DONE]\n\n` : `event: error\ndata: ${body}\n\n`);
         res.end();
       } catch {
-        /* ignore */
+        /* the connection is already gone */
       }
       return;
     }

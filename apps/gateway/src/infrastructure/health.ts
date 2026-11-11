@@ -54,8 +54,11 @@ export class HealthMonitor {
   }
 
   start() {
-    void this.probeAll();
-    this.timer = setInterval(() => void this.probeAll(), this.opts.intervalMs);
+    // probe() catches its own failures; the catch here only guards against a bug turning into an
+    // unhandled rejection, which index.ts treats as fatal
+    const run = () => void this.probeAll().catch((e) => console.error("health probe failed", e));
+    run();
+    this.timer = setInterval(run, this.opts.intervalMs);
     this.timer.unref();
   }
 
