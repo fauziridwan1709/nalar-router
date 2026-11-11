@@ -4,7 +4,7 @@
  * fallback and metering as the support assistant; output is OpenAI-compatible.
  */
 import type { Backend, ChatMessage, Sampling } from "./ports/backend.js";
-import { BackendError, publicAttemptError } from "../domain/errors.js";
+import { BackendError, publicAttemptError, type ErrorCode } from "../domain/errors.js";
 import type { AppDeps } from "./deps.js";
 import type { RunResult } from "./capability.js";
 import type { Tenant } from "../domain/types.js";
@@ -44,7 +44,7 @@ export function prepareChat(deps: AppDeps, tenant: Tenant, messages: ChatMessage
     deps.backends,
     tenant,
     // route on the size of the newest user turn; a long history alone shouldn't force the big model
-    { queryTokens: Math.ceil(lastUser.length / 4), hint: model },
+    { queryTokens: Math.ceil(lastUser.length / 4), text: lastUser, turns: messages.length, hint: model },
     deps.config.routing,
   );
   return { plan, estimatedPromptTokens };
@@ -105,7 +105,7 @@ export async function runChat(
   const err = result.status === "failed" ? result.error : new BackendError("error", "stopped");
   const aborted = err.kind === "aborted";
   const committed = result.status === "failed" && result.committed;
-  const code = aborted ? "client_aborted" : committed ? "stream_interrupted" : "all_backends_failed";
+  const code: ErrorCode = aborted ? "client_aborted" : committed ? "stream_interrupted" : "all_backends_failed";
   ctx.sink.emit("error", {
     code,
     message: aborted ? "Client disconnected." : committed ? "The answer was interrupted." : "All model backends failed.",

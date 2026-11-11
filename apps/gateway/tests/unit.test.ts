@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SupportOutputParser, parseHeader } from "../src/domain/support/parser.js";
 import { Bm25Index } from "../src/domain/support/retrieval.js";
 import { planRoute } from "../src/domain/routing/policy.js";
+import { assessComplexity } from "../src/domain/routing/complexity.js";
 import { CircuitBreaker } from "../src/domain/routing/breaker.js";
 import { executeWithFallback } from "../src/application/executor.js";
 import { BackendError } from "../src/domain/errors.js";
@@ -64,7 +65,7 @@ describe("retrieval", () => {
 
 describe("routing policy", () => {
   const backends = [new FakeBackend(cfg("f", "fast"), fail()), new FakeBackend(cfg("s", "strong"), fail()), new FakeBackend(cfg("m", "degraded"), fail())];
-  const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6 };
+  const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5 };
   it("defaults to fast with fallback chain", () => {
     const p = planRoute(backends, tenant("pro"), { queryTokens: 10, retrievalTopShare: 0.9 }, opts);
     expect(p.chain.map((b) => b.config.id)).toEqual(["f", "s", "m"]);
@@ -79,6 +80,72 @@ describe("routing policy", () => {
     expect(p.chain.map((b) => b.config.id)).toEqual(["f", "m"]);
     expect(p.rule).toBe("auto_escalate_denied_by_plan");
     expect(() => planRoute(backends, tenant("free"), { queryTokens: 1, hint: "strong" }, opts)).toThrow(/does not include/);
+  });
+});
+
+describe("query complexity", () => {
+  const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5 };
+  const assess = (text: string, extra: { retrievalTopShare?: number; turns?: number } = {}) =>
+    assessComplexity({ text, queryTokens: Math.ceil(text.length / 4), ...extra }, opts);
+  const ids = (text: string, extra = {}) => assess(text, extra).signals.map((s) => s.id);
+
+  it("scores a plain support question as simple", () => {
+    expect(assess("how can I cancel my order 12345?")).toMatchObject({ score: 0, level: "simple", signals: [] });
+  });
+  it("keeps one soft signal on the fast tier", () => {
+    const c = assess("why was I charged twice?");
+    expect(c.signals.map((s) => s.id)).toEqual(["reasoning"]);
+    expect(c.score).toBeLessThan(0.5);
+  });
+  it("detects each signal", () => {
+    expect(ids("what payment methods do you accept and how do I get a refund?")).toContain("multi_question");
+    expect(ids("is it shipped? when does it arrive?")).toContain("multi_question");
+    expect(ids("1. change my address 2. update my phone")).toContain("multi_step");
+    expect(ids("- change address\n- update phone")).toContain("multi_step");
+    expect(ids("first tell me how to report it, then how long the refund takes")).toContain("multi_step");
+    expect(ids("answer in JSON with at most 3 fields")).toContain("constraints");
+    expect(ids("why does this fail? ```js\nfetch(url)\n```")).toContain("code");
+    expect(ids("I paid 3 * 17.50, how much in total?")).toContain("math");
+    expect(ids("hi", { turns: 8 })).toContain("long_conversation");
+    expect(ids("cancel order", { retrievalTopShare: 0.4 })).toEqual(["ambiguous_intent"]);
+    expect(ids("x ".repeat(200))).toContain("long_query");
+  });
+  it("does not read order ids, prices or 'plan' as complexity", () => {
+    expect(ids("I want to change my subscription plan, order 123-456")).toEqual([]);
+    expect(ids("refund of $17.50 for order 12345")).toEqual([]);
+  });
+  it("escalates on combined signals and on each of the original rules alone", () => {
+    expect(assess("Compare standard and express shipping, explain the trade-offs and recommend one").level).toBe("complex");
+    expect(assess("cancel order", { retrievalTopShare: 0.4 }).score).toBe(0.5);
+    expect(assess("x ".repeat(200)).score).toBeGreaterThanOrEqual(0.5);
+  });
+  it("is capped at 1", () => {
+    expect(assess("Why? Compare, explain the trade-offs, analyze. ```js\nf()\n``` " + "x ".repeat(200), { retrievalTopShare: 0.1, turns: 9 }).score).toBe(1);
+  });
+});
+
+describe("complexity-based routing", () => {
+  const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5 };
+  const backends = [new FakeBackend(cfg("f", "fast"), reply("x")), new FakeBackend(cfg("s", "strong"), reply("x")), new FakeBackend(cfg("m", "degraded"), reply("x"))];
+  const route = (text: string, t = "pro") => planRoute(backends, tenant(t), { queryTokens: Math.ceil(text.length / 4), text, retrievalTopShare: 1 }, opts);
+
+  it("starts a complex request on the strong tier and records why", () => {
+    const p = route("Compare the standard and express shipping options, explain the trade-offs and recommend one.");
+    expect(p.rule).toBe("auto_escalate_strong");
+    expect(p.chain[0].config.id).toBe("s");
+    expect(p.signals.complexity).toMatchObject({ level: "complex", threshold: 0.5 });
+    expect(p.reason).toMatch(/complexity 0\.5 ≥ 0\.5: reasoning/);
+    expect(p.signals).not.toHaveProperty("text"); // the message itself is never stored with the route
+  });
+  it("keeps a simple request on the fast tier and still explains it", () => {
+    const p = route("where is my order?");
+    expect(p.rule).toBe("auto_default_fast");
+    expect(p.reason).toMatch(/simple enough for the fast tier: complexity 0 < 0\.5/);
+  });
+  it("respects the plan when a complex request can't escalate", () => {
+    const p = route("Compare the standard and express shipping options, explain the trade-offs and recommend one.", "free");
+    expect(p.rule).toBe("auto_escalate_denied_by_plan");
+    expect(p.chain[0].config.id).toBe("f");
   });
 });
 

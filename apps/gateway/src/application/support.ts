@@ -10,7 +10,7 @@
  *  - Combined confidence below the threshold (or model says "unknown") → refusal and
  *    hand-off message, never a guess.
  */
-import { BackendError, GatewayError, publicAttemptError } from "../domain/errors.js";
+import { BackendError, GatewayError, publicAttemptError, type ErrorCode } from "../domain/errors.js";
 import { PII_LABEL, retrievalText, scanPii, summarizeCounts, type PiiFinding } from "../domain/guardrails/pii.js";
 import type { AppDeps } from "./deps.js";
 import type { Backend } from "./ports/backend.js";
@@ -71,7 +71,7 @@ export function prepareSupport(deps: AppDeps, tenant: Tenant, input: SupportInpu
   const plan = planRoute(
     deps.backends,
     tenant,
-    { queryTokens: estimateTokens(modelText), retrievalTopShare: retrieval.topShare, hint: input.model },
+    { queryTokens: estimateTokens(modelText), text: modelText, retrievalTopShare: retrieval.topShare, hint: input.model },
     deps.config.routing,
   );
   const contextHits = retrieval.hits.slice(0, input.promptVersion === "v1" ? 2 : deps.config.support.contextK);
@@ -277,7 +277,7 @@ export async function runSupport(
     };
   }
   const aborted = result.error.kind === "aborted";
-  const code = aborted ? "client_aborted" : result.committed ? "stream_interrupted" : "all_backends_failed";
+  const code: ErrorCode = aborted ? "client_aborted" : result.committed ? "stream_interrupted" : "all_backends_failed";
   sink.emit("error", {
     code,
     message: aborted

@@ -50,6 +50,8 @@ export const config = {
     longQueryTokens: num(env.ROUTE_LONG_QUERY_TOKENS, 60),
     /** retrieval vote share below this = ambiguous → strong tier */
     ambiguousVoteShare: num(env.ROUTE_AMBIGUOUS_VOTE_SHARE, 0.6),
+    /** complexity score (domain/routing/complexity.ts) at or above which auto routing starts at the strong tier */
+    complexityThreshold: num(env.ROUTE_COMPLEXITY_THRESHOLD, 0.5),
   },
 
   health: {

@@ -8,11 +8,12 @@
  *     a backend id; it becomes the primary, the rest of the default order follows as
  *     fallback.
  *  3. Auto – default to the FAST tier (cheapest, lowest latency). Escalate to the
- *     STRONG tier only when there is evidence the cheap model is likely to struggle:
- *       a) long input (> routing.longQueryTokens), or
- *       b) retrieval is ambiguous (top intent's vote share < routing.ambiguousVoteShare)
- *     On the support task the KB answer usually does the heavy lifting, so paying for
- *     the big model on every request buys little; we spend it where it matters.
+ *     STRONG tier only when the query looks complex: assessComplexity (complexity.ts) scores
+ *     length, retrieval ambiguity, multiple questions, reasoning cues, multi-step structure,
+ *     constraints, code, math and conversation length, and the router escalates when the
+ *     score reaches routing.complexityThreshold. On the support task the KB answer usually does
+ *     the heavy lifting, so paying for the big model on every request buys little; we spend it
+ *     where it matters.
  *  4. Fallback order after the primary: remaining real tiers, then the local model,
  *     then the extractive "degraded" backend (always available, zero cost, grounded).
  *  5. Backends with an open circuit breaker are moved out of the chain at execution
@@ -20,9 +21,15 @@
  */
 import type { RoutableBackend, Tenant, Tier } from "../types.js";
 import { GatewayError } from "../errors.js";
+import { assessComplexity, describeComplexity, type ComplexityAssessment } from "./complexity.js";
 
 export interface RouteSignals {
+  /** estimated tokens of the newest user turn */
   queryTokens: number;
+  /** the newest user turn, for the complexity signals (masked if the PII guardrail masked it) */
+  text?: string;
+  /** chat only: messages in the conversation */
+  turns?: number;
   /** support only */
   retrievalTopShare?: number;
   hint?: string;
@@ -33,13 +40,15 @@ export interface RouteOptions {
   longQueryTokens: number;
   /** retrieval vote share below this = ambiguous → strong tier */
   ambiguousVoteShare: number;
+  /** complexity score (0–1) at or above which auto routing starts at the strong tier */
+  complexityThreshold: number;
 }
 
 export interface RoutePlan<B extends RoutableBackend = RoutableBackend> {
   chain: B[];
   rule: string;
   reason: string;
-  signals: RouteSignals & { allowedTiers: Tier[] };
+  signals: Omit<RouteSignals, "text"> & { allowedTiers: Tier[]; complexity?: ComplexityAssessment };
 }
 
 const TIER_ORDER_FAST_FIRST: Tier[] = ["fast", "strong", "local", "degraded"];
@@ -53,7 +62,9 @@ export function planRoute<B extends RoutableBackend>(
 ): RoutePlan<B> {
   const enabled = backends.filter((b) => b.config.enabled);
   const allowed = enabled.filter((b) => tenant.allowedTiers.includes(b.config.tier));
-  const sig = { ...signals, allowedTiers: tenant.allowedTiers };
+  // the text itself isn't kept: route reasons are stored and shown, and the text may be long
+  const { text: _text, ...kept } = signals;
+  const sig: RoutePlan["signals"] = { ...kept, allowedTiers: tenant.allowedTiers };
   if (!allowed.length) {
     throw new GatewayError(503, "no_backend_available", "No model backend is available for this tenant's plan.");
   }
@@ -86,12 +97,13 @@ export function planRoute<B extends RoutableBackend>(
     };
   }
 
-  const reasons: string[] = [];
-  if (signals.queryTokens > opts.longQueryTokens) reasons.push(`long query (${signals.queryTokens} > ${opts.longQueryTokens} tokens)`);
-  if (signals.retrievalTopShare !== undefined && signals.retrievalTopShare < opts.ambiguousVoteShare)
-    reasons.push(`ambiguous retrieval (top intent share ${signals.retrievalTopShare.toFixed(2)} < ${opts.ambiguousVoteShare})`);
-
-  const wantStrong = reasons.length > 0;
+  const complexity = assessComplexity(
+    { text: signals.text ?? "", queryTokens: signals.queryTokens, turns: signals.turns, retrievalTopShare: signals.retrievalTopShare },
+    opts,
+  );
+  sig.complexity = complexity;
+  const why = describeComplexity(complexity);
+  const wantStrong = complexity.score >= opts.complexityThreshold;
   const hasStrong = allowed.some((b) => b.config.tier === "strong");
   const planHasStrong = tenant.allowedTiers.includes("strong");
   const chain = order(wantStrong ? TIER_ORDER_STRONG_FIRST : TIER_ORDER_FAST_FIRST);
@@ -100,16 +112,16 @@ export function planRoute<B extends RoutableBackend>(
   let reason: string;
   if (wantStrong && hasStrong) {
     rule = "auto_escalate_strong";
-    reason = `escalated to strong tier: ${reasons.join("; ")}`;
+    reason = `escalated to strong tier: ${why}`;
   } else if (wantStrong && !planHasStrong) {
     rule = "auto_escalate_denied_by_plan";
-    reason = `would escalate (${reasons.join("; ")}) but plan "${tenant.plan}" has no strong tier`;
+    reason = `would escalate (${why}) but plan "${tenant.plan}" has no strong tier`;
   } else if (wantStrong) {
     rule = "auto_escalate_unavailable";
-    reason = `would escalate (${reasons.join("; ")}) but no strong-tier backend is enabled`;
+    reason = `would escalate (${why}) but no strong-tier backend is enabled`;
   } else {
     rule = "auto_default_fast";
-    reason = "short query with unambiguous retrieval → cheapest/fastest tier";
+    reason = `simple enough for the fast tier: ${why}`;
   }
   if (chain[0]?.config.tier !== (wantStrong && hasStrong ? "strong" : "fast")) {
     reason += `; preferred tier unavailable, starting at ${chain[0].config.id}`;
