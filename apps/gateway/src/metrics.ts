@@ -35,6 +35,35 @@ interface Row {
   completion_tokens: number;
   latency_ms: number | null;
   cost_usd: number;
+  intent: string | null;
+  error_code: string | null;
+}
+
+/** a readable cause for every request that wasn't answered: feeds the "where do problems come from" Pareto */
+export function issueOf(r: Pick<Row, "outcome" | "error_code">): string | null {
+  if (r.outcome === "success") return null;
+  if (r.outcome === "refused_out_of_scope") return "Out of scope (refused)";
+  if (r.outcome === "refused_low_confidence") return "Low confidence (refused)";
+  if (r.outcome === "quota_exceeded") return "Quota exceeded";
+  if (r.outcome === "rejected") return r.error_code === "model_not_allowed" ? "Model not on plan" : "Invalid request";
+  if (r.outcome === "failed_all_backends") return "All backends failed";
+  if (r.outcome === "partial") return "Stream interrupted";
+  if (r.outcome === "client_aborted") return "Client cancelled";
+  return "Other failure";
+}
+
+/** sorted descending with each item's share and the running cumulative share (one 0–100% axis) */
+function pareto(counts: Map<string, number>, maxItems = 8) {
+  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const head = sorted.slice(0, maxItems);
+  const rest = sorted.slice(maxItems).reduce((n, [, v]) => n + v, 0);
+  if (rest) head.push(["Other", rest]);
+  let cum = 0;
+  return head.map(([label, count]) => {
+    cum += count;
+    return { label, count, share: total ? count / total : 0, cumulative: total ? cum / total : 0 };
+  });
 }
 
 export function computeMetrics(db: DB, range: RangeKey, opts: { tenantId?: string; now?: number } = {}) {
@@ -46,11 +75,11 @@ export function computeMetrics(db: DB, range: RangeKey, opts: { tenantId?: strin
   const rows = (
     opts.tenantId
       ? db.prepare(
-          `SELECT created_at, tenant_id, outcome, backend, fallback_used, prompt_tokens, completion_tokens, latency_ms, cost_usd
+          `SELECT created_at, tenant_id, outcome, backend, fallback_used, prompt_tokens, completion_tokens, latency_ms, cost_usd, intent, error_code
              FROM requests WHERE created_at >= ? AND created_at < ? AND outcome != 'in_progress' AND tenant_id = ?`,
         ).all(start, end, opts.tenantId)
       : db.prepare(
-          `SELECT created_at, tenant_id, outcome, backend, fallback_used, prompt_tokens, completion_tokens, latency_ms, cost_usd
+          `SELECT created_at, tenant_id, outcome, backend, fallback_used, prompt_tokens, completion_tokens, latency_ms, cost_usd, intent, error_code
              FROM requests WHERE created_at >= ? AND created_at < ? AND outcome != 'in_progress'`,
         ).all(start, end)
   ) as unknown as Row[];
@@ -71,6 +100,8 @@ export function computeMetrics(db: DB, range: RangeKey, opts: { tenantId?: strin
 
   const byTenant = new Map<string, { requests: number; tokens: number; costUsd: number }>();
   const byBackend = new Map<string, number>();
+  const byIntent = new Map<string, number>();
+  const byIssue = new Map<string, number>();
   const allLat: number[] = [];
   let fallbacks = 0;
   let modelCalls = 0;
@@ -96,6 +127,9 @@ export function computeMetrics(db: DB, range: RangeKey, opts: { tenantId?: strin
       }
       byBackend.set(r.backend, (byBackend.get(r.backend) ?? 0) + 1);
     }
+    if (r.intent && r.intent !== "unknown") byIntent.set(r.intent, (byIntent.get(r.intent) ?? 0) + 1);
+    const issue = issueOf(r);
+    if (issue) byIssue.set(issue, (byIssue.get(issue) ?? 0) + 1);
     const t = byTenant.get(r.tenant_id) ?? { requests: 0, tokens: 0, costUsd: 0 };
     t.requests++;
     t.tokens += tokens;
@@ -131,6 +165,8 @@ export function computeMetrics(db: DB, range: RangeKey, opts: { tenantId?: strin
     },
     buckets: buckets.map(({ _lat, ...b }) => ({ ...b, fallbackRate: b.modelCalls ? b.fallbacks / b.modelCalls : null })),
     byTenant: [...byTenant.entries()].map(([tenant, v]) => ({ tenant, ...v })).sort((a, b) => b.costUsd - a.costUsd),
+    paretoIntents: pareto(byIntent),
+    paretoIssues: pareto(byIssue),
     byBackend: [...byBackend.entries()].map(([backend, requests]) => ({ backend, requests, share: requests / (modelCalls || 1) })),
   };
 }
