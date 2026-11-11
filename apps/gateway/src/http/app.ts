@@ -81,6 +81,15 @@ export function createApp(gw: Gateway) {
     await runCapability(req, res, "chat.completions", { tenant: req.tenant!, credential: req.apiKey!.id }, chatSpec(gw, res, req.body));
   });
 
+  // OpenAI's model list: the router aliases first, then the tiers and backends this key's plan may use
+  app.get("/v1/models", tenantAuth("chat.completions"), (req, res) => {
+    const t = req.tenant!;
+    const created = Math.floor(gw.startedAt / 1000);
+    const usable = gw.backends.filter((b) => b.config.enabled && t.allowedTiers.includes(b.config.tier));
+    const ids = ["auto", ...new Set(usable.map((b) => b.config.tier)), ...usable.map((b) => b.config.id)];
+    res.json({ object: "list", data: ids.map((id) => ({ id, object: "model", created, owned_by: "nalar-router" })) });
+  });
+
   // which backends exist, whether they're online, and whether this tenant's plan may use them
   app.get("/v1/backends", tenantAuth("usage.read"), (req, res) => {
     res.json(
@@ -171,7 +180,7 @@ export function createApp(gw: Gateway) {
   // ---------- errors ----------
   // generic: don't echo the method or path back
   app.use((_req: Request, _res: Response, next: NextFunction) => next(new GatewayError(404, "not_found", "Not found.")));
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     let ge: GatewayError;
     if (err instanceof GatewayError) ge = err;
     else if (err instanceof ZodError) ge = new GatewayError(400, "invalid_request", zodMessage(err));
@@ -197,9 +206,21 @@ export function createApp(gw: Gateway) {
     }
     const retryAfter = ge.details?.retryAfterSeconds;
     if (ge.status === 429 && typeof retryAfter === "number") res.setHeader("retry-after", String(retryAfter));
-    res.status(ge.status).json(ge.toJSON());
+    // the OpenAI-compatible routes also carry OpenAI's error `type` and `param`, which its SDKs read
+    const openai = req.path === "/v1/chat/completions" || req.path === "/v1/models";
+    const body = ge.toJSON();
+    res.status(ge.status).json(openai ? { error: { ...body.error, type: openaiErrorType(ge.status), param: null } } : body);
   });
 
   return app;
 }
 
+
+function openaiErrorType(status: number) {
+  if (status === 401) return "authentication_error";
+  if (status === 403) return "permission_error";
+  if (status === 404) return "not_found_error";
+  if (status === 429) return "rate_limit_error";
+  if (status >= 500) return "api_error";
+  return "invalid_request_error";
+}

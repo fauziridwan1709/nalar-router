@@ -21,6 +21,8 @@ export interface Gateway {
   intents: string[];
   /** online/offline probes; started by index.ts, not in tests */
   health: HealthMonitor;
+  /** process start, used as `created` in /v1/models */
+  startedAt: number;
 }
 
 export function buildBackend(cfg: BackendConfig): Backend {
@@ -45,6 +47,7 @@ export function createGateway(
   const kbEntries: KbEntry[] = overrides.kbEntries ?? JSON.parse(readFileSync(resolve(config.dataDir, "kb.json"), "utf8"));
   const intents = [...new Set(kbEntries.map((e) => e.intent))].sort();
   return {
+    startedAt: Date.now(),
     config,
     db: overrides.db ?? openDb(config.dbPath, overrides.seed ?? DEMO_TENANTS, consoleUsers(config)),
     backends,

@@ -3,7 +3,7 @@
  * would call for anything that isn't a packaged capability. Same auth, quota, routing,
  * fallback and metering as the support assistant; output is OpenAI-compatible.
  */
-import type { ChatMessage } from "./backends/types.js";
+import type { ChatMessage, Sampling } from "./backends/types.js";
 import { BackendError, publicAttemptError } from "./errors.js";
 import type { Gateway } from "./gateway.js";
 import type { RunResult } from "./support/assistant.js";
@@ -57,6 +57,7 @@ export async function runChat(
   ctx: {
     maxCompletionTokens: number;
     temperature?: number;
+    sampling?: Sampling;
     includeReasoning?: boolean;
     sink: EventSink;
     clientSignal: AbortSignal;
@@ -72,6 +73,7 @@ export async function runChat(
     messages,
     maxTokens: ctx.maxCompletionTokens,
     temperature: ctx.temperature,
+    sampling: ctx.sampling,
     clientSignal: ctx.clientSignal,
     includeReasoning: ctx.includeReasoning,
     onReasoning: (r) => ctx.sink.emit("reasoning", r),

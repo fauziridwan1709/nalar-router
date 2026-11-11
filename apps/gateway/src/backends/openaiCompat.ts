@@ -18,6 +18,7 @@ export class OpenAICompatBackend implements Backend {
       stream_options: { include_usage: true },
       max_tokens: req.maxTokens,
       temperature: req.temperature ?? 0.2,
+      ...Object.fromEntries(Object.entries(req.sampling ?? {}).filter(([, v]) => v !== undefined)),
       ...(this.config.extraBody ?? {}),
       ...(this.config.reasoningBody ? (req.includeReasoning ? this.config.reasoningBody.on : this.config.reasoningBody.off) : {}),
     };

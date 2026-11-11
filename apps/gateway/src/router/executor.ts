@@ -59,6 +59,7 @@ export interface ExecuteOptions {
   messages: ChatMessage[];
   maxTokens: number;
   temperature?: number;
+  sampling?: BackendRequest["sampling"];
   hints?: BackendRequest["hints"];
   includeReasoning?: boolean;
   /** reasoning is diagnostic only: it is forwarded as-is, never parsed, and is not the commit point */
@@ -126,7 +127,7 @@ export async function executeWithFallback(o: ExecuteOptions): Promise<ExecuteRes
     async function* text(): AsyncIterable<string> {
       requestSent = true;
       for await (const c of backend.stream({
-        messages: o.messages, maxTokens: o.maxTokens, temperature: o.temperature, hints: o.hints,
+        messages: o.messages, maxTokens: o.maxTokens, temperature: o.temperature, sampling: o.sampling, hints: o.hints,
         includeReasoning: o.includeReasoning, signal: ac.signal,
       })) {
         if (c.type === "reasoning") {

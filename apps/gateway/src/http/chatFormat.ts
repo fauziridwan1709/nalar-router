@@ -8,7 +8,9 @@ export class ChatSseSink implements EventSink {
   private heartbeat: NodeJS.Timeout;
   private trace: unknown[] = [];
   private start = Date.now();
-  constructor(private res: Response) {
+  private includeUsage: boolean;
+  constructor(private res: Response, opts: { includeUsage?: boolean } = {}) {
+    this.includeUsage = !!opts.includeUsage;
     res.status(200);
     res.setHeader("content-type", "text/event-stream; charset=utf-8");
     res.setHeader("cache-control", "no-cache, no-transform");
@@ -52,6 +54,13 @@ export class ChatSseSink implements EventSink {
           },
           x_router: { ...data, trace: this.trace },
         });
+        // stream_options.include_usage: OpenAI sends usage in one extra chunk with no choices
+        if (this.includeUsage && data.usage) {
+          this.write(`data: ${JSON.stringify({
+            id: this.id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model: this.model, choices: [],
+            usage: { prompt_tokens: data.usage.promptTokens, completion_tokens: data.usage.completionTokens, total_tokens: data.usage.totalTokens },
+          })}\n\n`);
+        }
         this.write("data: [DONE]\n\n");
         break;
       default: {

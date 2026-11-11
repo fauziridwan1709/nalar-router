@@ -216,11 +216,26 @@ export function mountConsole(app: Express, gw: Gateway, runCapability: RunCapabi
     const scoped = scopeTenant(req, true);
     const tenants = scoped ? [getTenant(gw.db, scoped)!] : listTenants(gw.db);
     res.json(
-      tenants.map((t) => ({
-        tenant: t.id, name: t.name, plan: t.plan, allowedTiers: t.allowedTiers, profileFields: Object.keys(t.profile).length,
-        ...getUsage(gw.db, t),
-        outcomes: gw.db.prepare("SELECT outcome, COUNT(*) AS n FROM requests WHERE tenant_id = ? GROUP BY outcome").all(t.id),
-      })),
+      tenants.map((t) => {
+        const usage = getUsage(gw.db, t);
+        // quota rejections this period, and whether the newest one came after the last admitted request:
+        // a tenant can be refused while under 100% because each request reserves its prompt + a minimum answer
+        const q = gw.db
+          .prepare(
+            `SELECT SUM(error_code = 'quota_exceeded') AS rejected,
+                    MAX(CASE WHEN error_code = 'quota_exceeded' THEN created_at END) AS lastRejectedAt,
+                    MAX(CASE WHEN counts_against_quota = 1 THEN created_at END) AS lastAdmittedAt
+               FROM requests WHERE tenant_id = ? AND created_at >= ?`,
+          )
+          .get(t.id, usage.periodStart) as { rejected: number | null; lastRejectedAt: number | null; lastAdmittedAt: number | null };
+        return {
+          tenant: t.id, name: t.name, plan: t.plan, allowedTiers: t.allowedTiers, profileFields: Object.keys(t.profile).length,
+          ...usage,
+          quotaRejections: q.rejected ?? 0,
+          rejecting: q.lastRejectedAt != null && q.lastRejectedAt >= (q.lastAdmittedAt ?? 0),
+          outcomes: gw.db.prepare("SELECT outcome, COUNT(*) AS n FROM requests WHERE tenant_id = ? GROUP BY outcome").all(t.id),
+        };
+      }),
     );
   });
 
