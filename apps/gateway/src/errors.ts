@@ -24,3 +24,19 @@ export class BackendError extends Error {
     super(message);
   }
 }
+
+/**
+ * What a tenant is told about a failed attempt. The full message (upstream HTTP bodies,
+ * fragments of model output) stays in the attempts table for operators; it never goes over
+ * the wire, because it can carry provider internals.
+ */
+const PUBLIC_ATTEMPT_ERROR: Record<string, string> = {
+  error: "upstream model error",
+  http: "upstream model error",
+  timeout_first_token: "no first token in time",
+  timeout_total: "model call timed out",
+  unusable_output: "model output failed validation",
+  aborted: "cancelled",
+  skipped_circuit_open: "circuit breaker open",
+};
+export const publicAttemptError = (outcome: string) => PUBLIC_ATTEMPT_ERROR[outcome] ?? "attempt failed";

@@ -10,7 +10,7 @@
  *  - Combined confidence below the threshold (or model says "unknown") → refusal and
  *    hand-off message, never a guess.
  */
-import { BackendError } from "../errors.js";
+import { BackendError, publicAttemptError } from "../errors.js";
 import type { Gateway } from "../gateway.js";
 import type { Tenant } from "../tenants.js";
 import { executeWithFallback, StopRequest, type AttemptRecord } from "../router/executor.js";
@@ -144,7 +144,7 @@ export async function runSupport(
       ? { extractive: { intent: topEntry.intent, answer: topEntry.answer, confidence: retrieval.topShare } }
       : undefined,
     onAttemptStart: (a) => sink.emit("attempt", { ...a, status: "started" }),
-    onAttemptEnd: (a) => sink.emit("attempt", { ...a, status: a.outcome }),
+    onAttemptEnd: (a) => sink.emit("attempt", { ...a, status: a.outcome, error: a.error ? publicAttemptError(a.outcome) : a.error }),
     consume: async (text, actx) => {
       const parser = new SupportOutputParser(validIntents);
       // fresh per attempt: a discarded attempt's partial slot state must not leak into the next one
@@ -252,7 +252,7 @@ export async function runSupport(
     message: aborted
       ? "Client disconnected."
       : result.committed
-        ? `The answer was interrupted: ${result.error.message}`
+        ? "The answer was interrupted."
         : "All model backends failed or returned unusable output.",
     partial: result.committed,
   });

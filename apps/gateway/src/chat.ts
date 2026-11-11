@@ -4,7 +4,7 @@
  * fallback and metering as the support assistant; output is OpenAI-compatible.
  */
 import type { ChatMessage } from "./backends/types.js";
-import { BackendError } from "./errors.js";
+import { BackendError, publicAttemptError } from "./errors.js";
 import type { Gateway } from "./gateway.js";
 import type { RunResult } from "./support/assistant.js";
 import type { Tenant } from "./tenants.js";
@@ -52,7 +52,7 @@ export async function runChat(
     includeReasoning: ctx.includeReasoning,
     onReasoning: (r) => ctx.sink.emit("reasoning", r),
     onAttemptStart: (a) => ctx.sink.emit("attempt", { ...a, status: "started" }),
-    onAttemptEnd: (a) => ctx.sink.emit("attempt", { ...a, status: a.outcome }),
+    onAttemptEnd: (a) => ctx.sink.emit("attempt", { ...a, status: a.outcome, error: a.error ? publicAttemptError(a.outcome) : a.error }),
     consume: async (text, actx) => {
       let committed = false;
       for await (const t of text) {
@@ -80,7 +80,11 @@ export async function runChat(
   const aborted = err.kind === "aborted";
   const committed = result.status === "failed" && result.committed;
   const code = aborted ? "client_aborted" : committed ? "stream_interrupted" : "all_backends_failed";
-  ctx.sink.emit("error", { code, message: aborted ? "Client disconnected." : err.message, partial: committed });
+  ctx.sink.emit("error", {
+    code,
+    message: aborted ? "Client disconnected." : committed ? "The answer was interrupted." : "All model backends failed.",
+    partial: committed,
+  });
   return {
     outcome: aborted ? "client_aborted" : committed ? "partial" : "failed_all_backends",
     httpStatus: aborted ? 499 : 502, attempts: result.attempts, routeReason, latencyMs, ttftMs,
