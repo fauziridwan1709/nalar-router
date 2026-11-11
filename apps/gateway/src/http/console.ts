@@ -27,7 +27,7 @@ import { dummyHash, verifyPassword } from "../auth/passwords.js";
 import { FailureLimiter } from "../auth/rateLimit.js";
 import { audit, createSession, deleteSession, findUserForLogin, getSession, listAudit, SESSION_MAX_MS, type User } from "../auth/sessions.js";
 import { createKey, EXPIRY_DAYS, getKey, KEY_SCOPES, listKeys, MAX_ACTIVE_KEYS_PER_TENANT, revokeKey } from "../auth/apiKeys.js";
-import { supportSpec, type RunCapability } from "./capability.js";
+import { chatSpec, supportSpec, type RunCapability } from "./capability.js";
 import { clearSessionCookie, readCookie, safeEq, sameOrigin, sessionCookieName, setSessionCookie } from "./security.js";
 import { backendsFull, ChaosBody, listEvals } from "./shared.js";
 
@@ -356,16 +356,19 @@ export function mountConsole(app: Express, gw: Gateway, runCapability: RunCapabi
     res.json(rows.map((u) => ({ id: u.id, tenantId: u.tenant_id, email: u.email, name: u.name, role: u.role, createdAt: u.created_at, lastLoginAt: u.last_login_at, disabled: !!u.disabled_at })));
   });
 
-  // ---------- playground: the support endpoint, as the signed-in user's tenant ----------
-  app.post("/api/console/playground/support", session, csrf, need("playground:run"), async (req, res) => {
-    const { tenant: asked, ...rest } = PlaygroundBody.parse(req.body ?? {});
-    let tenantId = req.user!.tenantId;
-    if (asked && asked !== tenantId) {
-      if (!isOperator(req)) throw new GatewayError(404, "not_found", "Tenant not found.");
-      if (!ID.test(asked) || !getTenant(gw.db, asked)) throw new GatewayError(404, "not_found", "Tenant not found.");
-      tenantId = asked;
-    }
-    const tenant = getTenant(gw.db, tenantId)!;
-    await runCapability(req, res, "support.answer", { tenant, credential: `user:${req.user!.id}` }, supportSpec(gw, res, rest));
-  });
+  // ---------- playground: the same two endpoints an API key calls, as the signed-in user's tenant ----------
+  const playground = (endpoint: "support.answer" | "chat.completions", spec: typeof supportSpec) =>
+    async (req: Request, res: Response) => {
+      const { tenant: asked, ...rest } = PlaygroundBody.parse(req.body ?? {});
+      let tenantId = req.user!.tenantId;
+      if (asked && asked !== tenantId) {
+        if (!isOperator(req)) throw new GatewayError(404, "not_found", "Tenant not found.");
+        if (!ID.test(asked) || !getTenant(gw.db, asked)) throw new GatewayError(404, "not_found", "Tenant not found.");
+        tenantId = asked;
+      }
+      const tenant = getTenant(gw.db, tenantId)!;
+      await runCapability(req, res, endpoint, { tenant, credential: `user:${req.user!.id}` }, spec(gw, res, rest));
+    };
+  app.post("/api/console/playground/support", session, csrf, need("playground:run"), playground("support.answer", supportSpec));
+  app.post("/api/console/playground/chat", session, csrf, need("playground:run"), playground("chat.completions", chatSpec));
 }

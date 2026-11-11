@@ -7,13 +7,11 @@ import { GatewayError } from "../errors.js";
 import { getTenant, listTenants, type Tenant } from "../tenants.js";
 import { getUsage, resetQuota } from "../quota.js";
 import { getRequestDetail, listRequests } from "../metering.js";
-import { guardChatMessages, prepareChat, runChat } from "../chat.js";
-import { ChatSseSink, chatCompletionJson } from "./chatFormat.js";
 import type { ChaosMode } from "../backends/chaos.js";
 import { computeMetrics, RANGES, type RangeKey } from "../metrics.js";
 import { authenticateKey, type ApiKeyRow, type KeyScope } from "../auth/apiKeys.js";
 import type { User } from "../auth/sessions.js";
-import { createCapabilityRunner, supportSpec, zodMessage } from "./capability.js";
+import { chatSpec, createCapabilityRunner, supportSpec, zodMessage } from "./capability.js";
 import { safeEq, securityHeaders } from "./security.js";
 import { mountConsole } from "./console.js";
 import { backendsFull, ChaosBody, listEvals } from "./shared.js";
@@ -26,22 +24,6 @@ declare module "express-serve-static-core" {
     csrf?: string;
   }
 }
-
-const ChatBody = z
-  .object({
-    messages: z
-      .array(z.object({ role: z.enum(["system", "user", "assistant"]), content: z.string().max(16_000) }).strict())
-      .min(1)
-      .max(50)
-      .refine((m) => m.some((x) => x.role === "user" && x.content.trim()), "at least one non-empty user message is required")
-      .refine((m) => m.reduce((n, x) => n + x.content.length, 0) <= 32_000, "conversation too long (max 32k chars)"),
-    model: z.string().max(64).optional(),
-    stream: z.boolean().optional(),
-    max_tokens: z.number().int().min(1).max(4096).optional(),
-    temperature: z.number().min(0).max(2).optional(),
-    include_reasoning: z.boolean().optional(),
-  })
-  .strict();
 
 function bearer(req: Request): string | null {
   const h = req.header("authorization");
@@ -96,21 +78,7 @@ export function createApp(gw: Gateway) {
   });
 
   app.post("/v1/chat/completions", tenantAuth("chat.completions"), async (req, res) => {
-    await runCapability(req, res, "chat.completions", { tenant: req.tenant!, credential: req.apiKey!.id }, (tenant) => {
-      const body = ChatBody.parse(req.body ?? {});
-      const guarded = guardChatMessages(tenant, body.messages);
-      const { plan, estimatedPromptTokens } = prepareChat(gw, tenant, guarded.messages, body.model);
-      return {
-        estimatedPromptTokens,
-        pii: guarded.pii,
-        requestedMaxTokens: body.max_tokens ?? 1024,
-        stream: body.stream ?? true,
-        makeSink: () => new ChatSseSink(res),
-        run: (ctx) =>
-          runChat(gw, plan, guarded.messages, { ...ctx, temperature: body.temperature, includeReasoning: body.include_reasoning }),
-        respondJson: (s, done) => chatCompletionJson(s, done),
-      };
-    });
+    await runCapability(req, res, "chat.completions", { tenant: req.tenant!, credential: req.apiKey!.id }, chatSpec(gw, res, req.body));
   });
 
   // which backends exist, whether they're online, and whether this tenant's plan may use them
