@@ -12,6 +12,30 @@ import type { EventSink } from "./http/sink.js";
 import { executeWithFallback } from "./router/executor.js";
 import { planRoute, type RoutePlan } from "./router/policy.js";
 import { estimateMessagesTokens } from "./tokens.js";
+import { GatewayError } from "./errors.js";
+import { PII_LABEL, scanPii, summarizeCounts, type PiiType } from "./guardrails/pii.js";
+
+/**
+ * The raw path applies the same PII policy to every message. Masked values stay masked: there is
+ * no template renderer here, so a model that repeats {{Customer Email}} shows it as written.
+ */
+export function guardChatMessages(tenant: Tenant, messages: ChatMessage[]) {
+  const policy = tenant.piiPolicy;
+  if (policy.mode === "off") return { messages, pii: null as string | null };
+  const counts: Partial<Record<PiiType, number>> = {};
+  const out = messages.map((m) => {
+    const s = scanPii(m.content, policy.types);
+    for (const [t, n] of Object.entries(s.counts)) counts[t as PiiType] = (counts[t as PiiType] ?? 0) + (n ?? 0);
+    return { ...m, content: s.masked };
+  });
+  const types = Object.keys(counts) as PiiType[];
+  if (types.length && policy.mode === "block") {
+    throw new GatewayError(422, "pii_detected",
+      `The messages contain personal data (${types.map((t) => PII_LABEL[t].toLowerCase()).join(", ")}). This tenant's policy blocks it; remove it and try again.`,
+      { types, pii: summarizeCounts(counts) });
+  }
+  return { messages: out, pii: types.length ? summarizeCounts(counts) : null };
+}
 
 export function prepareChat(gw: Gateway, tenant: Tenant, messages: ChatMessage[], model?: string) {
   const estimatedPromptTokens = estimateMessagesTokens(messages);

@@ -1,5 +1,6 @@
 import type { DB } from "./db.js";
 import type { Tier } from "./config.js";
+import { parsePolicy, type PiiPolicy } from "./guardrails/pii.js";
 
 export interface Tenant {
   id: string;
@@ -10,6 +11,7 @@ export interface Tenant {
   requestQuota: number;
   quotaResetAt: number;
   profile: Record<string, string>;
+  piiPolicy: PiiPolicy;
 }
 
 function rowToTenant(r: any): Tenant {
@@ -22,6 +24,7 @@ function rowToTenant(r: any): Tenant {
     requestQuota: r.request_quota,
     quotaResetAt: r.quota_reset_at,
     profile: r.profile ? JSON.parse(r.profile) : {},
+    piiPolicy: parsePolicy(r.pii_policy),
   };
 }
 
@@ -32,4 +35,8 @@ export function getTenant(db: DB, id: string): Tenant | null {
 
 export function listTenants(db: DB): Tenant[] {
   return db.prepare("SELECT * FROM tenants ORDER BY created_at, id").all().map(rowToTenant);
+}
+
+export function setPiiPolicy(db: DB, id: string, policy: PiiPolicy) {
+  db.prepare("UPDATE tenants SET pii_policy = ? WHERE id = ?").run(JSON.stringify(policy), id);
 }

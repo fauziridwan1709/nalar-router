@@ -7,7 +7,7 @@ import { GatewayError } from "../errors.js";
 import { getTenant, listTenants, type Tenant } from "../tenants.js";
 import { getUsage, resetQuota } from "../quota.js";
 import { getRequestDetail, listRequests } from "../metering.js";
-import { prepareChat, runChat } from "../chat.js";
+import { guardChatMessages, prepareChat, runChat } from "../chat.js";
 import { ChatSseSink, chatCompletionJson } from "./chatFormat.js";
 import type { ChaosMode } from "../backends/chaos.js";
 import { computeMetrics, RANGES, type RangeKey } from "../metrics.js";
@@ -98,14 +98,16 @@ export function createApp(gw: Gateway) {
   app.post("/v1/chat/completions", tenantAuth("chat.completions"), async (req, res) => {
     await runCapability(req, res, "chat.completions", { tenant: req.tenant!, credential: req.apiKey!.id }, (tenant) => {
       const body = ChatBody.parse(req.body ?? {});
-      const { plan, estimatedPromptTokens } = prepareChat(gw, tenant, body.messages, body.model);
+      const guarded = guardChatMessages(tenant, body.messages);
+      const { plan, estimatedPromptTokens } = prepareChat(gw, tenant, guarded.messages, body.model);
       return {
         estimatedPromptTokens,
+        pii: guarded.pii,
         requestedMaxTokens: body.max_tokens ?? 1024,
         stream: body.stream ?? true,
         makeSink: () => new ChatSseSink(res),
         run: (ctx) =>
-          runChat(gw, plan, body.messages, { ...ctx, temperature: body.temperature, includeReasoning: body.include_reasoning }),
+          runChat(gw, plan, guarded.messages, { ...ctx, temperature: body.temperature, includeReasoning: body.include_reasoning }),
         respondJson: (s, done) => chatCompletionJson(s, done),
       };
     });

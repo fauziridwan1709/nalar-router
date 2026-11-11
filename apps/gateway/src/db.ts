@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   request_quota INTEGER NOT NULL,       -- per calendar month (UTC)
   quota_reset_at INTEGER NOT NULL DEFAULT 0,
   profile TEXT NOT NULL DEFAULT '{}',   -- JSON: company facts used to fill answer placeholders
+  pii_policy TEXT NOT NULL DEFAULT '{"mode":"mask"}', -- JSON PiiPolicy, see guardrails/pii.ts
   created_at INTEGER NOT NULL
 );
 
@@ -50,7 +51,8 @@ CREATE TABLE IF NOT EXISTS requests (
   error_code TEXT,
   error_message TEXT,
   counts_against_quota INTEGER NOT NULL DEFAULT 1,
-  credential TEXT                       -- api key id, or user:<id> for console playground calls
+  credential TEXT,                      -- api key id, or user:<id> for console playground calls
+  pii TEXT                              -- PII found in the input, as type:count pairs (never values)
 );
 CREATE INDEX IF NOT EXISTS idx_requests_tenant_time ON requests(tenant_id, created_at);
 
@@ -254,8 +256,10 @@ export function openDb(path: string, seed: SeedTenant[] = DEMO_TENANTS, users: S
   // migration for databases created before tenant profiles existed
   const cols = (db.prepare("PRAGMA table_info(tenants)").all() as { name: string }[]).map((c) => c.name);
   if (!cols.includes("profile")) db.exec("ALTER TABLE tenants ADD COLUMN profile TEXT NOT NULL DEFAULT '{}'");
+  if (!cols.includes("pii_policy")) db.exec(`ALTER TABLE tenants ADD COLUMN pii_policy TEXT NOT NULL DEFAULT '{"mode":"mask"}'`);
   const rcols = (db.prepare("PRAGMA table_info(requests)").all() as { name: string }[]).map((c) => c.name);
   if (!rcols.includes("credential")) db.exec("ALTER TABLE requests ADD COLUMN credential TEXT");
+  if (!rcols.includes("pii")) db.exec("ALTER TABLE requests ADD COLUMN pii TEXT");
   const upsert = db.prepare(`
     INSERT INTO tenants (id, name, plan, api_key_hash, allowed_tiers, token_quota, request_quota, profile, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
