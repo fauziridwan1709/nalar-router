@@ -8,22 +8,20 @@ This file is for coding agents working in **nalar-router**. It is an npm-workspa
 
 ```
 apps/gateway/     Node ≥22.13 + Express 5 API (TypeScript → dist/). Serves the console build too.
-  src/config.ts      every tunable: backends, prices, timeouts, routing thresholds, confidence gate
-  src/http/          app.ts (routes, auth, shared capability handler), sink.ts (SSE), chatFormat.ts (OpenAI wire format)
-  src/router/        policy.ts (which backends, in what order), executor.ts (fallback/timeouts/attempt metering), breaker.ts
-  src/backends/      openaiCompat.ts (Groq, MLX, Ollama…), mock.ts (extractive), chaos.ts (fault injection)
-  src/support/       retrieval.ts (BM25 + typo correction), prompt.ts (v1/v2/v3), parser.ts (header validation),
-                     placeholders.ts (slot filling), assistant.ts
-  src/guardrails/    pii.ts (PII detectors, masking, read-back, retrieval text)
-  src/auth/          passwords.ts (scrypt), sessions.ts (users, sessions, audit), rbac.ts (roles → permissions),
-                     apiKeys.ts (scoped, expiring keys; digest only), rateLimit.ts (sign-in failures)
-  src/http/console.ts  session-authed console API: sign-in, RBAC, tenant scoping, keys, playground
-  src/http/capability.ts  the shared validate → admit → run → meter path (API key and console both use it)
-  src/http/security.ts    CSP and security headers, cookies, CSRF / origin checks
-  src/quota.ts       fail-closed admission + token reservations
-  src/metering.ts    requests/attempts rows
-  src/db.ts          node:sqlite schema + demo tenant seed
-  tests/             vitest; scripted FakeBackend, no network
+                  Clean architecture; dependencies point inward (tests/architecture.test.ts enforces it):
+  src/domain/          pure rules, no I/O: types.ts, errors.ts (ERROR_CATALOG), tokens.ts, quota.ts (decideAdmission),
+                       metering.ts (attempt/request records, summarize), routing/ (policy.ts planRoute,
+                       complexity.ts assessComplexity, breaker.ts), guardrails/pii.ts, auth/rbac.ts,
+                       support/ (retrieval.ts BM25, prompt.ts v1–v3, parser.ts header validation, placeholders.ts)
+  src/application/     use cases + ports: capability.ts (prepare → admit → run → meter → respond), support.ts,
+                       chat.ts, executor.ts (fallback/timeouts/attempts), deps.ts (AppDeps),
+                       ports/ (backend.ts Backend, sink.ts EventSink/CollectSink, stores.ts QuotaStore/MeteringStore)
+  src/infrastructure/  adapters: db/ (db.ts schema+seed, quota.ts, metering.ts, metrics.ts, tenants.ts),
+                       backends/ (openaiCompat.ts, mock.ts, chaos.ts), auth/ (apiKeys, sessions, passwords, rateLimit), health.ts
+  src/interfaces/http/ app.ts (routes, auth, error handler), console.ts (session API), specs.ts (zod schemas,
+                       spec builders, Express transport), sink.ts (SSE), chatFormat.ts (OpenAI wire), security.ts
+  src/config.ts, gateway.ts, index.ts   composition root: env → settings, wiring, server + shutdown
+  tests/               vitest; scripted FakeBackend, no network; architecture, errors and OpenAI SDK contract tests
 apps/console/     React 19 + Vite console (Playground / Usage / Backends)
 tools/eval/       prepare-data.ts, retrieval-eval.ts, eval.ts, probe.ts; results/ holds committed eval outputs
 data/             kb.json (2,160 KB entries), eval.json (30 held-out), eval-ood.json, eval-hard.json, retrieval-holdout.json
@@ -47,6 +45,7 @@ npm test                    # gateway tests (must stay green)
 npm run typecheck
 npm run build && npm start  # production: one process serves the API and the console
 npm run retrieval-eval      # LLM-free retrieval check, takes about 1 s
+npm run routing-eval        # LLM-free: which tier each eval/example message starts on, and why
 npm run eval -- --base http://localhost:3000 --configs groq-fast:v2,groq-strong:v2 --judge groq-strong --delay 17000
 ```
 
@@ -61,7 +60,7 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 - **The model never types contact details or ids.** It writes `{{placeholders}}`, and `PlaceholderRenderer` fills them from the message, the tenant profile, UI labels, or a fallback phrase. Create a fresh renderer for each attempt. Raw `{{…}}` must never reach the customer in `fill` mode.
 - **Refusals are `StopRequest`, not errors.** They don't trip the circuit breaker and they don't fall back.
 - **Every attempt is metered,** including failed ones. `usage_source` is `provider` only when the provider actually reported usage. Otherwise it is `estimated`, or `none` when the provider rejected the call outright.
-- **Routing reasons are data.** If you add a rule, give it a `rule` id and a human-readable `reason` in `planRoute`, and add a test.
+- **Routing reasons are data.** If you add a rule, give it a `rule` id and a human-readable `reason` in `planRoute`, and add a test. Complexity signals live in `domain/routing/complexity.ts` with their weights; after changing one, run `npm run routing-eval` and report the route changes.
 - Prices and thresholds belong in `config.ts`, not inline.
 - **The server enforces access.** Every console route checks a permission from `auth/rbac.ts`; the console hiding a control is not the control. Non-operators are pinned to their own tenant, and another tenant's object returns the same 404 as a missing one.
 - **The browser never gets a tenant API key or the admin token.** The console uses the session cookie + CSRF token; the playground goes through `/api/console/playground/support` and `/chat` (the same specs as the `/v1` routes, in `capability.ts`).
@@ -81,7 +80,8 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 
 - Commits use Conventional Commits with the part touched as the scope: `feat(gateway): …`, `fix(console): …`, `docs(readme): …`, `test(gateway): …`, `chore(eval): …`, `ci: …`. Split commits by part.
 - ESM everywhere. The gateway uses `.js` suffixes in relative imports (NodeNext).
-- Errors use `GatewayError(status, code, message, details)` and come out as `{error:{code,message,details}}`.
+- Errors use `GatewayError(status, code, message, details)` and come out as `{error:{code,message,details}}`. `code` must be in `ERROR_CATALOG` (domain/errors.ts, typed) with the same status, and documented in docs/ERRORS.md; tests/errors.test.ts checks both.
+- New code goes in the right layer: rules in `domain/`, orchestration in `application/` (talking to the outside only through ports), adapters in `infrastructure/` or `interfaces/`. Wire new adapters in `gateway.ts`.
 - New backends implement `Backend.stream()` and yield `{type:"text"}` and `{type:"usage"}` chunks. They must honour `req.signal`.
 - When you change routing, prompts or retrieval, re-run `npm run retrieval-eval` and a short `npm run eval -- --limit 10`, and update `docs/REPORT.md` if the numbers move.
 - Secrets live only in `.env` or the Render dashboard. The `DEMO_MODE` keys and demo account passwords are public demo values.

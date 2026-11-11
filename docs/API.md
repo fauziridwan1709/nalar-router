@@ -23,7 +23,7 @@ The response is a stream of Server-Sent Events, in this order:
 | event | payload |
 |---|---|
 | `meta` | `requestId`, tenant |
-| `route` | `rule`, `reason`, `chain`, `signals` (why this backend was picked) |
+| `route` | `rule`, `reason`, `chain`, `signals` (why this backend was picked). On auto routing `signals.complexity` is `{score, level, threshold, signals: [{id, weight, detail}]}`; see REPORT §3 |
 | `retrieval` | `coverage`, intent `votes`, top `entries` (id, intent, score, question, answer) |
 | `attempt` | one per backend try: `started`, then `ok` / `error` / `timeout_first_token` / `timeout_total` / `unusable_output` / `skipped_circuit_open` / `refused`, with latency, tokens and cost |
 | `intent` | `intent`, `confidence` (0–1), `label`, `components`, `agreesWithRetrieval`. Sent right before the first token. |
@@ -160,20 +160,4 @@ Every request on `/v1/support/answer`, `/v1/chat/completions` and the console pl
 
 ## Errors
 
-Every error has the shape `{"error": {"code", "message", "details?"}}`.
-
-| status | code | when |
-|---|---|---|
-| 400 | `invalid_request` / `invalid_json` / `unknown_model` | bad input, with the field-level reason |
-| 401 | `missing_api_key` / `invalid_api_key` | unknown, revoked and expired keys all get `invalid_api_key` |
-| 401 | `unauthenticated` / `invalid_credentials` | console: no session / sign-in failed |
-| 403 | `insufficient_scope` | the key lacks the endpoint's scope |
-| 403 | `forbidden` / `csrf_failed` | console: the role lacks the permission / missing CSRF token or cross-origin |
-| 403 | `model_not_allowed` | the tenant asked for a tier its plan doesn't include |
-| 413 | `payload_too_large` | body over 64 kB |
-| 429 | `quota_exceeded` | includes the remaining quota, `resetsAt` and `Retry-After` |
-| 422 | `pii_detected` | the tenant's PII policy is `block` and the input contains personal data |
-| 429 | `too_many_attempts` | console sign-in paused after repeated failures; `Retry-After` |
-| 409 | `key_limit_reached` | the tenant already has 10 active keys |
-| 502 | `all_backends_failed` | every backend errored, timed out or returned unusable output |
-| 503 | `quota_unavailable` | the quota check itself failed, so the request is rejected (fail closed) |
+Every error has the shape `{"error": {"code", "message", "details?"}}`. The full list (every code, its status, whether a retry can help, and when it happens), along with how errors appear mid-stream, is in **[ERRORS.md](ERRORS.md)**. It is checked against the source on every test run.
