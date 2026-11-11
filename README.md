@@ -79,31 +79,41 @@
   4. a natural phrase ("your order number")
 - **Refusal:** short off-topic messages are refused before any model is called ($0). The model can also mark a message `unknown`. Low confidence leads to a hand-off message instead of a guess.
 
+### Governance and security guardrails
+
+- **PII masking:** emails, phone numbers, payment cards (Luhn-checked), national IDs (NIK, SSN), IBANs (mod-97-checked) and IP addresses are found before anything leaves the gateway.
+  - Each value is replaced with a placeholder such as `{{Customer Email}}` in the text that retrieval and the model provider see.
+  - On the support path the gateway restores the value in the answer after generation, the same way it fills `{{Order Number}}`. Customers read a natural reply, and the provider never saw the value. Card, ID and bank numbers come back only as "the card ending in 1111".
+  - Per-tenant policy: **mask** (default), **block** (`422 pii_detected` before admission, no model call, no quota spent) or **off**, and which types to detect. Owners change it on the Guardrails page; every change is audited.
+  - Values are never logged, metered or put in trace events. Only types and counts (`email:1,card:1`) are stored with the request.
+  - Detectors are conservative so order and invoice numbers survive. Across all 3,553 messages in the dataset slices there were 0 false positives. Personal names are not detected; that needs an NER model and is a known gap.
+- **Access control:** four roles checked on the server for every console route; tenant isolation with 404 parity; members and the permission matrix on the Access page.
+- **Audit logging:**
+  - Sign-ins and failed attempts, API key creation and revocation, PII policy changes, quota resets, fault injection, and operators reading another tenant's data.
+  - The Audit log page filters by event and exports CSV, with cells guarded against formula injection.
+- **Error handling:** one error shape everywhere, with the least detail that still helps the caller (see [How it's secured](#how-its-secured)).
+
 ### Console
 
-An operations console behind a **tenant sign-in with role-based access**. Controls (selects, menus, dialogs, tabs, switches, toasts) come from Meta's open-source [Astryx](https://astryx.atmeta.com/) design system, icons from Lucide. Light and dark themes. Charts are built to the dataviz method (validated palette, thin marks, one axis, a tooltip and a table view on every chart) and animate in once: lines draw, columns grow from the baseline, numbers count up. Motion is off under `prefers-reduced-motion`.
+The console follows the Claude Console's layout: a top bar with search (⌘K command palette), notifications and documentation; a sectioned sidebar (Build & configure, Monitor, Security & data, Platform) with the account menu at the bottom; and centred pages with filter chips ("Tenant All ▾"), stat cards and chart cards with a chart/table toggle. It is dark by default, with a light theme. Controls come from Meta's open-source [Astryx](https://astryx.atmeta.com/) design system, icons from Lucide; type is Inter with Source Serif 4 for headings. Charts follow the dataviz method (validated palette, one axis, a tooltip and a table view on every chart) and animate in once. Motion is off under `prefers-reduced-motion`.
 
-- **Sign-in and roles:** four seeded accounts, one per tenant and one per role (operator, owner, developer, viewer). The server checks every permission; the console only hides what a role can't use. See [Console sign-in, roles and API keys](#console-sign-in-roles-and-api-keys).
-- **Feature guide:** a spotlight tour that walks a new user through the console, step by step, skipping what their role can't use. It starts on first sign-in and can be replayed from the help button.
-- **API keys:** create scoped, expiring keys (shown once), revoke them, and a quickstart with cURL, Python and Node examples for both endpoints.
-- **Overview:** one filter row (15 m, 1 h, 24 h or 7 d; operators also pick a tenant) scopes a stat strip and seven charts:
-  - requests by outcome (stacked columns)
-  - a **Pareto** of why requests weren't answered (or of intents), with the 80% line
-  - latency p50 and p95
-  - tokens
-  - fallback rate
-  - cost by tenant
-  - traffic share by backend
-
-  **Run sample traffic** sends 14 real requests through the gateway. Nothing is synthetic.
-- **Playground:** a workbench layout (settings toolbar, prompt on the left, response and inspector on the right, **Get code** for the equivalent API call), with live streaming plus an inspector showing the routing decision, the fallback trail, intent and confidence, retrieved entries, tokens, latency and cost.
-- **Model reasoning:** an optional *thinking* panel streams the model's reasoning (gpt-oss on Groq, Qwen thinking on MLX), kept separate from the answer and labelled per attempt.
-- **Step trace:** a timeline of every step with server-side timings: auth and quota, routing, retrieval, scope gate, each attempt, header validation, the commit point, and done.
-- **Online/offline labels** on every backend, from live health probes plus the circuit breaker. On the cloud deployment the local model is listed as *offline: runs on a local machine*.
-- **Requests:** every metered request, with a **route strip** showing the attempts in order: failed hops struck through, the serving hop outlined. You can filter by tenant, outcome group or fallback, and open a drawer with the routing decision and each attempt.
-- **Tenants and quota:** monthly token and request meters that change colour by severity, cost, in-flight reservations, company profile, and outcome counts.
-- **Backends:** online/offline status, pricing, timeouts, circuit breaker state, and fault injection.
-- **Evaluations:** the committed eval runs, charted one metric at a time.
+- **Sign-in:** a dark split page with the cursor-following spark trail (WebGL2, off for touch and reduced motion). It lists four seeded accounts, one per tenant and one per role. See [Console sign-in, roles and API keys](#console-sign-in-roles-and-api-keys).
+- **Dashboard:** a greeting with *Get API key* and *Open playground*, three headline cards (requests with the change against the day before, token volume, PII-masked requests), the backends as cards, and resource shortcuts.
+- **Playground:** *Build your request* on the left (Form or Code, tenant, routing, prompt version, reasoning, the managed system prompt, the user message); on the right, six templates (placeholders, PII masking, typos, routing, refusal, prompt injection) or the streamed answer with an inspector. The inspector has tabs for Overview (incl. PII guardrail), Trace, Routing and Retrieval. History and *Get code* sit in the header.
+- **Monitor:**
+  - **Usage:** tokens in and out, requests; token usage stacked by backend or tenant; requests by outcome.
+  - **Cost:** total, per 1,000 requests and per 1M tokens; cost stacked by backend or tenant; cost by tenant.
+  - **Reliability:** answer rate, p95, fallback rate and rejections; a **Pareto** of why requests weren't answered (or of intents) with the 80% line; latency and fallback trends; traffic share. *Run sample traffic* sends 15 real requests.
+  - **Logs:** every metered request, filterable by tenant, outcome, fallback and personal data, with a **route strip** and a drawer holding the routing decision and each attempt.
+  - **Quotas:** monthly token and request meters per tenant.
+- **Security & data:**
+  - **Guardrails:** PII policy, a live detector tester, and each built-in control with the file that enforces it.
+  - **Access:** members and the role matrix.
+  - **Audit log.**
+- **Platform:**
+  - **Backends:** health, pricing, timeouts, breakers and fault injection.
+  - **Evaluations:** committed eval runs.
+- **Feature guide:** a spotlight tour on first sign-in, replayable from the sparkle button; notifications for quotas above 80% and backends that are down.
 
 ## Results
 
@@ -189,17 +199,21 @@ More diagrams (the routing decision tree and the data model) are in **[docs/ARCH
 
 ## Screenshots
 
-**Overview.** Traffic, reliability and spend, from the same table that meters billing.
+**Dashboard.** Claude-Console layout: ⌘K search, sectioned sidebar, headline cards, backends and resources.
 
-![Overview](docs/assets/console-overview.png)
+![Dashboard](docs/assets/console-dashboard.png)
 
-| Playground: streamed answer, trace, routing, filled placeholders | Requests: the route each request took |
+| Sign-in, with the cursor spark trail | Playground: templates, streamed answer, PII masked and restored |
 |---|---|
-| ![Playground](docs/assets/console-playground.png) | ![Requests](docs/assets/console-requests.png) |
-| **Tenants and quota** | **Evaluations** |
-| ![Tenants](docs/assets/console-tenants.png) | ![Evaluations](docs/assets/console-evaluations.png) |
-| **Backends and fault injection** | **Dark mode** (its own validated steps, not an inversion) |
-| ![Backends](docs/assets/console-backends.png) | ![Overview, dark](docs/assets/console-overview-dark.png) |
+| ![Sign-in](docs/assets/console-signin.png) | ![Playground](docs/assets/console-playground.png) |
+| **Reliability: Pareto of unanswered causes** | **Guardrails: PII policy and detector** |
+| ![Reliability](docs/assets/console-reliability.png) | ![Guardrails](docs/assets/console-guardrails.png) |
+| **Usage, grouped by backend** | **Logs: route strip and PII column** |
+| ![Usage](docs/assets/console-usage.png) | ![Logs](docs/assets/console-requests.png) |
+| **API keys and quickstart** | **Cost, light theme** |
+| ![API keys](docs/assets/console-keys.png) | ![Cost](docs/assets/console-cost-light.png) |
+| **Quotas** | **Backends and fault injection** |
+| ![Quotas](docs/assets/console-tenants.png) | ![Backends](docs/assets/console-backends.png) |
 
 ## Quick start
 
@@ -360,9 +374,11 @@ curl -N http://localhost:3000/v1/support/answer \
 | `GET /api/console/*` | session + permission | Metrics, requests, usage, backends, evals, keys and audit log, scoped to the user's tenant |
 | `POST /api/console/keys` · `DELETE /api/console/keys/:id` | session + CSRF + permission | Create (secret returned once) and revoke API keys |
 | `POST /api/console/playground/support` | session + CSRF + `playground:run` | The support capability as the signed-in user's tenant |
+| `GET /api/console/governance` · `PUT /api/console/governance/pii` · `POST /api/console/governance/pii/test` | session (+ CSRF, `governance:write` to change) | PII policy, stats, and a dry-run detector |
+| `GET /api/console/members` | session + `members:read` | Who can sign in to the tenant |
 | `GET /healthz` | — | Liveness check |
 
-Error codes: `400 invalid_request`, `401 invalid_api_key`, `403 insufficient_scope`, `403 model_not_allowed`, `429 quota_exceeded`, `502 all_backends_failed`, `503 quota_unavailable`. Payload schemas and the full event reference are in **[docs/API.md](docs/API.md)**.
+Error codes: `400 invalid_request`, `401 invalid_api_key`, `403 insufficient_scope`, `403 model_not_allowed`, `422 pii_detected`, `429 quota_exceeded`, `502 all_backends_failed`, `503 quota_unavailable`. Payload schemas and the full event reference are in **[docs/API.md](docs/API.md)**.
 
 ## Evaluation
 

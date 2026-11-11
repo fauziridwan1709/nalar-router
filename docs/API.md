@@ -126,6 +126,19 @@ The console signs in with email and password and then uses a session cookie. Key
 | `POST /api/console/tenants/:id/reset-quota` | `quota:reset` |
 | `PUT /api/console/chaos/:backend`, `DELETE /api/console/chaos` | `chaos:write` |
 | `POST /api/console/playground/support` | `playground:run`. Same body as `/v1/support/answer`, plus `tenant` for operators. |
+| `GET /api/console/governance?tenant=` | `governance:read`. The PII policy, the types it can detect, 30-day stats (requests, with PII, blocked, by type) and `canEdit`. |
+| `PUT /api/console/governance/pii` with `{mode: mask\|block\|off, types: [email, phone, card, national_id, iban, ip_address]}` | `governance:write`. Audited as `governance.pii_policy`. |
+| `POST /api/console/governance/pii/test` with `{text}` (≤ 2,000 chars) | `governance:read`. Returns the masked text and findings; nothing is stored or sent to a model. |
+| `GET /api/console/members?tenant=` | `members:read` (owners, operators) |
+| `GET /api/console/metrics` also accepts `backend=` and `range=30d` | buckets carry `byBackend` and `byTenant` (requests, tokens, cost) and totals carry `promptTokens`, `completionTokens`, `piiRequests` and `piiByType` |
+
+## PII guardrail
+
+Every request on `/v1/support/answer`, `/v1/chat/completions` and the console playground is scanned with the tenant's policy before retrieval, routing or a model call.
+
+- `mask`: values are replaced with `{{Customer Email}}`, `{{Customer Phone}}`, `{{Card Number}}`, `{{National ID}}`, `{{Bank Account}}` or `{{IP Address}}`, numbered from the second (`{{Customer Email 2}}`). The support answer restores email and phone, and shows card, ID and bank numbers only as "ending in 1234". The chat endpoint leaves the placeholders as they are.
+- `block`: `422 pii_detected` with `details.types`, before admission; no model call, no quota.
+- The SSE stream carries a `step` event `{name: "pii_guard", mode, masked: [{type, label, placeholder}]}`, with types only, never values. The request row stores `pii` as `type:count` pairs.
 
 ## Errors
 
@@ -141,6 +154,7 @@ Every error has the shape `{"error": {"code", "message", "details?"}}`.
 | 403 | `model_not_allowed` | the tenant asked for a tier its plan doesn't include |
 | 413 | `payload_too_large` | body over 64 kB |
 | 429 | `quota_exceeded` | includes the remaining quota, `resetsAt` and `Retry-After` |
+| 422 | `pii_detected` | the tenant's PII policy is `block` and the input contains personal data |
 | 429 | `too_many_attempts` | console sign-in paused after repeated failures; `Retry-After` |
 | 409 | `key_limit_reached` | the tenant already has 10 active keys |
 | 502 | `all_backends_failed` | every backend errored, timed out or returned unusable output |
