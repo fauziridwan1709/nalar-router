@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, fmtMs } from "./api";
 import { Select } from "./ui";
+import { PageHeader } from "./kit";
 import { ChartPanel, HBars, TableView } from "./charts";
 
 interface Summary {
@@ -62,6 +63,7 @@ export function Evaluations() {
 
   return (
     <>
+      <PageHeader title="Evaluations" sub="Committed eval runs over held-out Bitext cases: intent accuracy, answer quality, latency and cost per configuration." />
       <div className="filters">
         <Select label="Evaluation run" width={520} value={file} onChange={setFile} search
           options={runs.map((r) => ({ value: r.file, label: PURPOSE[r.stamp] ?? r.configs.map((x) => x.config).join(" vs "), description: r.stamp.replace("T", " ").slice(0, 16) }))} />

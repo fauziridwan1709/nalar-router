@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Switch } from "@astryxdesign/core/Switch";
-import { ListTree, X } from "lucide-react";
+import { Fingerprint, ListTree, RefreshCcw, X } from "lucide-react";
 import { api, fmtMs, fmtN, fmtUsd, qs } from "./api";
-import { Empty, GROUP, Outcome, RouteStrip, Select, groupOf, type Group } from "./ui";
+import { Empty, GROUP, Outcome, RouteStrip, groupOf, type Group } from "./ui";
 import { useApp } from "./context";
+import { FilterChip, PageHeader } from "./kit";
 
 export function Requests() {
-  const { scope: tenant, can } = useApp();
+  const { scope: tenant, can, cfg, setScope } = useApp();
+  const [pii, setPii] = useState("");
   const [rows, setRows] = useState<any[]>([]);
   const [group, setGroup] = useState<"" | Group>("");
   const [onlyFallback, setOnlyFallback] = useState(false);
@@ -29,25 +30,34 @@ export function Requests() {
   }, [load]);
 
   const shown = useMemo(
-    () => rows.filter((r) => (!group || groupOf(r.outcome) === group) && (!onlyFallback || r.fallback_used)),
-    [rows, group, onlyFallback],
+    () => rows.filter((r) => (!group || groupOf(r.outcome) === group) && (!onlyFallback || r.fallback_used) && (!pii || !!r.pii)),
+    [rows, group, onlyFallback, pii],
   );
 
   return (
     <>
-      <div className="filters">
-        <Select label="Outcome" width={220} value={group || "*"} onChange={(v) => setGroup(v === "*" ? "" : (v as Group))}
-          options={[{ value: "*", label: "All outcomes" }, ...(Object.keys(GROUP) as Group[]).map((g) => ({ value: g, label: GROUP[g].label }))]} />
-        <Switch label="Only requests that fell back" value={onlyFallback} onChange={setOnlyFallback} size="sm" />
-        <span className="muted small">{fmtN(shown.length)} of the latest {fmtN(rows.length)}</span>
+      <PageHeader title="Logs" sub="Every metered request, newest first, with the route it took. Select a row for the full routing decision and every attempt."
+        actions={<button className="btn" onClick={load}><RefreshCcw size={14} /> Refresh</button>} />
+      <div className="chips">
+        {can("tenants:all") && (
+          <FilterChip label="Tenant" value={tenant || "*"} onChange={(v) => setScope(v === "*" ? "" : v)}
+            options={[{ value: "*", label: "All" }, ...cfg.tenants.map((t) => ({ value: t.id, label: t.name.split(" (")[0] }))]} />
+        )}
+        <FilterChip label="Outcome" value={group || "*"} onChange={(v) => setGroup(v === "*" ? "" : (v as Group))}
+          options={[{ value: "*", label: "All" }, ...(Object.keys(GROUP) as Group[]).map((g) => ({ value: g, label: GROUP[g].label }))]} />
+        <FilterChip label="Fallback" value={onlyFallback ? "yes" : "*"} onChange={(v) => setOnlyFallback(v === "yes")}
+          options={[{ value: "*", label: "All" }, { value: "yes", label: "Only fell back" }]} />
+        <FilterChip label="Personal data" value={pii || "*"} onChange={(v) => setPii(v === "*" ? "" : v)}
+          options={[{ value: "*", label: "All" }, { value: "yes", label: "Masked or blocked" }]} />
+        <span className="muted small" style={{ marginLeft: "auto" }}>{fmtN(shown.length)} of the latest {fmtN(rows.length)}</span>
       </div>
       {err && <div className="banner error">{err}</div>}
 
-      <section className="panel" style={{ overflow: "auto" }}>
+      <section className="panel" style={{ overflow: "auto" }} data-tour="logs">
         <table className="tbl click">
           <thead>
             <tr>
-              <th>Time</th>{can("tenants:all") && <th>Tenant</th>}<th>Credential</th><th>Outcome</th><th>Route (attempts in order)</th><th>Intent</th>
+              <th>Time</th>{can("tenants:all") && <th>Tenant</th>}<th>Credential</th><th>Outcome</th><th>PII</th><th>Route (attempts in order)</th><th>Intent</th>
               <th className="r">Tokens</th><th className="r">Latency</th><th className="r">First token</th><th className="r">Cost</th>
             </tr>
           </thead>
@@ -58,6 +68,7 @@ export function Requests() {
                 {can("tenants:all") && <td>{r.tenant_id}</td>}
                 <td className="small">{r.credential?.startsWith("user:") ? <span className="tag">console</span> : r.credential_name ? <span title={r.credential}>{r.credential_name}</span> : <span className="muted">–</span>}</td>
                 <td><Outcome outcome={r.outcome} /></td>
+                <td>{r.pii ? <span className="tag pii" title={`Masked before the model: ${r.pii}`}><Fingerprint size={12} /> {r.pii.split(",").map((x: string) => x.split(":")[0].replace("_", " ")).join(", ")}</span> : <span className="muted">–</span>}</td>
                 <td><RouteStrip trail={r.attempt_trail} /></td>
                 <td className="small">{r.intent ?? <span className="muted">–</span>}</td>
                 <td className="r">
@@ -70,7 +81,7 @@ export function Requests() {
               </tr>
             ))}
             {!shown.length && (
-              <tr><td colSpan={11}><Empty icon={ListTree} title="No requests match these filters">Requests appear here as soon as they are metered.</Empty></td></tr>
+              <tr><td colSpan={12}><Empty icon={ListTree} title="No requests match these filters">Requests appear here as soon as they are metered.</Empty></td></tr>
             )}
           </tbody>
         </table>
@@ -101,6 +112,7 @@ export function RequestDrawer({ detail, onClose }: { detail: any; onClose: () =>
           <span className="tag">{detail.tenant_id}</span>
           <span className="tag">{detail.endpoint}</span>
           {detail.error_code && <span className="tag bad">{detail.error_code}</span>}
+          {detail.pii && <span className="tag pii"><Fingerprint size={12} /> PII masked: {detail.pii}</span>}
           <span className="muted">{new Date(detail.created_at).toLocaleString()}</span>
         </div>
         {detail.error_message && <div className="banner small" style={{ marginBottom: 10 }}>{detail.error_message}</div>}

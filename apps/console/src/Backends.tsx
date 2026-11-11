@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { api, fmtMs, type BackendStatus } from "./api";
 import { useApp } from "./context";
 import { Select } from "./ui";
+import { PageHeader } from "./kit";
 import { LOCATION_LABEL, StatusBadge } from "./StatusBadge";
-import { BACKEND_COLOR } from "./Overview";
+import { BACKEND_COLOR } from "./metricsData";
 
 const MODES: { id: string; label: string }[] = [
   { id: "error", label: "Return 503" },
@@ -32,6 +33,7 @@ export function Backends() {
 
   return (
     <>
+      <PageHeader title="Backends" sub="Model backends the router can choose from: availability, pricing, timeouts, circuit breakers and fault injection." />
       {err && <div className="banner error">{err}</div>}
       <section className="panel">
         <header>
