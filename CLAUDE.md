@@ -67,6 +67,7 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 - **The browser never gets a tenant API key or the admin token.** The console uses the session cookie + CSRF token; the playground goes through `/api/console/playground/support` and `/chat` (the same specs as the `/v1` routes, in `capability.ts`).
 - **Errors carry the least detail that still helps the caller.** Same 401 for unknown/revoked/expired keys and for wrong password/unknown account; 403 doesn't name the permission; upstream error text stays in the DB (operators only); 404 doesn't echo the path.
 - **PII never leaves the gateway unmasked under `mask`, and its values are never stored.** Scan before retrieval, routing and the prompt; restore only in the answer stream; trace events, logs and the `requests.pii` column carry types and counts, never values. Detectors must not mask order/invoice/tracking ids (tests cover this).
+- **`/v1/chat/completions` and `/v1/models` stay OpenAI-compatible.** `stream` defaults to `false`, errors carry OpenAI's `type`, and `tests/openai-sdk.test.ts` (the real `openai` package) must pass. Extensions go in `x_router` or SSE comments, never in OpenAI's own fields.
 - **A key's plaintext leaves the server once,** in the `POST /api/console/keys` response. Only its SHA-256 is stored.
 
 ## Agent skills (`.agents/skills`, linked in `.claude/skills`)

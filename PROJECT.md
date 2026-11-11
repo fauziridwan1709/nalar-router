@@ -1,6 +1,6 @@
 # PROJECT.md: state of the work, and how to pick it up
 
-This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-11 (PR #2 merged; PR #3 open: chat completions in the playground, `stream` toggle, original logo back).
+This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-11 (PR #3 merged; PR #4 open: OpenAI SDK compatibility, Quotas redesign, orange theme).
 
 ## What this is
 
@@ -30,7 +30,9 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - [ ] **Invite the assessors** to the private repo (GitHub → Settings → Collaborators), or make it public
 - [ ] **Rotate the Groq API key.** It was printed in a session transcript on 2026-11-10. Update `.env` and the Render env var.
 - [x] **Merge PR #2** (PII guardrail, Claude-Console redesign). Merged 2026-11-11.
-- [ ] **Merge PR #3** (chat completions + `stream` toggle in the playground, logo reverted). Merging redeploys Render; keep `DEMO_MODE=true` there or nobody can sign in.
+- [x] **Merge PR #3** (chat completions + `stream` toggle in the playground, logo reverted).
+- [ ] **Merge PR #4** (OpenAI SDK compatibility, Quotas redesign, orange theme). Merging redeploys Render and wipes the SQLite data (accepted for now); keep `DEMO_MODE=true`.
+- [ ] Refresh the README screenshots other than Quotas: they still show the old blue accent.
 - [ ] Before recording or submitting, sign in on the live console as `ops@nalar.example` and click **Run sample traffic** on the Reliability page. The Render disk is ephemeral, so metering is empty after every redeploy.
 - [ ] Add a short "Beyond the brief" section to `docs/REPORT.md`: sign-in/RBAC, API key management, PII guardrail, console redesign. Say why each was added and what it cost, so it reads as judgement rather than scope creep.
 - [ ] Submit: repo link, live URL, video link
@@ -38,7 +40,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 ## Brief requirements vs status
 
 ### Gateway
-- [x] Chat endpoint with streaming, authenticated by a per-tenant API key: `POST /v1/chat/completions` (OpenAI-compatible SSE) and `POST /v1/support/answer` (SSE)
+- [x] Chat endpoint with streaming, authenticated by a per-tenant API key: `POST /v1/chat/completions` (OpenAI-compatible: JSON by default, SSE with `stream: true`) and `POST /v1/support/answer` (SSE)
 - [x] Per-tenant quota that fails closed with a clear error: monthly tokens and requests, atomic reservation, 429 `quota_exceeded` with `Retry-After`, 503 `quota_unavailable` on any DB error (`apps/gateway/src/quota.ts`)
 - [x] Metering per request (model, tokens, latency, estimated cost, outcome) in a database: SQLite `requests` plus per-attempt `attempts`, with `usage_source` as provider, estimated, mixed or none
 
@@ -75,7 +77,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - **Code:**
   - npm-workspaces monorepo: `apps/gateway` (Express 5, TypeScript, `node:sqlite`), `apps/console` (React 19, Vite 8, Astryx 0.7.13, hand-rolled SVG charts), `tools/eval`
   - **72 gateway tests** pass (incl. sign-in, sessions, CSRF, RBAC, tenant isolation, API keys, PII guardrail and error hygiene); CI (GitHub Actions) runs typecheck, tests, build and the retrieval eval
-- **Branches:** `main` has PR #1 (auth, RBAC, keys, first redesign). PR #2 (PII guardrail, governance pages, Claude-Console layout) is merged. PR #3 (`feat/console-completions-playground`) is open.
+- **Branches:** `main` has PR #1 (auth, RBAC, keys, first redesign). PR #2 (PII guardrail, governance pages, Claude-Console layout) is merged. PR #3 (chat playground, `stream` toggle) is merged. PR #4 (`feat/quotas-orange-openai-compat`) is open.
 - **Default prompt is v3:** it tells the model which placeholders the gateway can fill. v1 and v2 are kept for reproducible comparisons.
 - **Tenants:**
   - `acme` (pro), `globex` (free), `initech` (trial: 4k tokens / 5 requests, to demo exhausting the quota) and `eval` (shown as "Nalar internal", the operator's home tenant)
@@ -95,6 +97,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
   - Pages: Dashboard; Usage / Cost / Reliability (Pareto) / Logs / Quotas; a workbench playground with templates; Guardrails / Access / Audit log; Backends / Evaluations.
   - Dark by default; Inter + Source Serif 4. Sign-in has the SparkTrail from the user's stackbyte website.
   - PR #3: the playground calls support answer or chat completions, with a `stream: true|false` toggle and a Raw tab; the original gradient logo is back.
+  - PR #4: orange accent everywhere (the sign-in page's `#d97757`; light mode `#b4532f` for 4.5:1 text contrast), Astryx controls included; the logo gradient is orange. Quotas redesigned as stat cards plus a tenant table with a "Rejecting requests" status.
 - **Headline numbers:**
   - groq-fast vs groq-strong: intent accuracy 100% vs 100%, judge 4.47 vs 4.53, cost $0.092 vs $0.185 per 1k requests
   - answers showing raw placeholders: 15/30 → 0/30
@@ -146,6 +149,8 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 | Astryx for controls, our own CSS for layout | the user asked for Astryx; versions are pinned (beta). `layers.css` sets cascade order so our resets lose to Astryx and our classes win. |
 | Claude-Console look | the user supplied Claude Console screenshots as the reference: dark default, chips, stat cards, workbench playground. |
 | Original logo, not the spark mark | the spark mark from PR #2 looked too close to the Claude Console's. The layout stays; only the mark went back to the gradient fan-out. |
+| OpenAI compatibility is tested with the real SDK | `stream` used to default to `true`, so `client.chat.completions.create()` without `stream` got SSE and broke. Now it follows OpenAI: JSON by default, `stream_options`, `max_completion_tokens`, text parts, `developer`, sampling params, `/v1/models`, OpenAI error `type`. `tests/openai-sdk.test.ts` runs the `openai` package against the gateway. Tools, `response_format` and images are rejected by name. |
+| Ephemeral SQLite on Render is accepted for now | the user decided a redeploy wiping usage is fine for the demo; Litestream → R2 or a paid disk are the options when it isn't. |
 | Playground covers both endpoints and `stream` | the completions endpoint had no place in the console; the playground now calls either one, streamed or as JSON, and the Raw tab shows the exact wire body. Still session-authed: the console twin of each `/v1` route uses the same spec. |
 
 ## Known issues and limitations
@@ -156,7 +161,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - **Hand-offs:** multi-intent, vague and Indonesian messages are refused with a hand-off instead of answered. This is deliberate and documented.
 - **Judge score:** v3 scores about 0.1 lower than v2-raw. The judge compares against template references; this is documented and not hidden.
 - **Token estimate:** chars/4 runs 6–17% high vs the provider. That's the safe direction for quota; such rows are labelled `estimated`.
-- **Chat endpoint:** `/v1/chat/completions` is single-model streaming, with no placeholder rendering. That's intentional: the raw path stays raw. It masks PII but does not restore it.
+- **Chat endpoint:** `/v1/chat/completions` is OpenAI's Chat Completions format (tested with the `openai` SDK), not Anthropic's Messages format; no tools, `response_format` or images. It has no placeholder rendering. That's intentional: the raw path stays raw. It masks PII but does not restore it.
 - **PII:** personal names aren't detected. A short message whose only content words sit next to PII can still be refused by the scope gate (lead-ins like "email me at" are already stripped for retrieval).
 - **Auth:** the sign-in failure limiter is in memory (fine for one instance). Users are seeded; there is no user management or password change UI.
 - **Console bundle** is about 1 MB (Astryx + CodeBlock); code-splitting by page would fix the Vite warning.
@@ -164,7 +169,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 
 ## Next steps (in priority order)
 
-- [ ] Merge PR #3, check the live sign-in, the PII template and a chat run with `stream: false` on Render.
+- [ ] Merge PR #4, check the live sign-in, Quotas, and the OpenAI SDK against the live URL (`baseURL: https://nalar-router.onrender.com/v1`).
 - [ ] REPORT.md "Beyond the brief" section (see the checklist above).
 - [ ] Record the video demo (user). Optionally script it with `.agents/skills/product-demo` (writes to `out/product-demo/`).
 - [ ] Invite the assessors; rotate the Groq key.
