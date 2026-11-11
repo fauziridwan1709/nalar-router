@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { SupportOutputParser, parseHeader } from "../src/support/parser.js";
-import { Bm25Index } from "../src/support/retrieval.js";
-import { planRoute } from "../src/router/policy.js";
-import { CircuitBreaker } from "../src/router/breaker.js";
-import { executeWithFallback } from "../src/router/executor.js";
-import { BackendError } from "../src/errors.js";
-import { admit, getUsage } from "../src/quota.js";
-import { openDb } from "../src/db.js";
-import { getTenant } from "../src/tenants.js";
-import { computeMetrics, outcomeGroup } from "../src/metrics.js";
+import { SupportOutputParser, parseHeader } from "../src/domain/support/parser.js";
+import { Bm25Index } from "../src/domain/support/retrieval.js";
+import { planRoute } from "../src/domain/routing/policy.js";
+import { CircuitBreaker } from "../src/domain/routing/breaker.js";
+import { executeWithFallback } from "../src/application/executor.js";
+import { BackendError } from "../src/domain/errors.js";
+import { admit, getUsage } from "../src/infrastructure/db/quota.js";
+import { openDb } from "../src/infrastructure/db/db.js";
+import { getTenant } from "../src/infrastructure/db/tenants.js";
+import { computeMetrics, outcomeGroup } from "../src/infrastructure/db/metrics.js";
 import { FakeBackend, KB, TENANTS, cfg, fail, hang, reply } from "./helpers.js";
-import { PlaceholderRenderer, buildSlots, extractFromMessage, fillablePlaceholders } from "../src/support/placeholders.js";
+import { PlaceholderRenderer, buildSlots, extractFromMessage, fillablePlaceholders } from "../src/domain/support/placeholders.js";
 
 const INTENTS = new Set(["cancel_order", "track_order", "get_refund", "unknown"]);
 const tenant = (id: string) => {

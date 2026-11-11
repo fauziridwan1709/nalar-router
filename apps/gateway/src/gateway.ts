@@ -1,17 +1,23 @@
-/** Dependency container: everything a request handler needs, built once at boot (and in tests). */
+/**
+ * Composition root: builds every adapter once at boot (and in tests) and wires them into the
+ * use cases' AppDeps contract. This is the only module that knows every layer.
+ */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { BackendConfig, Config } from "./config.js";
-import { openDb, type DB, type SeedTenant, type SeedUser, DEMO_TENANTS, DEMO_USERS } from "./db.js";
-import type { Backend } from "./backends/types.js";
-import { OpenAICompatBackend } from "./backends/openaiCompat.js";
-import { MockBackend } from "./backends/mock.js";
-import { ChaosRegistry, withChaos } from "./backends/chaos.js";
-import { CircuitBreaker } from "./router/breaker.js";
-import { Bm25Index, type KbEntry } from "./support/retrieval.js";
-import { HealthMonitor } from "./health.js";
+import { openDb, type DB, type SeedTenant, type SeedUser, DEMO_TENANTS, DEMO_USERS } from "./infrastructure/db/db.js";
+import type { Backend } from "./application/ports/backend.js";
+import { OpenAICompatBackend } from "./infrastructure/backends/openaiCompat.js";
+import { MockBackend } from "./infrastructure/backends/mock.js";
+import { ChaosRegistry, withChaos } from "./infrastructure/backends/chaos.js";
+import { CircuitBreaker } from "./domain/routing/breaker.js";
+import { Bm25Index, type KbEntry } from "./domain/support/retrieval.js";
+import { HealthMonitor } from "./infrastructure/health.js";
+import { sqliteQuotaStore } from "./infrastructure/db/quota.js";
+import { sqliteMeteringStore } from "./infrastructure/db/metering.js";
+import type { AppDeps } from "./application/deps.js";
 
-export interface Gateway {
+export interface Gateway extends AppDeps {
   config: Config;
   db: DB;
   backends: Backend[];
@@ -46,10 +52,13 @@ export function createGateway(
   const backends = raw.map((b) => withChaos(b, chaos));
   const kbEntries: KbEntry[] = overrides.kbEntries ?? JSON.parse(readFileSync(resolve(config.dataDir, "kb.json"), "utf8"));
   const intents = [...new Set(kbEntries.map((e) => e.intent))].sort();
+  const db = overrides.db ?? openDb(config.dbPath, overrides.seed ?? DEMO_TENANTS, consoleUsers(config));
   return {
     startedAt: Date.now(),
     config,
-    db: overrides.db ?? openDb(config.dbPath, overrides.seed ?? DEMO_TENANTS, consoleUsers(config)),
+    db,
+    quota: sqliteQuotaStore(db),
+    metering: sqliteMeteringStore(db),
     backends,
     breaker: new CircuitBreaker(config.breaker.failureThreshold, config.breaker.openMs),
     chaos,

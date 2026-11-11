@@ -1,8 +1,8 @@
 /** Console sign-in, sessions, CSRF, RBAC, tenant isolation and API key lifecycle. */
 import { afterEach, describe, expect, it } from "vitest";
 import { FakeBackend, cfg, reply, signIn, startServer } from "./helpers.js";
-import { hashPassword, verifyPassword } from "../src/auth/passwords.js";
-import { can } from "../src/auth/rbac.js";
+import { hashPassword, verifyPassword } from "../src/infrastructure/auth/passwords.js";
+import { can } from "../src/domain/auth/rbac.js";
 
 const GOOD = '{"intent":"cancel_order","confidence":0.9}\n###\nGo to Orders and press Cancel.';
 let close: (() => Promise<void>) | null = null;

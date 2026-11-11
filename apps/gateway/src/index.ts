@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { createGateway } from "./gateway.js";
-import { createApp } from "./http/app.js";
+import { createApp } from "./interfaces/http/app.js";
 
 const gw = createGateway(config);
 const app = createApp(gw);
