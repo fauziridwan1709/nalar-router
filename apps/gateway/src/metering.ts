@@ -79,12 +79,14 @@ export function finishRequest(db: DB, requestId: string, f: FinalRecord, attempt
 }
 
 /** Requests rejected after auth but before admission (bad input, model not allowed). Never count against quota. */
-export function recordRejected(db: DB, requestId: string, tenantId: string, endpoint: string, status: number, code: string, message: string) {
+export function recordRejected(
+  db: DB, requestId: string, tenantId: string, endpoint: string, status: number, code: string, message: string, credential: string | null = null,
+) {
   const now = Date.now();
   db.prepare(
-    `INSERT INTO requests (id, tenant_id, endpoint, created_at, finished_at, outcome, http_status, error_code, error_message, counts_against_quota, latency_ms)
-     VALUES (?, ?, ?, ?, ?, 'rejected', ?, ?, ?, 0, 0)`,
-  ).run(requestId, tenantId, endpoint, now, now, status, code, message.slice(0, 500));
+    `INSERT INTO requests (id, tenant_id, endpoint, created_at, finished_at, outcome, http_status, error_code, error_message, counts_against_quota, latency_ms, credential)
+     VALUES (?, ?, ?, ?, ?, 'rejected', ?, ?, ?, 0, 0, ?)`,
+  ).run(requestId, tenantId, endpoint, now, now, status, code, message.slice(0, 500), credential);
 }
 
 export function getRequestDetail(db: DB, id: string) {
@@ -96,7 +98,8 @@ export function getRequestDetail(db: DB, id: string) {
 
 // "backend:outcome,backend:outcome" in attempt order: the route strip in the console
 const TRAIL = `(SELECT group_concat(backend || ':' || outcome, ',') FROM
-  (SELECT backend, outcome FROM attempts a WHERE a.request_id = r.id ORDER BY seq)) AS attempt_trail`;
+  (SELECT backend, outcome FROM attempts a WHERE a.request_id = r.id ORDER BY seq)) AS attempt_trail,
+  (SELECT name FROM api_keys k WHERE k.id = r.credential) AS credential_name`;
 
 export function listRequests(db: DB, opts: { tenantId?: string; limit?: number }) {
   const limit = Math.min(500, Math.max(1, opts.limit ?? 50));

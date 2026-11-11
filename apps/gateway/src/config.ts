@@ -50,6 +50,22 @@ export const config = {
   demoMode: (env.DEMO_MODE ?? "true") === "true",
   adminToken: env.ADMIN_TOKEN ?? "admin-demo-token",
 
+  auth: {
+    /** behind Render's proxy: trust one hop so req.ip and req.secure are the client's */
+    trustProxy: env.TRUST_PROXY ?? (env.RENDER ? "1" : "loopback"),
+    /** Secure cookies + HSTS. Auto-on when the request arrived over HTTPS. Force with SECURE_COOKIES=true. */
+    forceSecureCookies: env.SECURE_COOKIES === "true",
+    /** failed sign-ins allowed per (email) and per (client IP) inside the window */
+    maxFailuresPerAccount: num(env.AUTH_MAX_FAILURES_ACCOUNT, 5),
+    maxFailuresPerIp: num(env.AUTH_MAX_FAILURES_IP, 20),
+    failureWindowMs: num(env.AUTH_FAILURE_WINDOW_MS, 15 * 60_000),
+    /** creates one operator account at boot (outside demo mode this is the only way in) */
+    bootstrapOperator:
+      env.BOOTSTRAP_OPERATOR_EMAIL && env.BOOTSTRAP_OPERATOR_PASSWORD
+        ? { email: env.BOOTSTRAP_OPERATOR_EMAIL, password: env.BOOTSTRAP_OPERATOR_PASSWORD, tenantId: env.BOOTSTRAP_OPERATOR_TENANT ?? "eval" }
+        : null,
+  },
+
   routing: {
     /** queries longer than this (estimated tokens) go to the strong tier */
     longQueryTokens: num(env.ROUTE_LONG_QUERY_TOKENS, 60),
