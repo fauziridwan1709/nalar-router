@@ -45,7 +45,9 @@ curl -N http://localhost:3000/v1/chat/completions -H 'authorization: Bearer sk-a
   -H 'content-type: application/json' -d '{"messages":[{"role":"user","content":"hi"}],"model":"auto"}'
 ```
 
-It streams standard `chat.completion.chunk`s. The final chunk carries `usage` and an `x_router` block with backend, fallback, cost and trace.
+It streams standard `chat.completion.chunk`s. The final chunk carries `usage` and an `x_router` block with backend, fallback, cost and trace. Routing and attempt events also arrive as SSE comments (`: route {…}`, `: attempt {…}`, each with `t`, ms since the request started), which OpenAI clients ignore.
+
+With `"stream": false` it returns one `chat.completion` object, with `x_router` (route, attempts, and reasoning when `include_reasoning` is set) alongside `choices` and `usage`. `/v1/support/answer` works the same way; `stream` defaults to `true` on both.
 
 ## `GET /v1/backends`
 
@@ -126,6 +128,7 @@ The console signs in with email and password and then uses a session cookie. Key
 | `POST /api/console/tenants/:id/reset-quota` | `quota:reset` |
 | `PUT /api/console/chaos/:backend`, `DELETE /api/console/chaos` | `chaos:write` |
 | `POST /api/console/playground/support` | `playground:run`. Same body as `/v1/support/answer`, plus `tenant` for operators. |
+| `POST /api/console/playground/chat` | `playground:run`. Same body as `/v1/chat/completions` (incl. `stream`), plus `tenant` for operators. Metered as `chat.completions`. |
 | `GET /api/console/governance?tenant=` | `governance:read`. The PII policy, the types it can detect, 30-day stats (requests, with PII, blocked, by type) and `canEdit`. |
 | `PUT /api/console/governance/pii` with `{mode: mask\|block\|off, types: [email, phone, card, national_id, iban, ip_address]}` | `governance:write`. Audited as `governance.pii_policy`. |
 | `POST /api/console/governance/pii/test` with `{text}` (≤ 2,000 chars) | `governance:read`. Returns the masked text and findings; nothing is stored or sent to a model. |

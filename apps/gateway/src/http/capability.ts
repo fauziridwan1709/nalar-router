@@ -13,7 +13,8 @@ import { admit, getUsage } from "../quota.js";
 import { finishRequest, recordRejected } from "../metering.js";
 import { prepareSupport, runSupport, type RunResult } from "../support/assistant.js";
 import { CollectSink, SseSink, type EventSink } from "./sink.js";
-import type { ChatSseSink } from "./chatFormat.js";
+import { ChatSseSink, chatCompletionJson } from "./chatFormat.js";
+import { guardChatMessages, prepareChat, runChat } from "../chat.js";
 
 export const SupportBody = z
   .object({
@@ -22,6 +23,22 @@ export const SupportBody = z
     prompt_version: z.enum(["v1", "v2", "v3"]).optional(),
     placeholders: z.enum(["fill", "raw"]).optional(),
     stream: z.boolean().optional(),
+    include_reasoning: z.boolean().optional(),
+  })
+  .strict();
+
+export const ChatBody = z
+  .object({
+    messages: z
+      .array(z.object({ role: z.enum(["system", "user", "assistant"]), content: z.string().max(16_000) }).strict())
+      .min(1)
+      .max(50)
+      .refine((m) => m.some((x) => x.role === "user" && x.content.trim()), "at least one non-empty user message is required")
+      .refine((m) => m.reduce((n, x) => n + x.content.length, 0) <= 32_000, "conversation too long (max 32k chars)"),
+    model: z.string().max(64).optional(),
+    stream: z.boolean().optional(),
+    max_tokens: z.number().int().min(1).max(4096).optional(),
+    temperature: z.number().min(0).max(2).optional(),
     include_reasoning: z.boolean().optional(),
   })
   .strict();
@@ -193,6 +210,25 @@ export function supportSpec(gw: Gateway, res: Response, rawBody: unknown) {
         steps: s.all("step"),
         reasoning: body.include_reasoning ? s.reasoning : undefined,
       }),
+    };
+  };
+}
+
+/** POST /v1/chat/completions and the console's chat playground share this spec */
+export function chatSpec(gw: Gateway, res: Response, rawBody: unknown) {
+  return (tenant: Tenant): CapabilitySpec => {
+    const body = ChatBody.parse(rawBody ?? {});
+    const guarded = guardChatMessages(tenant, body.messages);
+    const { plan, estimatedPromptTokens } = prepareChat(gw, tenant, guarded.messages, body.model);
+    return {
+      estimatedPromptTokens,
+      pii: guarded.pii,
+      requestedMaxTokens: body.max_tokens ?? 1024,
+      stream: body.stream ?? true,
+      makeSink: () => new ChatSseSink(res),
+      run: (ctx) =>
+        runChat(gw, plan, guarded.messages, { ...ctx, temperature: body.temperature, includeReasoning: body.include_reasoning }),
+      respondJson: (s, done) => chatCompletionJson(s, done),
     };
   };
 }

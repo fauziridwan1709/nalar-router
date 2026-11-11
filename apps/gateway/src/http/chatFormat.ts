@@ -7,6 +7,7 @@ export class ChatSseSink implements EventSink {
   private model = "";
   private heartbeat: NodeJS.Timeout;
   private trace: unknown[] = [];
+  private start = Date.now();
   constructor(private res: Response) {
     res.status(200);
     res.setHeader("content-type", "text/event-stream; charset=utf-8");
@@ -53,10 +54,13 @@ export class ChatSseSink implements EventSink {
         });
         this.write("data: [DONE]\n\n");
         break;
-      default:
+      default: {
         // route / attempt events: kept for x_router.trace and as SSE comments (ignored by OpenAI clients)
-        this.trace.push({ event, ...data });
-        this.write(`: ${event} ${JSON.stringify(data)}\n\n`);
+        // `t` is ms since the request started, the same stamp the support stream carries
+        const stamped = { ...data, t: Date.now() - this.start };
+        this.trace.push({ event, ...stamped });
+        this.write(`: ${event} ${JSON.stringify(stamped)}\n\n`);
+      }
     }
   }
   end() {
