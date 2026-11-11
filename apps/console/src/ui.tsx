@@ -3,7 +3,7 @@
  * DropdownMenu, Dialog, Tooltip, Toast…); icons are Lucide, the set Astryx's neutral theme uses.
  * Status is never colour alone: an icon and a word go with it.
  */
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Selector } from "@astryxdesign/core/Selector";
 import { useToast } from "@astryxdesign/core/Toast";
 import {
@@ -161,14 +161,20 @@ export function Empty({ icon: I, title, children, action }: { icon?: LucideIcon;
 
 export const ROLE_LABEL: Record<string, string> = { operator: "Operator", owner: "Owner", developer: "Developer", viewer: "Viewer" };
 
-/** the mark: a router fan-out drawn as a spark, in the brand terracotta */
+/** the mark: one input fanning out to three backends, on the accent gradient */
 export function Logo({ size = 22 }: { size?: number }) {
+  const id = `nlg${useId().replace(/[^\w-]/g, "")}`; // several logos can be on screen at once; gradient ids must not collide
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ color: "var(--brand)", flex: "none" }}>
-      {[0, 30, 60, 90, 120, 150].map((a) => (
-        <rect key={a} x="11" y="2" width="2" height="20" rx="1" fill="currentColor" transform={`rotate(${a} 12 12)`} opacity={a % 60 ? 0.75 : 1} />
-      ))}
-      <circle cx="12" cy="12" r="2.6" fill="currentColor" />
+    <svg width={size} height={size} viewBox="0 0 28 28" aria-hidden="true" style={{ flex: "none" }}>
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="var(--accent)" />
+          <stop offset="1" stopColor="color-mix(in srgb, var(--accent) 60%, #7b4dff)" />
+        </linearGradient>
+      </defs>
+      <rect width="28" height="28" rx="8" fill={`url(#${id})`} />
+      <path d="M7 14h5M15 14c3 0 3-6 6-6M15 14c3 0 3 6 6 6M15 14h6" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+      <circle cx="13.5" cy="14" r="2" fill="#fff" />
     </svg>
   );
 }
