@@ -19,7 +19,7 @@ export interface Series<T> {
   get: (d: T) => number | null;
 }
 
-const PAD = { l: 44, r: 12, t: 12, b: 24 };
+const PAD = { l: 48, r: 12, t: 12, b: 26 };
 
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -164,6 +164,8 @@ export function StackedColumns<T>({ data, x, xLabel, series, format, height = 22
   const totals = data.map((d) => series.reduce((s, se) => s + (se.get(d) ?? 0), 0));
   const ticks = niceTicks(Math.max(...totals, 0));
   const top = ticks[ticks.length - 1];
+  // small fractional values (dollars) need the caller's formatter, or 0.0015 and 0.002 both print "0.002"
+  const fractional = ticks.some((t) => !Number.isInteger(t));
   const y = (v: number) => PAD.t + ih - (v / top) * ih;
   const band = iw / Math.max(1, n);
   const bw = Math.min(24, Math.max(3, band * 0.62));
@@ -175,7 +177,7 @@ export function StackedColumns<T>({ data, x, xLabel, series, format, height = 22
           {ticks.map((t) => (
             <g key={t}>
               <line className={t === 0 ? "base-line" : "grid-line"} x1={PAD.l} x2={width - PAD.r} y1={y(t)} y2={y(t)} />
-              <text x={PAD.l - 8} y={y(t) + 4} textAnchor="end">{compact(t)}</text>
+              <text x={PAD.l - 8} y={y(t) + 4} textAnchor="end">{fractional ? format(t) : compact(t)}</text>
             </g>
           ))}
           {xTickIndexes(n).map((i) => (
@@ -576,9 +578,10 @@ export function ChartPanel({ title, sub, legend, table, children, tools, tour }:
         <div className="tools">
           {tools}
           {table && (
-            <button className="icon-btn" aria-pressed={asTable} onClick={() => setAsTable((v) => !v)} title={asTable ? "Show chart" : "Show table"} aria-label={asTable ? "Show chart" : "Show table"}>
-              {asTable ? <BarChart3 size={15} /> : <Table2 size={15} />}
-            </button>
+            <div className="view-toggle" role="group" aria-label="View">
+              <button aria-pressed={!asTable} onClick={() => setAsTable(false)} title="Chart" aria-label="Show chart"><BarChart3 size={15} /></button>
+              <button aria-pressed={asTable} onClick={() => setAsTable(true)} title="Table" aria-label="Show table"><Table2 size={15} /></button>
+            </div>
           )}
         </div>
       </header>

@@ -38,7 +38,18 @@ export interface CapabilitySpec {
   makeSink: () => EventSink;
   run: (ctx: { maxCompletionTokens: number; sink: EventSink; clientSignal: AbortSignal; startedAt: number }) => Promise<RunResult>;
   respondJson: (sink: CollectSink, done: any) => unknown;
+  /** PII types and counts found in the input (type:count,…), metered with the request; never values */
+  pii?: string | null;
 }
+
+const recordPii = (gw: Gateway, requestId: string, pii: unknown) => {
+  if (typeof pii !== "string" || !pii) return;
+  try {
+    gw.db.prepare("UPDATE requests SET pii = ? WHERE id = ?").run(pii, requestId);
+  } catch (e) {
+    console.error(`[${requestId}] pii metering failed`, e);
+  }
+};
 
 export function createCapabilityRunner(gw: Gateway) {
   return async function runCapability(
@@ -65,9 +76,11 @@ export function createCapabilityRunner(gw: Gateway) {
       if (!(e instanceof ZodError) && !(e instanceof GatewayError)) console.error(`[${requestId}] prepare failed`, e);
       try {
         recordRejected(gw.db, requestId, tenant.id, endpoint, ge.status, ge.code, ge.message, credential);
+        if (ge.code === "pii_detected") recordPii(gw, requestId, ge.details?.pii);
       } catch {
         /* metering failure must not mask the client error */
       }
+      if (ge.details?.pii) delete ge.details.pii; // the client already knows its own message; keep the response minimal
       throw ge;
     }
 
@@ -80,6 +93,7 @@ export function createCapabilityRunner(gw: Gateway) {
       promptVersion: spec.promptVersion,
       credential,
     });
+    recordPii(gw, requestId, spec.pii);
 
     const startedAt = Date.now();
     const client = new AbortController();
@@ -162,6 +176,7 @@ export function supportSpec(gw: Gateway, res: Response, rawBody: unknown) {
       estimatedPromptTokens: prepared.estimatedPromptTokens,
       requestedMaxTokens: gw.config.support.maxAnswerTokens + (body.include_reasoning ? gw.config.support.reasoningExtraTokens : 0),
       promptVersion,
+      pii: prepared.pii.summary,
       stream: body.stream ?? true,
       makeSink: () => new SseSink(res),
       run: (ctx) => runSupport(gw, prepared, ctx),

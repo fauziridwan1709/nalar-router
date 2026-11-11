@@ -36,9 +36,11 @@ describe("support endpoint", () => {
     expect(res.headers.get("content-type")).toContain("text/event-stream");
     const ev = await sse(res);
     const names = ev.map((e) => e.event);
-    expect(names.slice(0, 5)).toEqual(["meta", "route", "retrieval", "step", "attempt"]);
+    // the PII guardrail runs before routing and retrieval
+    expect(names.slice(0, 6)).toEqual(["meta", "step", "route", "retrieval", "step", "attempt"]);
+    expect(ev[1].data).toMatchObject({ name: "pii_guard", masked: [] });
     expect(ev[0].data.admission.maxCompletionTokens).toBeGreaterThan(0);
-    expect(typeof ev[1].data.t).toBe("number"); // server-side elapsed ms on every non-token event
+    expect(typeof ev[2].data.t).toBe("number"); // server-side elapsed ms on every non-token event
     expect(names).toContain("intent");
     const answer = ev.filter((e) => e.event === "token").map((e) => e.data.text).join("");
     expect(answer).toBe("Go to Orders and press Cancel.");

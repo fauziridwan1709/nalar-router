@@ -16,6 +16,7 @@ import { CalendarClock, EyeOff, FileLock2, KeyRound, Layers, Plus, RefreshCcw, S
 import { api, ApiError, qs, type ApiKey } from "./api";
 import { useApp } from "./context";
 import { CopyButton, Empty, Select, timeAgo } from "./ui";
+import { PageHeader } from "./kit";
 import { chatSnippet, envSnippet, LANGS, supportSnippet, type Lang } from "./snippets";
 
 const SCOPE_INFO: Record<string, { label: string; desc: string }> = {
@@ -62,6 +63,13 @@ export function ApiKeys() {
 
   return (
     <>
+      <PageHeader title="API keys" sub="Keys your services use to call the gateway. Each key acts as the tenant and spends its quota."
+        actions={can("keys:create") ? (
+          <button className="btn primary" data-tour="keys-create" onClick={() => setCreating(true)} disabled={active >= cfg.maxActiveKeys}
+            title={active >= cfg.maxActiveKeys ? "Revoke a key before creating another" : undefined}>
+            <Plus size={15} /> Create key
+          </button>
+        ) : undefined} />
       {err && <div className="banner error">{err}</div>}
       <section className="panel">
         <header>
@@ -71,12 +79,7 @@ export function ApiKeys() {
           </div>
           <div className="tools">
             <button className="icon-btn" onClick={load} aria-label="Refresh"><RefreshCcw size={15} /></button>
-            {can("keys:create") && (
-              <button className="btn primary" data-tour="keys-create" onClick={() => setCreating(true)} disabled={active >= cfg.maxActiveKeys}
-                title={active >= cfg.maxActiveKeys ? "Revoke a key before creating another" : undefined}>
-                <Plus size={15} /> Create key
-              </button>
-            )}
+
           </div>
         </header>
         <div className="body" style={{ overflow: "auto" }}>
@@ -106,7 +109,7 @@ export function ApiKeys() {
         </div>
       </section>
 
-      <div className="grid c2 keys-lower">
+      <div className="grid c32">
         <Quickstart />
         <BestPractices />
       </div>

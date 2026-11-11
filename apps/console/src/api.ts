@@ -6,7 +6,8 @@
 export type Role = "operator" | "owner" | "developer" | "viewer";
 export type Permission =
   | "dashboard:read" | "requests:read" | "usage:read" | "evals:read" | "backends:read" | "playground:run"
-  | "keys:read" | "keys:create" | "keys:revoke_own" | "keys:revoke_any" | "audit:read" | "tenants:all" | "quota:reset" | "chaos:write";
+  | "keys:read" | "keys:create" | "keys:revoke_own" | "keys:revoke_any" | "audit:read" | "tenants:all" | "quota:reset" | "chaos:write"
+  | "governance:read" | "governance:write" | "members:read";
 
 export interface SessionUser {
   id: string;

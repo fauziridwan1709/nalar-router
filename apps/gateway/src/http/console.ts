@@ -16,7 +16,8 @@ import { z } from "zod";
 import type { Gateway } from "../gateway.js";
 import { GatewayError, publicAttemptError } from "../errors.js";
 import { DEMO_USERS } from "../db.js";
-import { getTenant, listTenants, type Tenant } from "../tenants.js";
+import { getTenant, listTenants, setPiiPolicy, type Tenant } from "../tenants.js";
+import { PII_LABEL, PII_MODES, PII_TYPES, scanPii } from "../guardrails/pii.js";
 import { getUsage, resetQuota } from "../quota.js";
 import { getRequestDetail, listRequests } from "../metering.js";
 import { computeMetrics, RANGES, type RangeKey } from "../metrics.js";
@@ -55,6 +56,8 @@ const KeyBody = z
   .strict();
 
 const PlaygroundBody = z.object({ tenant: z.string().max(64).optional() }).passthrough();
+const PiiPolicyBody = z.object({ mode: z.enum(PII_MODES), types: z.array(z.enum(PII_TYPES)).max(PII_TYPES.length) }).strict();
+const PiiTestBody = z.object({ text: z.string().max(2000, "text is at most 2000 characters") }).strict();
 
 const ID = /^[a-z0-9_]{1,64}$/;
 
@@ -188,7 +191,9 @@ export function mountConsole(app: Express, gw: Gateway, runCapability: RunCapabi
   app.get("/api/console/metrics", session, need("dashboard:read"), (req, res) => {
     const range = String(req.query.range ?? "24h");
     if (!(range in RANGES)) throw new GatewayError(400, "invalid_request", `range must be one of ${Object.keys(RANGES).join(", ")}`);
-    res.json(computeMetrics(gw.db, range as RangeKey, { tenantId: scopeTenant(req, true) ?? undefined }));
+    const backend = typeof req.query.backend === "string" && req.query.backend ? req.query.backend : undefined;
+    if (backend && !gw.backends.some((b) => b.config.id === backend)) throw new GatewayError(400, "invalid_request", "Unknown backend.");
+    res.json(computeMetrics(gw.db, range as RangeKey, { tenantId: scopeTenant(req, true) ?? undefined, backend }));
   });
 
   app.get("/api/console/requests", session, need("requests:read"), (req, res) => {
@@ -200,6 +205,10 @@ export function mountConsole(app: Express, gw: Gateway, runCapability: RunCapabi
     const id = String(req.params.id);
     const d = /^req_[a-z0-9]{1,40}$/.test(id) ? getRequestDetail(gw.db, id) : null;
     if (!d || (!isOperator(req) && d.tenant_id !== req.user!.tenantId)) throw new GatewayError(404, "not_found", "Request not found.");
+    // operators reading another tenant's data leave a trail
+    if (d.tenant_id !== req.user!.tenantId) {
+      audit(gw.db, { tenantId: d.tenant_id, actor: req.user!, action: "data.cross_tenant_read", target: id, ip: req.ip });
+    }
     res.json(redactRequest(req, d));
   });
 
@@ -288,6 +297,63 @@ export function mountConsole(app: Express, gw: Gateway, runCapability: RunCapabi
 
   app.get("/api/console/audit", session, need("audit:read"), (req, res) => {
     res.json(listAudit(gw.db, scopeTenant(req, true), 100));
+  });
+
+  // ---------- governance: guardrails, members ----------
+  app.get("/api/console/governance", session, need("governance:read"), (req, res) => {
+    const tenantId = scopeTenant(req, false)!;
+    const t = getTenant(gw.db, tenantId)!;
+    const since = Date.now() - 30 * 86_400_000;
+    const rows = gw.db
+      .prepare("SELECT pii, outcome, error_code FROM requests WHERE tenant_id = ? AND created_at >= ? AND pii IS NOT NULL")
+      .all(tenantId, since) as { pii: string; error_code: string | null }[];
+    const byType: Record<string, number> = {};
+    for (const r of rows) for (const part of r.pii.split(",")) {
+      const [k, n] = part.split(":");
+      byType[k] = (byType[k] ?? 0) + Number(n || 0);
+    }
+    const total = (gw.db.prepare("SELECT COUNT(*) AS n FROM requests WHERE tenant_id = ? AND created_at >= ?").get(tenantId, since) as { n: number }).n;
+    res.json({
+      tenant: { id: t.id, name: t.name },
+      piiPolicy: t.piiPolicy,
+      piiTypes: PII_TYPES.map((id) => ({ id, label: PII_LABEL[id] })),
+      stats: {
+        windowDays: 30,
+        requests: total,
+        requestsWithPii: rows.length,
+        blocked: rows.filter((r) => r.error_code === "pii_detected").length,
+        byType,
+      },
+      canEdit: can(req.user!.role, "governance:write"),
+    });
+  });
+
+  app.put("/api/console/governance/pii", session, csrf, need("governance:write"), (req, res) => {
+    const tenantId = scopeTenant(req, false)!;
+    const body = PiiPolicyBody.parse(req.body ?? {});
+    if (body.mode !== "off" && body.types.length === 0) {
+      throw new GatewayError(400, "invalid_request", "Pick at least one type of personal data, or turn the guardrail off.");
+    }
+    const before = getTenant(gw.db, tenantId)!.piiPolicy;
+    setPiiPolicy(gw.db, tenantId, { mode: body.mode, types: [...new Set(body.types)] });
+    audit(gw.db, { tenantId, actor: req.user!, action: "governance.pii_policy", target: tenantId, ip: req.ip, meta: { from: before.mode, to: body.mode, types: body.types } });
+    res.json({ piiPolicy: getTenant(gw.db, tenantId)!.piiPolicy });
+  });
+
+  // a dry run of the detector: nothing is stored or sent to a model
+  app.post("/api/console/governance/pii/test", session, csrf, need("governance:read"), (req, res) => {
+    const { text } = PiiTestBody.parse(req.body ?? {});
+    const tenantId = scopeTenant(req, false)!;
+    const s = scanPii(text, getTenant(gw.db, tenantId)!.piiPolicy.types);
+    res.json({ masked: s.masked, findings: s.findings.map((f) => ({ type: f.type, label: PII_LABEL[f.type], placeholder: `{{${f.slot}}}` })) });
+  });
+
+  app.get("/api/console/members", session, need("members:read"), (req, res) => {
+    const tenantId = scopeTenant(req, true);
+    const rows = (tenantId
+      ? gw.db.prepare("SELECT id, tenant_id, email, name, role, created_at, last_login_at, disabled_at FROM users WHERE tenant_id = ? ORDER BY role, email").all(tenantId)
+      : gw.db.prepare("SELECT id, tenant_id, email, name, role, created_at, last_login_at, disabled_at FROM users ORDER BY tenant_id, role, email").all()) as any[];
+    res.json(rows.map((u) => ({ id: u.id, tenantId: u.tenant_id, email: u.email, name: u.name, role: u.role, createdAt: u.created_at, lastLoginAt: u.last_login_at, disabled: !!u.disabled_at })));
   });
 
   // ---------- playground: the support endpoint, as the signed-in user's tenant ----------

@@ -65,12 +65,14 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 
 - **Code:**
   - npm-workspaces monorepo: `apps/gateway` (Express 5, TypeScript, `node:sqlite`), `apps/console` (React 19, Vite 8, hand-rolled SVG charts), `tools/eval`
-  - **62 gateway tests** pass (19 new for sign-in, sessions, CSRF, RBAC, tenant isolation, API keys and error hygiene); CI (GitHub Actions) runs typecheck, tests, build and the retrieval eval
+  - **72 gateway tests** pass (incl. sign-in, sessions, CSRF, RBAC, tenant isolation, API keys, PII guardrail and error hygiene); CI (GitHub Actions) runs typecheck, tests, build and the retrieval eval
 - **Default prompt is v3:** it tells the model which placeholders the gateway can fill. v1 and v2 are kept for reproducible comparisons.
 - **Tenants:**
   - `acme` (pro), `globex` (free), `initech` (trial: 4k tokens / 5 requests, to demo exhausting the quota) and `eval`
   - keys are in README "Demo tenants". The console no longer receives keys: it signs in (see below).
 - **Console auth (added 2026-11-11):** email + password sign-in, sessions (HttpOnly cookie + CSRF token), RBAC with four roles, tenant isolation, audit log, scoped expiring API keys created in the console. Four demo accounts (README "Console sign-in, roles and API keys"), one per tenant and role: `ops@nalar.example` (operator), `owner@acme.example`, `dev@globex.example`, `viewer@initech.example`.
+- **Guardrails (2026-11-11, later):** PII masking (mask / block / off per tenant) on every model-calling path, with values restored only in the support answer; governance API and Guardrails, Access and Audit log pages; audit of operators' cross-tenant reads; CSV export. 72 gateway tests.
+- **Console redesign 2 (2026-11-11):** Claude-Console layout (top bar with ⌘K, sectioned sidebar, Dashboard, Usage / Cost / Reliability / Logs / Quotas, workbench playground with templates), dark by default, Inter + Source Serif 4, sign-in page with the stackbyte SparkTrail.
 - **Console UI (2026-11-11):** Astryx design system controls, Lucide icons, workbench-style playground with Get code, animated charts plus a Pareto chart, a spotlight feature tour. `/api/demo-config` was removed: it exposed the admin token and every key to anonymous visitors.
   - acme and eval share a company profile that fills placeholders; initech has none on purpose, to show the fallback phrases
 - **Headline numbers:**

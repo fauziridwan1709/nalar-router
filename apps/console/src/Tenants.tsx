@@ -4,6 +4,7 @@ import { RotateCcw } from "lucide-react";
 import { api, fmtN, fmtUsd, qs } from "./api";
 import { GROUP, groupOf, type Group } from "./ui";
 import { useApp } from "./context";
+import { PageHeader } from "./kit";
 
 /** meter: fill carries severity (accent → warning → critical); the track is a lighter step */
 function Meter({ used, total, label }: { used: number; total: number; label: string }) {
@@ -41,11 +42,9 @@ export function Tenants() {
 
   return (
     <>
+      <PageHeader title="Quotas" sub="Monthly token and request limits per tenant (UTC). Quotas fail closed: if a check can't complete, the request is rejected rather than served unmetered." />
       {err && <div className="banner error">{err}</div>}
-      <p className="muted small" style={{ margin: 0 }}>
-        Quotas are monthly (UTC) and fail closed: when a check can't be completed, the request is rejected rather than served unmetered.
-      </p>
-      <div className="grid c2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(420px, 1fr))" }}>
+      <div className="grid c2">
         {usage.map((u) => {
           const outcomes: Record<Group, number> = { success: 0, refused: 0, rejected: 0, failed: 0 };
           for (const o of u.outcomes) outcomes[groupOf(o.outcome)] += o.n;

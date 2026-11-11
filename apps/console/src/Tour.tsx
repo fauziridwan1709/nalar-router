@@ -18,16 +18,16 @@ export interface TourStep {
 }
 
 export const TOUR: TourStep[] = [
-  { target: "nav", title: "Your console", body: "Everything you can do is in this sidebar. What you see depends on your role, and the server enforces it too." },
-  { target: "scope", title: "Tenant scope", body: "Operators can look at one tenant or all of them. Everyone else always sees only their own tenant.", perm: "tenants:all" },
-  { target: "stats", page: "overview", title: "Headline numbers", body: "Requests, answer rate, latency, fallback rate and spend for the selected range. Each has a trend line.", perm: "dashboard:read" },
-  { target: "pareto", page: "overview", title: "Where problems come from", body: "A Pareto chart: causes sorted by size, with the running total. The few bars before the 80% line are where a fix pays off most.", perm: "dashboard:read" },
-  { target: "pg-toolbar", page: "playground", title: "Playground", body: "Pick routing, prompt version and reasoning, like a model workbench. Get code turns the current request into a curl, Python or Node snippet.", perm: "playground:run" },
-  { target: "pg-composer", page: "playground", title: "Send a message", body: "Type a customer message or start from an example. Press ⌘/Ctrl + Enter to run.", perm: "playground:run" },
-  { target: "pg-inspector", page: "playground", title: "Inspect every decision", body: "Routing, fallback, the step trace with server timings, retrieval, intent and confidence for the selected run.", perm: "playground:run" },
-  { target: "keys-create", page: "keys", title: "Create an API key", body: "Name it after the service that uses it, give it only the scopes it needs and an expiry. The secret is shown once.", perm: "keys:create" },
-  { target: "keys-quickstart", page: "keys", title: "Call the API", body: "Ready-to-run curl, Python and Node examples for both endpoints, reading the key from an environment variable.", perm: "keys:read" },
-  { target: "help", title: "Replay any time", body: "Open this tour again from the help button. That's it: happy building." },
+  { target: "nav", title: "Your console", body: "Build, monitor, and security & data, in that order. What you see depends on your role, and the server enforces it too." },
+  { target: "search", title: "Search anything", body: "Press ⌘K (Ctrl K) to jump to a page or run an action: create a key, change the PII policy, switch theme." },
+  { target: "stats", page: "dashboard", title: "Headline numbers", body: "Requests with the change against the day before, token volume, and how many requests had personal data masked.", perm: "dashboard:read" },
+  { target: "pareto", page: "reliability", title: "Where problems come from", body: "A Pareto chart: causes sorted by size, with the running total. The bars before the 80% line are where a fix pays off most.", perm: "dashboard:read" },
+  { target: "scope", page: "usage", title: "Filter chips", body: "Every monitor page filters by tenant (operators), backend and grouping, with the range on the right.", perm: "tenants:all" },
+  { target: "pg-composer", page: "playground", title: "Build a request", body: "Write a customer message or pick a template. Form shows the settings; Code shows the same request as cURL, Python or Node.", perm: "playground:run" },
+  { target: "pg-run", page: "playground", title: "Run it", body: "⌘/Ctrl + Enter. The answer streams in on the right with routing, the PII guardrail, retrieval, intent, tokens, latency and cost.", perm: "playground:run" },
+  { target: "keys-create", page: "keys", title: "Create an API key", body: "Name it after the service, give it only the scopes it needs and an expiry. The secret is shown once.", perm: "keys:create" },
+  { target: "pii-policy", page: "guardrails", title: "Guardrails", body: "Personal data is masked before any model sees it. Owners choose mask, block or off, and every change lands in the audit log.", perm: "governance:read" },
+  { target: "help", title: "Replay any time", body: "Open this guide again from the sparkle button in the top bar. That's it: happy building." },
 ];
 
 const PAD = 8;

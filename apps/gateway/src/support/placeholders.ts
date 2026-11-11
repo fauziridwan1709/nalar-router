@@ -11,7 +11,7 @@
  * Placeholders never reach the customer as raw {{…}}.
  */
 
-export type SlotSource = "message" | "profile" | "ui_label" | "fallback";
+export type SlotSource = "message" | "profile" | "ui_label" | "fallback" | "pii";
 export interface SlotValue {
   value: string;
   source: SlotSource;

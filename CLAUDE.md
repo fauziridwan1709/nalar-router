@@ -14,6 +14,7 @@ apps/gateway/     Node ≥22.13 + Express 5 API (TypeScript → dist/). Serves t
   src/backends/      openaiCompat.ts (Groq, MLX, Ollama…), mock.ts (extractive), chaos.ts (fault injection)
   src/support/       retrieval.ts (BM25 + typo correction), prompt.ts (v1/v2/v3), parser.ts (header validation),
                      placeholders.ts (slot filling), assistant.ts
+  src/guardrails/    pii.ts (PII detectors, masking, read-back, retrieval text)
   src/auth/          passwords.ts (scrypt), sessions.ts (users, sessions, audit), rbac.ts (roles → permissions),
                      apiKeys.ts (scoped, expiring keys; digest only), rateLimit.ts (sign-in failures)
   src/http/console.ts  session-authed console API: sign-in, RBAC, tenant scoping, keys, playground
@@ -28,9 +29,11 @@ tools/eval/       prepare-data.ts, retrieval-eval.ts, eval.ts, probe.ts; results
 data/             kb.json (2,160 KB entries), eval.json (30 held-out), eval-ood.json, eval-hard.json, retrieval-holdout.json
 docs/             REPORT.md (design + results), EVALUATION.md (all eval runs), ARCHITECTURE.md (Mermaid diagrams),
                   API.md, assets/ (banner, screenshots)
-apps/console/src  main.tsx (Astryx Theme, sign-in gate, role-aware shell), SignIn, Tour (feature guide), context.tsx (pages + perms),
-                  Overview (dashboard + Pareto), Playground (workbench + Get code), ApiKeys, AuditLog, Requests, Tenants,
-                  Backends, Evaluations; charts.tsx (animated SVG charts), ui.tsx (Astryx Select wrapper, Lucide icons),
+apps/console/src  main.tsx (Astryx Theme, sign-in gate, top bar + ⌘K palette + sidebar), context.tsx (pages + perms + sections),
+                  kit.tsx (PageHeader, FilterChip, StatCard), metricsData.ts (shared metrics hook, colours),
+                  SignIn (+ SparkTrail.tsx, WebGL2), Dashboard, Playground (Claude-Console workbench), ApiKeys,
+                  Usage, Cost, Reliability (Pareto), Requests (Logs), Tenants (Quotas), Guardrails, Access, AuditLog,
+                  Backends, Evaluations, Tour; charts.tsx (animated SVG charts), ui.tsx (Select, icons, Logo),
                   snippets.ts (API call samples), layers.css (cascade order vs Astryx)
 ```
 
@@ -63,6 +66,7 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 - **The server enforces access.** Every console route checks a permission from `auth/rbac.ts`; the console hiding a control is not the control. Non-operators are pinned to their own tenant, and another tenant's object returns the same 404 as a missing one.
 - **The browser never gets a tenant API key or the admin token.** The console uses the session cookie + CSRF token; the playground goes through `/api/console/playground/support`.
 - **Errors carry the least detail that still helps the caller.** Same 401 for unknown/revoked/expired keys and for wrong password/unknown account; 403 doesn't name the permission; upstream error text stays in the DB (operators only); 404 doesn't echo the path.
+- **PII never leaves the gateway unmasked under `mask`, and its values are never stored.** Scan before retrieval, routing and the prompt; restore only in the answer stream; trace events, logs and the `requests.pii` column carry types and counts, never values. Detectors must not mask order/invoice/tracking ids (tests cover this).
 - **A key's plaintext leaves the server once,** in the `POST /api/console/keys` response. Only its SHA-256 is stored.
 
 ## Agent skills (`.agents/skills`, linked in `.claude/skills`)

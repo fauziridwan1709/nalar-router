@@ -40,12 +40,15 @@ export type Script = (req: BackendRequest) => AsyncIterable<StreamChunk>;
 /** Scriptable fake backend for deterministic tests. */
 export class FakeBackend implements Backend {
   calls = 0;
+  /** every request this backend received, to assert on what a provider would have seen */
+  seen: BackendRequest[] = [];
   constructor(
     public config: BackendConfig,
     public script: Script,
   ) {}
   stream(req: BackendRequest) {
     this.calls++;
+    this.seen.push(req);
     return this.script(req);
   }
 }

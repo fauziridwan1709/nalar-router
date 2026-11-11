@@ -10,7 +10,8 @@
  *  - Combined confidence below the threshold (or model says "unknown") → refusal and
  *    hand-off message, never a guess.
  */
-import { BackendError, publicAttemptError } from "../errors.js";
+import { BackendError, GatewayError, publicAttemptError } from "../errors.js";
+import { PII_LABEL, retrievalText, scanPii, summarizeCounts, type PiiFinding } from "../guardrails/pii.js";
 import type { Gateway } from "../gateway.js";
 import type { Tenant } from "../tenants.js";
 import { executeWithFallback, StopRequest, type AttemptRecord } from "../router/executor.js";
@@ -45,26 +46,46 @@ export interface Prepared {
   plan: RoutePlan;
   messages: ReturnType<typeof buildSupportMessages>;
   estimatedPromptTokens: number;
+  /** what the PII guardrail did; values are never kept here */
+  pii: { mode: string; findings: PiiFinding[]; summary: string | null };
 }
 
 /** Cheap, synchronous part (no model call): needed before admission for routing + budget. */
 export function prepareSupport(gw: Gateway, tenant: Tenant, input: SupportInput): Prepared {
-  const retrieval = gw.kb.search(input.message, gw.config.support.topK);
+  // PII guardrail first: nothing below (retrieval, routing, the prompt) sees a raw value
+  const policy = tenant.piiPolicy;
+  const scan = policy.mode === "off" ? null : scanPii(input.message, policy.types);
+  if (scan?.findings.length && policy.mode === "block") {
+    const types = [...new Set(scan.findings.map((f) => f.type))];
+    throw new GatewayError(
+      422,
+      "pii_detected",
+      `The message contains personal data (${types.map((t) => PII_LABEL[t].toLowerCase()).join(", ")}). This tenant's policy blocks it; remove it and try again.`,
+      { types, pii: summarizeCounts(scan.counts) },
+    );
+  }
+  const modelText = scan ? scan.masked : input.message;
+  // the retriever gets the text without masked values or their lead-ins (see retrievalText)
+  const retrieval = gw.kb.search(scan ? retrievalText(modelText) : modelText, gw.config.support.topK);
   const plan = planRoute(
     gw.backends,
     tenant,
-    { queryTokens: estimateTokens(input.message), retrievalTopShare: retrieval.topShare, hint: input.model },
+    { queryTokens: estimateTokens(modelText), retrievalTopShare: retrieval.topShare, hint: input.model },
     gw.config.routing,
   );
   const contextHits = retrieval.hits.slice(0, input.promptVersion === "v1" ? 2 : gw.config.support.contextK);
+  // values the customer typed are extracted locally (order ids, amounts); masked values come back
+  // through the same renderer, so the provider never sees them but the customer still does
   const slots = buildSlots(input.message, tenant.profile ?? {});
-  const fillable = fillablePlaceholders(contextHits.map((h) => h.entry.answer), slots);
-  const messages = buildSupportMessages(input.promptVersion, input.message, contextHits, gw.intents, fillable);
+  for (const [slot, value] of scan?.readBack ?? []) slots.set(slot, { value, source: "pii" });
+  const fillable = [...new Set([...fillablePlaceholders(contextHits.map((h) => h.entry.answer), slots), ...(scan?.findings.map((f) => f.slot) ?? [])])].sort();
+  const messages = buildSupportMessages(input.promptVersion, modelText, contextHits, gw.intents, fillable);
   const estimatedPromptTokens = messages.reduce((n, m) => n + estimateTokens(m.content) + 4, 2);
   return {
     retrieval, plan, messages, estimatedPromptTokens,
     includeReasoning: !!input.includeReasoning,
     slots: input.placeholders === "raw" ? null : slots,
+    pii: { mode: policy.mode, findings: scan?.findings ?? [], summary: scan?.findings.length ? summarizeCounts(scan.counts) : null },
   };
 }
 
@@ -91,6 +112,18 @@ export async function runSupport(
   const { retrieval, plan } = p;
   const { sink } = ctx;
   const routeReason = { rule: plan.rule, reason: plan.reason, chain: plan.chain.map((b) => b.config.id), signals: plan.signals };
+  // types and placeholder names only: the values never leave the gateway
+  sink.emit("step", {
+    name: "pii_guard",
+    mode: p.pii.mode,
+    masked: p.pii.findings.map((f) => ({ type: f.type, label: PII_LABEL[f.type], placeholder: `{{${f.slot}}}` })),
+    detail:
+      p.pii.mode === "off"
+        ? "PII guardrail is off for this tenant"
+        : p.pii.findings.length
+          ? `masked ${p.pii.findings.length} value${p.pii.findings.length === 1 ? "" : "s"} before retrieval and the model`
+          : "no personal data found",
+  });
   sink.emit("route", routeReason);
   sink.emit("retrieval", {
     coverage: round(retrieval.coverage),
@@ -211,8 +244,9 @@ export async function runSupport(
         if (filled.length) {
           sink.emit("step", {
             name: "placeholders_rendered",
-            detail: filled.map((f) => `{{${f.name}}} → "${f.value}" (${f.source})`).join("; "),
-            slots: filled,
+            detail: filled.map((f) => `{{${f.name}}} → ${f.source === "pii" ? "restored" : `"${f.value}"`} (${f.source})`).join("; "),
+            // restored personal data goes to the answer only, never into trace events or logs
+            slots: filled.map((f) => (f.source === "pii" ? { ...f, value: "(restored in the answer)" } : f)),
           });
         }
       }

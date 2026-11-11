@@ -1,16 +1,22 @@
 import { createContext, useContext } from "react";
 import type { ConsoleConfig, Permission, SessionUser } from "./api";
 
+/** every page, the permission it needs, and where it sits in the sidebar */
 export const PAGES = {
-  overview: { label: "Overview", title: "Overview", sub: "Traffic, reliability and spend", perm: "dashboard:read", section: "Monitor" },
-  requests: { label: "Requests", title: "Requests", sub: "Every metered request, with the route it took", perm: "requests:read", section: "Monitor" },
-  tenants: { label: "Usage & quota", title: "Usage and quota", sub: "Monthly usage against each plan's limits", perm: "usage:read", section: "Monitor" },
-  playground: { label: "Playground", title: "Playground", sub: "Send a customer message and inspect every decision the gateway makes", perm: "playground:run", section: "Build" },
-  keys: { label: "API keys", title: "API keys", sub: "Create, scope and revoke the keys your services use to call the gateway", perm: "keys:read", section: "Build" },
-  backends: { label: "Backends", title: "Backends", sub: "Health, pricing, timeouts and fault injection", perm: "backends:read", section: "Platform" },
-  evaluations: { label: "Evaluations", title: "Evaluations", sub: "Committed eval runs: accuracy, quality, latency and cost per configuration", perm: "evals:read", section: "Platform" },
-  audit: { label: "Audit log", title: "Audit log", sub: "Sign-ins, key changes and operator actions", perm: "audit:read", section: "Platform" },
-} as const satisfies Record<string, { label: string; title: string; sub: string; perm: Permission; section: string }>;
+  dashboard: { label: "Dashboard", perm: "dashboard:read", section: "" },
+  playground: { label: "Playground", perm: "playground:run", section: "Build & configure" },
+  keys: { label: "API keys", perm: "keys:read", section: "Build & configure" },
+  usage: { label: "Usage", perm: "dashboard:read", section: "Monitor" },
+  cost: { label: "Cost", perm: "dashboard:read", section: "Monitor" },
+  reliability: { label: "Reliability", perm: "dashboard:read", section: "Monitor" },
+  logs: { label: "Logs", perm: "requests:read", section: "Monitor" },
+  quotas: { label: "Quotas", perm: "usage:read", section: "Monitor" },
+  guardrails: { label: "Guardrails", perm: "governance:read", section: "Security & data" },
+  access: { label: "Access", perm: "governance:read", section: "Security & data" },
+  audit: { label: "Audit log", perm: "audit:read", section: "Security & data" },
+  backends: { label: "Backends", perm: "backends:read", section: "Platform" },
+  evaluations: { label: "Evaluations", perm: "evals:read", section: "Platform" },
+} as const satisfies Record<string, { label: string; perm: Permission; section: string }>;
 export type Page = keyof typeof PAGES;
 
 export interface AppCtx {
