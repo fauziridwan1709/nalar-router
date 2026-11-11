@@ -25,14 +25,17 @@ export const PERMISSIONS = [
   "tenants:all", // see and act on every tenant, not only your own
   "quota:reset",
   "chaos:write",
+  "governance:read", // guardrail policy and PII stats for your tenant
+  "governance:write", // change the PII policy
+  "members:read", // who has access to the tenant
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
-const READ: Permission[] = ["dashboard:read", "requests:read", "usage:read", "evals:read", "backends:read"];
+const READ: Permission[] = ["dashboard:read", "requests:read", "usage:read", "evals:read", "backends:read", "governance:read"];
 
 export const GRANTS: Record<Role, readonly Permission[]> = {
   operator: PERMISSIONS,
-  owner: [...READ, "playground:run", "keys:read", "keys:create", "keys:revoke_own", "keys:revoke_any", "audit:read"],
+  owner: [...READ, "playground:run", "keys:read", "keys:create", "keys:revoke_own", "keys:revoke_any", "audit:read", "governance:write", "members:read"],
   developer: [...READ, "playground:run", "keys:read", "keys:create", "keys:revoke_own"],
   viewer: READ,
 };
