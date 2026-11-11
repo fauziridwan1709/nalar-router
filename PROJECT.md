@@ -1,6 +1,6 @@
 # PROJECT.md: state of the work, and how to pick it up
 
-This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-11 (PR #4 merged; PR #5 open: clean-architecture refactor, complexity-based routing, error catalog).
+This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-11 (PR #4 merged; PR #5 open: gateway clean architecture, complexity routing, error catalog; PR #6 open on top of it: console clean architecture).
 
 ## What this is
 
@@ -33,6 +33,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - [x] **Merge PR #3** (chat completions + `stream` toggle in the playground, logo reverted).
 - [x] **Merge PR #4** (OpenAI SDK compatibility, Quotas redesign, orange theme).
 - [ ] **Merge PR #5** (clean architecture, complexity-based routing, error catalog + docs/ERRORS.md). Merging redeploys Render and wipes the SQLite data (accepted); keep `DEMO_MODE=true`.
+- [ ] **Then merge PR #6** (console clean architecture). It is stacked on PR #5's branch; after #5 merges, retarget #6 to `main` if GitHub doesn't do it automatically.
 - [ ] Refresh the README screenshots other than Quotas: they still show the old blue accent.
 - [ ] Optional: per-signal routing eval with real models (does escalating complex queries actually raise judged quality?).
 - [ ] Before recording or submitting, sign in on the live console as `ops@nalar.example` and click **Run sample traffic** on the Reliability page. The Render disk is ephemeral, so metering is empty after every redeploy.
@@ -151,6 +152,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 | Astryx for controls, our own CSS for layout | the user asked for Astryx; versions are pinned (beta). `layers.css` sets cascade order so our resets lose to Astryx and our classes win. |
 | Claude-Console look | the user supplied Claude Console screenshots as the reference: dark default, chips, stat cards, workbench playground. |
 | Original logo, not the spark mark | the spark mark from PR #2 looked too close to the Claude Console's. The layout stays; only the mark went back to the gradient fan-out. |
+| Console in the same layers | pages called `fetch` through a shared `api()` with URLs spread across 15 files, and rules (quota level, backend status, the playground reducer) lived inside components. Now they sit behind one `ConsoleApi` port and in pure domain functions with tests. The bell and the Quotas page share one quota rule. |
 | Clean architecture, enforced by a test | the gateway grew to about 4.7k lines with use cases reaching into SQLite and Express. Layers (domain / application / infrastructure / interfaces) with ports make the rules unit-testable and Postgres a new adapter, not a rewrite. `tests/architecture.test.ts` fails the build on an outward import. |
 | Complexity-based auto routing, as a heuristic | weighted signals (length, ambiguity, several questions, reasoning cues, steps, constraints, code, math) instead of a classifier: free, no added latency, replayable, every decision explains itself. Weights keep the two original rules escalating on their own; `npm run routing-eval` showed no route change on the 43 eval messages. |
 | Error catalog | `GatewayError` only accepts a code from `ERROR_CATALOG`, a test ties it to docs/ERRORS.md, and process-level failures (port in use, uncaught errors, SIGTERM) drain and exit cleanly. |
@@ -170,6 +172,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - **Chat endpoint:** `/v1/chat/completions` is OpenAI's Chat Completions format (tested with the `openai` SDK), not Anthropic's Messages format; no tools, `response_format` or images. It has no placeholder rendering. That's intentional: the raw path stays raw. It masks PII but does not restore it.
 - **PII:** personal names aren't detected. A short message whose only content words sit next to PII can still be refused by the scope gate (lead-ins like "email me at" are already stripped for retrieval).
 - **Auth:** the sign-in failure limiter is in memory (fine for one instance). Users are seeded; there is no user management or password change UI.
+- **Console tests** cover the architecture and the domain rules; there are no component or end-to-end tests in CI (pages were smoke-tested with Playwright by hand).
 - **Console bundle** is about 1 MB (Astryx + CodeBlock); code-splitting by page would fix the Vite warning.
 - **Stale assets:** `docs/assets/console-overview.png` and `console-overview-dark.png` are no longer referenced; a safety check blocked the agent from deleting them. Run `git rm docs/assets/console-overview*.png`.
 
