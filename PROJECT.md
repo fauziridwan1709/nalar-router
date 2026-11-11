@@ -1,6 +1,6 @@
 # PROJECT.md: state of the work, and how to pick it up
 
-This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-10.
+This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-11 (PR #2 open: PII guardrail and the Claude-Console redesign).
 
 ## What this is
 
@@ -29,7 +29,9 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - [ ] **Video demo**, owned by the user. Use the `product-demo` skill, or record by hand. Suggested 5-minute flow is below.
 - [ ] **Invite the assessors** to the private repo (GitHub → Settings → Collaborators), or make it public
 - [ ] **Rotate the Groq API key.** It was printed in a session transcript on 2026-11-10. Update `.env` and the Render env var.
-- [ ] Before recording or submitting, open the live console and click **Run sample traffic**. The Render disk is ephemeral, so metering is empty after every redeploy.
+- [ ] **Merge PR #2** (https://github.com/fauziridwan1709/nalar-router/pull/2, CI green). Merging redeploys Render; keep `DEMO_MODE=true` there or nobody can sign in.
+- [ ] Before recording or submitting, sign in on the live console as `ops@nalar.example` and click **Run sample traffic** on the Reliability page. The Render disk is ephemeral, so metering is empty after every redeploy.
+- [ ] Add a short "Beyond the brief" section to `docs/REPORT.md`: sign-in/RBAC, API key management, PII guardrail, console redesign. Say why each was added and what it cost, so it reads as judgement rather than scope creep.
 - [ ] Submit: repo link, live URL, video link
 
 ## Brief requirements vs status
@@ -49,8 +51,14 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - [x] Handles unusable model output (falls back) and refuses when confidence is low: a validated JSON header before streaming, a coverage check for short off-topic messages, the model's `unknown` label, and a confidence threshold of 0.5
 
 ### Console (React + Vite, Node back end)
-- [x] Playground with a streamed answer and: served-by model, whether fallback fired, retrieved entries, intent, tokens, latency, cost. Also model reasoning, a step trace and filled placeholders.
-- [x] Usage view with requests and cost per tenant plus remaining quota: the Overview dashboard has charts, and the Tenants page has quota meters
+- [x] Playground with a streamed answer and: served-by model, whether fallback fired, retrieved entries, intent, tokens, latency, cost. Also model reasoning, a step trace, filled placeholders and the PII guardrail. It runs the **support assistant** (the brief's "what was retrieved, the intent" only exist there), through the signed-in session, metered like an API call.
+- [x] Usage view with requests and cost per tenant plus remaining quota: the Monitor pages (Usage, Cost, Reliability, Logs) and Quotas (meters per tenant)
+
+### Beyond the brief (added 2026-11-11; call out in the report)
+- Console sign-in, four roles (operator, owner, developer, viewer), sessions + CSRF, tenant isolation, audit log
+- API key management: scoped, expiring keys shown once, quickstart for both endpoints
+- PII guardrail: mask / block / off per tenant on every model-calling path
+- Console redesign after the Claude Console, a feature tour, a Pareto chart
 
 ### Evaluation
 - [x] About 30 held-out cases, with a script reporting intent accuracy, answer quality (ROUGE-L + LLM judge), latency and cost (`tools/eval/eval.ts`)
@@ -64,17 +72,27 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 ## Current state
 
 - **Code:**
-  - npm-workspaces monorepo: `apps/gateway` (Express 5, TypeScript, `node:sqlite`), `apps/console` (React 19, Vite 8, hand-rolled SVG charts), `tools/eval`
+  - npm-workspaces monorepo: `apps/gateway` (Express 5, TypeScript, `node:sqlite`), `apps/console` (React 19, Vite 8, Astryx 0.7.13, hand-rolled SVG charts), `tools/eval`
   - **72 gateway tests** pass (incl. sign-in, sessions, CSRF, RBAC, tenant isolation, API keys, PII guardrail and error hygiene); CI (GitHub Actions) runs typecheck, tests, build and the retrieval eval
+- **Branches:** `main` has PR #1 (auth, RBAC, keys, first redesign). PR #2 (`feat/guardrails-console-redesign`) adds the PII guardrail, the governance pages and the Claude-Console layout. Not merged yet.
 - **Default prompt is v3:** it tells the model which placeholders the gateway can fill. v1 and v2 are kept for reproducible comparisons.
 - **Tenants:**
-  - `acme` (pro), `globex` (free), `initech` (trial: 4k tokens / 5 requests, to demo exhausting the quota) and `eval`
-  - keys are in README "Demo tenants". The console no longer receives keys: it signs in (see below).
-- **Console auth (added 2026-11-11):** email + password sign-in, sessions (HttpOnly cookie + CSRF token), RBAC with four roles, tenant isolation, audit log, scoped expiring API keys created in the console. Four demo accounts (README "Console sign-in, roles and API keys"), one per tenant and role: `ops@nalar.example` (operator), `owner@acme.example`, `dev@globex.example`, `viewer@initech.example`.
-- **Guardrails (2026-11-11, later):** PII masking (mask / block / off per tenant) on every model-calling path, with values restored only in the support answer; governance API and Guardrails, Access and Audit log pages; audit of operators' cross-tenant reads; CSV export. 72 gateway tests.
-- **Console redesign 2 (2026-11-11):** Claude-Console layout (top bar with ⌘K, sectioned sidebar, Dashboard, Usage / Cost / Reliability / Logs / Quotas, workbench playground with templates), dark by default, Inter + Source Serif 4, sign-in page with the stackbyte SparkTrail.
-- **Console UI (2026-11-11):** Astryx design system controls, Lucide icons, workbench-style playground with Get code, animated charts plus a Pareto chart, a spotlight feature tour. `/api/demo-config` was removed: it exposed the admin token and every key to anonymous visitors.
+  - `acme` (pro), `globex` (free), `initech` (trial: 4k tokens / 5 requests, to demo exhausting the quota) and `eval` (shown as "Nalar internal", the operator's home tenant)
   - acme and eval share a company profile that fills placeholders; initech has none on purpose, to show the fallback phrases
+  - API keys are in README "Demo tenants" (seeded as ordinary `api_keys` rows). The console never receives a key or the admin token.
+- **Console auth (PR #1):**
+  - Email + password sign-in, sessions (HttpOnly cookie + CSRF token), RBAC with four roles, tenant isolation, and an audit log.
+  - Scoped, expiring API keys created in the console.
+  - Four demo accounts, one per tenant and role, listed in README "Console sign-in, roles and API keys": `ops@nalar.example` (operator), `owner@acme.example`, `dev@globex.example`, `viewer@initech.example`.
+  - `/api/demo-config` was removed: it exposed the admin token and every key to anonymous visitors.
+- **Guardrails (PR #2):**
+  - PII masking (mask / block / off per tenant) on every model-calling path. Values reach the provider only as `{{Customer Email}}`-style slots and are restored only in the support answer; cards, IDs and bank numbers come back only as "ending in 1234".
+  - Only PII types and counts are stored (`requests.pii`).
+  - Governance API; Guardrails, Access and Audit log pages; operators' cross-tenant reads are audited; the audit log exports to CSV.
+- **Console (PR #2):**
+  - Claude-Console layout: a top bar with a ⌘K palette, notifications and docs, and a sectioned sidebar.
+  - Pages: Dashboard; Usage / Cost / Reliability (Pareto) / Logs / Quotas; a workbench playground with templates; Guardrails / Access / Audit log; Backends / Evaluations.
+  - Dark by default; Inter + Source Serif 4. Sign-in has the SparkTrail from the user's stackbyte website.
 - **Headline numbers:**
   - groq-fast vs groq-strong: intent accuracy 100% vs 100%, judge 4.47 vs 4.53, cost $0.092 vs $0.185 per 1k requests
   - answers showing raw placeholders: 15/30 → 0/30
@@ -120,6 +138,11 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 | Fallback only before the first byte | never splice two models' text; a `partial` outcome instead |
 | Render, card added | Vercel serverless doesn't fit SSE plus SQLite; the user chose to add a card rather than switch hosts |
 | Private repo | the user's choice; assessors need an invite, and the CI badge only shows for viewers with access |
+| Console uses sessions, not keys | the old demo-config handed every key and the admin token to the browser. The playground goes through `/api/console/playground/support`, the same capability path as `/v1/support/answer`. The user decided against an "API key test" field in the playground. |
+| PII: mask and restore, not just redact | the provider never sees the value, but the customer still reads a natural answer. Restore goes through the existing placeholder renderer, so there is one mechanism, not two. Block is offered for strict tenants. |
+| PII detectors are conservative | a masked order number would break answers; checksums and context keep false positives at 0 on the dataset. No name detection (needs NER). |
+| Astryx for controls, our own CSS for layout | the user asked for Astryx; versions are pinned (beta). `layers.css` sets cascade order so our resets lose to Astryx and our classes win. |
+| Claude-Console look | the user supplied Claude Console screenshots as the reference: dark default, chips, stat cards, workbench playground. |
 
 ## Known issues and limitations
 
@@ -129,10 +152,16 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - **Hand-offs:** multi-intent, vague and Indonesian messages are refused with a hand-off instead of answered. This is deliberate and documented.
 - **Judge score:** v3 scores about 0.1 lower than v2-raw. The judge compares against template references; this is documented and not hidden.
 - **Token estimate:** chars/4 runs 6–17% high vs the provider. That's the safe direction for quota; such rows are labelled `estimated`.
-- **Chat endpoint:** `/v1/chat/completions` is single-model streaming, with no placeholder rendering. That's intentional: the raw path stays raw.
+- **Chat endpoint:** `/v1/chat/completions` is single-model streaming, with no placeholder rendering. That's intentional: the raw path stays raw. It masks PII but does not restore it.
+- **PII:** personal names aren't detected. A short message whose only content words sit next to PII can still be refused by the scope gate (lead-ins like "email me at" are already stripped for retrieval).
+- **Auth:** the sign-in failure limiter is in memory (fine for one instance). Users are seeded; there is no user management or password change UI.
+- **Console bundle** is about 1 MB (Astryx + CodeBlock); code-splitting by page would fix the Vite warning.
+- **Stale assets:** `docs/assets/console-overview.png` and `console-overview-dark.png` are no longer referenced; a safety check blocked the agent from deleting them. Run `git rm docs/assets/console-overview*.png`.
 
 ## Next steps (in priority order)
 
+- [ ] Merge PR #2, check the live sign-in and the PII template on Render.
+- [ ] REPORT.md "Beyond the brief" section (see the checklist above).
 - [ ] Record the video demo (user). Optionally script it with `.agents/skills/product-demo` (writes to `out/product-demo/`).
 - [ ] Invite the assessors; rotate the Groq key.
 - [ ] Re-run a clean v2-raw vs v3 eval when Groq isn't rate-limited (it would replace the contaminated `08-35-26` run as the second clean data point).
@@ -144,12 +173,13 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 
 ### Suggested demo flow (about 5 minutes)
 
-1. Overview: run sample traffic, walk the charts.
-2. Playground: a streamed answer with the inspector (routing, trace, intent and confidence, filled placeholders, reasoning).
-3. Refusals: nasi goreng (no model call), and the angry customer (handed to a human).
-4. Fallback: Backends → set `groq-fast` to `hang` or `garbage`, then send again in the Playground to show the fallback trail and route strip.
-5. Quota: Initech until it returns 429; Tenants shows the meter turn red.
-6. Evaluations page plus the report's numbers, 30 s.
+1. Sign in as `ops@nalar.example` (move the cursor over the spark trail). Dashboard, then Reliability: run sample traffic, walk the Pareto and trends.
+2. Playground: the "Cancel an order" template, then "Mask personal data". Show the inspector: routing, trace, intent and confidence, filled placeholders, and the PII guardrail (the provider saw `{{Customer Email}}`; the answer has the real email).
+3. Refusals: the off-topic and prompt-injection templates (no model call for off-topic).
+4. Fallback: Backends → set `groq-fast` to `hang` or `garbage`, run again, show the fallback trail; Logs shows the route strip.
+5. Quota: Initech until it returns 429; Quotas shows the meter turn red, and the bell lights up.
+6. Governance, 45 s: Guardrails (switch to block and try the tester), the audit log entry for it, then sign in as the viewer to show RBAC.
+7. Get code → curl with an API key from the API keys page; Evaluations plus the report's numbers, 30 s.
 
 ## Work log (2026-11-10)
 
@@ -163,4 +193,12 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 | 14:20–15:59 | Placeholder rendering (message → profile → UI label → fallback), prompt v3, tenant profiles; three eval runs; two rendering bugs found by the judge and fixed. |
 | 16:00–16:25 | `.agents/skills` (8 skills); `/admin/metrics`; enterprise console redesign with charts (Overview, Requests route strip, Tenants, Backends, Evaluations); `docs/EVALUATION.md`. |
 
-The full commit history is in `git log`. Every commit since 14:19 is scoped.
+### 2026-11-11
+
+| what |
+|---|
+| Console sign-in, sessions, CSRF, RBAC (4 roles), tenant isolation, audit log, scoped expiring API keys with a quickstart; security headers and error hygiene; removed `/api/demo-config`. Astryx controls, Lucide icons, animated charts, Pareto, feature tour. PR #1, merged. |
+| PII guardrail (mask / block / off), governance API, Guardrails / Access / Audit log pages, cross-tenant read audit, CSV export. Two leaks caught by tests and fixed (PII in a trace event; lead-in words causing scope refusals). |
+| Claude-Console redesign (top bar, ⌘K, sectioned sidebar, Dashboard, Usage / Cost / Reliability / Logs / Quotas, workbench playground), sign-in focus-ring fix, SparkTrail on sign-in, refreshed README screenshots. PR #2, open. |
+
+The full commit history is in `git log`. Every commit since 14:19 on 2026-11-10 is scoped.
