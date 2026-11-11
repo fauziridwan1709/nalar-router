@@ -1,6 +1,6 @@
 /** End-to-end request path over real HTTP with scripted backends. */
 import { afterEach, describe, expect, it } from "vitest";
-import { FakeBackend, cfg, fail, hang, reply, sse, startServer, think } from "./helpers.js";
+import { FakeBackend, cfg, fail, hang, reply, signIn, sse, startServer, think } from "./helpers.js";
 
 let close: (() => Promise<void>) | null = null;
 afterEach(async () => {
@@ -191,8 +191,9 @@ describe("reasoning and backend status", () => {
     expect(local.health).toMatchObject({ label: "offline", availability: "disabled", location: "local" });
     expect(local.health.reason).toMatch(/local machine/);
     expect(list.find((b: any) => b.id === "m").health.label).toBe("online");
-    const demo = await (await fetch(`${s.base}/api/demo-config`)).json();
-    expect(demo.backends.map((b: any) => b.id)).toContain("local");
+    const { call } = await signIn(s.base, "viewer@test.example", "viewer-pass-1");
+    const consoleCfg = await (await call("/api/console/config")).json();
+    expect(consoleCfg.backends.map((b: any) => b.id)).toContain("local");
   });
 });
 

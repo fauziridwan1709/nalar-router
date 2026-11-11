@@ -1,7 +1,7 @@
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { config as baseConfig, type BackendConfig } from "../src/config.js";
-import { openDb, type SeedTenant } from "../src/db.js";
+import { openDb, type SeedTenant, type SeedUser } from "../src/db.js";
 import { createGateway, type Gateway } from "../src/gateway.js";
 import { createApp } from "../src/http/app.js";
 import type { Backend, BackendRequest, StreamChunk } from "../src/backends/types.js";
@@ -25,6 +25,14 @@ export const TENANTS: SeedTenant[] = [
   },
   { id: "free", name: "Free", plan: "free", apiKey: "k-free", allowedTiers: ["fast", "degraded"], tokenQuota: 100_000, requestQuota: 100 },
   { id: "tiny", name: "Tiny", plan: "trial", apiKey: "k-tiny", allowedTiers: ["fast", "degraded"], tokenQuota: 900, requestQuota: 2 },
+];
+
+export const USERS: SeedUser[] = [
+  { id: "u_op", tenantId: "pro", email: "op@test.example", name: "Op", role: "operator", password: "op-pass-1" },
+  { id: "u_owner", tenantId: "pro", email: "owner@test.example", name: "Owner", role: "owner", password: "owner-pass-1" },
+  { id: "u_dev", tenantId: "pro", email: "dev@test.example", name: "Dev", role: "developer", password: "dev-pass-1" },
+  { id: "u_dev2", tenantId: "pro", email: "dev2@test.example", name: "Dev 2", role: "developer", password: "dev2-pass-1" },
+  { id: "u_viewer", tenantId: "free", email: "viewer@test.example", name: "Viewer", role: "viewer", password: "viewer-pass-1" },
 ];
 
 export type Script = (req: BackendRequest) => AsyncIterable<StreamChunk>;
@@ -74,9 +82,9 @@ export const hang: Script = async function* (req) {
   await abortableSleep(60_000, req.signal);
 };
 
-export async function startServer(backends: Backend[], over: { demoMode?: boolean } = {}) {
-  const config = { ...baseConfig, demoMode: over.demoMode ?? true, adminToken: "adm" };
-  const gw: Gateway = createGateway(config, { db: openDb(":memory:", TENANTS), backends, kbEntries: KB });
+export async function startServer(backends: Backend[], over: { demoMode?: boolean; auth?: Partial<typeof baseConfig.auth> } = {}) {
+  const config = { ...baseConfig, demoMode: over.demoMode ?? true, adminToken: "adm", auth: { ...baseConfig.auth, ...over.auth } };
+  const gw: Gateway = createGateway(config, { db: openDb(":memory:", TENANTS, USERS), backends, kbEntries: KB });
   const app = createApp(gw);
   const server: Server = await new Promise((r) => {
     const s = app.listen(0, () => r(s));
@@ -94,4 +102,28 @@ export async function sse(res: Response) {
       const [e, d] = b.split("\n");
       return { event: e.slice(7), data: JSON.parse(d.slice(6)) };
     });
+}
+
+/** sign in through the real endpoint; returns a fetch bound to the session cookie + CSRF token */
+export async function signIn(base: string, email: string, password: string) {
+  const res = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (res.status !== 200) throw new Error(`login failed ${res.status}`);
+  const cookie = res.headers.get("set-cookie")!.split(";")[0];
+  const { csrfToken, user } = await res.json();
+  const call = (path: string, init: RequestInit & { json?: unknown; noCsrf?: boolean } = {}) =>
+    fetch(base + path, {
+      ...init,
+      body: init.json !== undefined ? JSON.stringify(init.json) : init.body,
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        ...(init.noCsrf ? {} : { "x-csrf-token": csrfToken }),
+        ...(init.headers ?? {}),
+      },
+    });
+  return { call, cookie, csrfToken, user };
 }
