@@ -445,6 +445,10 @@
   ol.trace li.warn::before { background: var(--warning); border-color: var(--warning); }
   ol.trace li.pii::before { background: #9b6bff; border-color: #9b6bff; }
   ol.trace .tt { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .cx-meter { position: relative; height: 8px; background: var(--surface-3); border-radius: 99px; margin: 4px 0 6px; }
+  .cx-meter > div { height: 100%; border-radius: 99px; background: var(--ink-2); }
+  .cx-meter > div.hi { background: var(--accent); }
+  .cx-threshold { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--ink); border-radius: 1px; }
   details.kb { margin: 6px 0; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
   details.kb summary { cursor: pointer; font-size: 13.5px; }
   .bar { position: relative; height: 8px; background: var(--surface-3); border-radius: 99px; overflow: hidden; margin: 6px 0; }
