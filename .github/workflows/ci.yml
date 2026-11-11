@@ -20,3 +20,5 @@ jobs:
       - run: npm run build
       - name: Retrieval eval (no LLM, deterministic)
         run: npm run retrieval-eval
+      - name: Routing eval (no LLM, deterministic)
+        run: npm run routing-eval
