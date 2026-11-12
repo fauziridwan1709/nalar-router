@@ -282,7 +282,7 @@ export function Playground() {
 
           <div className="pg-runbar">
             <span className={`tiny num ${check.chars > check.maxChars ? "danger" : "muted"}`} title="Characters in the message box, and the API's limit">
-              {check.chars.toLocaleString()} / {check.maxChars.toLocaleString()}
+              {check.chars.toLocaleString()} / {check.maxChars.toLocaleString()} chars
             </span>
             <span
               className={`tiny num ${overWindow ? "danger" : "muted"}`}
@@ -291,7 +291,8 @@ export function Playground() {
                 + ` plus ${check.completionTokens.toLocaleString()} reserved for the answer, against the context window of ${check.windowLabel}`
               }
             >
-              · ~{(check.promptTokens + check.completionTokens).toLocaleString()} / {check.window === null ? "no limit" : `${check.window.toLocaleString()} tokens`}
+              · ~{check.promptTokens.toLocaleString()} in + {check.completionTokens.toLocaleString()} for the answer
+              {" / "}{check.window === null ? "no token limit" : `${check.window.toLocaleString()} tokens`}
             </span>
             <span className="spacer" />
             {busy ? (
