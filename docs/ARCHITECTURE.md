@@ -6,7 +6,7 @@ This document has four diagrams, and a section on how the code is layered:
 2. [Request lifecycle](#2-request-lifecycle): one support request from start to finish, including fallback.
 3. [Routing decision](#3-routing-decision): how the router picks the order of backends.
 4. [Data model](#4-data-model): the database tables used for metering and quota.
-5. [Code layers](#5-code-layers): the clean-architecture layout of the gateway and its dependency rule.
+5. [Code layers](#5-code-layers): the clean-architecture layout of the gateway and the console, and their dependency rules.
 
 GitHub renders these diagrams natively. The design reasoning behind them is in [REPORT.md](REPORT.md).
 
@@ -200,3 +200,25 @@ flowchart LR
 | root | `config.ts` (env → settings), `gateway.ts` (builds the adapters and wires them into `AppDeps`), `index.ts` (HTTP server, shutdown) | everything |
 
 What this buys: the use cases run against any store or provider that satisfies a port (tests use in-memory SQLite and scripted backends). Moving to Postgres means a new `QuotaStore` and `MeteringStore` adapter, with no change to quota rules or use cases. The routing and quota rules are unit-tested as plain functions.
+
+### Console
+
+The console (`apps/console/src`) follows the same rule. `apps/console/tests/architecture.test.ts` also checks that only the HTTP adapter calls `fetch` or builds a console API URL.
+
+```mermaid
+flowchart LR
+    MAIN["main.tsx<br/>composition root"] --> UI & INF
+    UI["ui<br/>App shell, pages, components"] --> APP
+    INF["infrastructure/http<br/>fetch, CSRF, SSE parsing"] --> APP
+    APP["application<br/>ConsoleApi port, useApi(),<br/>data hooks"] --> DOM
+    DOM["domain<br/>types, formatting, access,<br/>quota standing, playground reducer"]
+```
+
+| layer | holds |
+|---|---|
+| `domain/` | the API's types (`models.ts`) and pure rules: number/money formatting, role grants and the page map, quota standing (`levelOf`), backend status, outcome groups, the playground's `applyEvent` reducer and trace text, code snippets. No React. |
+| `application/` | `ConsoleApi`, the one port (every console operation, typed), `ApiProvider`/`useApi()` for injection, the session context, and the polling hooks (`useMetrics`, `useBackendStatus`) |
+| `infrastructure/http/` | `createHttpConsoleApi()`: fetch with the session cookie and CSRF token, error mapping to `ApiError`, and the playground stream adapter that turns support SSE, OpenAI chunks or a JSON body into one event sequence |
+| `ui/` | the app shell, the pages and components; they reach the gateway only through `useApi()` |
+
+The pages never see a URL or `fetch`, so a page can be tested or reused with a fake `ConsoleApi`. The quota rule behind the Quotas page and the notification bell is one function, so the two can't disagree.

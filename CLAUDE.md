@@ -22,17 +22,21 @@ apps/gateway/     Node ≥22.13 + Express 5 API (TypeScript → dist/). Serves t
                        spec builders, Express transport), sink.ts (SSE), chatFormat.ts (OpenAI wire), security.ts
   src/config.ts, gateway.ts, index.ts   composition root: env → settings, wiring, server + shutdown
   tests/               vitest; scripted FakeBackend, no network; architecture, errors and OpenAI SDK contract tests
-apps/console/     React 19 + Vite console (Playground / Usage / Backends)
+apps/console/     React 19 + Vite console (layout below)
 tools/eval/       prepare-data.ts, retrieval-eval.ts, eval.ts, probe.ts; results/ holds committed eval outputs
 data/             kb.json (2,160 KB entries), eval.json (30 held-out), eval-ood.json, eval-hard.json, retrieval-holdout.json
 docs/             REPORT.md (design + results), EVALUATION.md (all eval runs), ARCHITECTURE.md (Mermaid diagrams),
                   API.md, assets/ (banner, screenshots)
-apps/console/src  main.tsx (Astryx Theme, sign-in gate, top bar + ⌘K palette + sidebar), context.tsx (pages + perms + sections),
-                  kit.tsx (PageHeader, FilterChip, StatCard), metricsData.ts (shared metrics hook, colours),
-                  SignIn (+ SparkTrail.tsx, WebGL2), Dashboard, Playground (Claude-Console workbench), ApiKeys,
-                  Usage, Cost, Reliability (Pareto), Requests (Logs), Tenants (Quotas), Guardrails, Access, AuditLog,
-                  Backends, Evaluations, Tour; charts.tsx (animated SVG charts), ui.tsx (Select, icons, Logo),
-                  snippets.ts (API call samples), layers.css (cascade order vs Astryx)
+apps/console/src  Clean architecture too; tests/architecture.test.ts enforces it:
+  main.tsx             composition root: styles, createHttpConsoleApi(), <ApiProvider><App/>
+  domain/              types (models.ts) and pure rules: format, access (grants, PAGES), quota (levelOf),
+                       backends (backendState), outcomes (groupOf), playground (Turn, applyEvent, TRACE_LABEL), snippets
+  application/         ports.ts (ConsoleApi), api.tsx (ApiProvider/useApi), appContext.tsx (session/scope context),
+                       useMetrics.ts, useBackendStatus.ts
+  infrastructure/http/ client.ts (fetch, CSRF, ApiError mapping), consoleApi.ts (every endpoint), playgroundStream.ts (SSE/JSON → events)
+  ui/                  app/App.tsx (sign-in gate, top bar, ⌘K, sidebar), pages/ (Dashboard, Playground, ApiKeys, Usage, Cost,
+                       Reliability, Logs, Quotas, Guardrails, Access, AuditLog, Backends, Evaluations, SignIn),
+                       components/ (kit, charts, ui, StatusBadge, Tour, SparkTrail, palette), styles/ (styles.css, layers.css)
 ```
 
 ## Commands (run from the repo root)
@@ -41,7 +45,7 @@ apps/console/src  main.tsx (Astryx Theme, sign-in gate, top bar + ⌘K palette +
 npm install
 npm run dev                 # gateway with reload on :3000 (reads ./.env)
 npm run dev:console         # vite on :5173, proxies /v1 /admin /api to :3000
-npm test                    # gateway tests (must stay green)
+npm test                    # gateway + console tests (must stay green)
 npm run typecheck
 npm run build && npm start  # production: one process serves the API and the console
 npm run retrieval-eval      # LLM-free retrieval check, takes about 1 s
@@ -82,6 +86,7 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 - ESM everywhere. The gateway uses `.js` suffixes in relative imports (NodeNext).
 - Errors use `GatewayError(status, code, message, details)` and come out as `{error:{code,message,details}}`. `code` must be in `ERROR_CATALOG` (domain/errors.ts, typed) with the same status, and documented in docs/ERRORS.md; tests/errors.test.ts checks both.
 - New code goes in the right layer: rules in `domain/`, orchestration in `application/` (talking to the outside only through ports), adapters in `infrastructure/` or `interfaces/`. Wire new adapters in `gateway.ts`.
+- Console: pages get data only through `useApi()` (the `ConsoleApi` port). A new endpoint is a method on the port plus its HTTP implementation in `infrastructure/http/consoleApi.ts`; logic worth testing goes in `domain/` as a pure function.
 - New backends implement `Backend.stream()` and yield `{type:"text"}` and `{type:"usage"}` chunks. They must honour `req.signal`.
 - When you change routing, prompts or retrieval, re-run `npm run retrieval-eval` and a short `npm run eval -- --limit 10`, and update `docs/REPORT.md` if the numbers move.
 - Secrets live only in `.env` or the Render dashboard. The `DEMO_MODE` keys and demo account passwords are public demo values.
