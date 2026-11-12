@@ -281,18 +281,22 @@ export function Playground() {
           )}
 
           <div className="pg-runbar">
-            <span className={`tiny num ${check.chars > check.maxChars ? "danger" : "muted"}`} title="Characters in the message box, and the API's limit">
+            <span style={{ whiteSpace: "nowrap" }} className={`tiny num ${check.chars > check.maxChars ? "danger" : "muted"}`} title="Characters in the message box. The API rejects a longer message.">
               {check.chars.toLocaleString()} / {check.maxChars.toLocaleString()} chars
             </span>
             <span
+              style={{ whiteSpace: "nowrap" }}
               className={`tiny num ${overWindow ? "danger" : "muted"}`}
               title={
-                (endpoint === "support" ? "Estimated tokens of your message (the gateway adds instructions and knowledge-base context and checks the full prompt)" : "Estimated tokens of the messages")
-                + ` plus ${check.completionTokens.toLocaleString()} reserved for the answer, against the context window of ${check.windowLabel}`
+                `The model's context window must hold the prompt and the reply.\n` +
+                `Prompt: ~${check.promptTokens.toLocaleString()} tokens (` +
+                (endpoint === "support" ? "your message; the gateway adds instructions and knowledge-base entries and checks the full prompt" : "system prompt and message") +
+                `)\nReply: ${check.completionTokens.toLocaleString()} tokens reserved (max_tokens)\n` +
+                `Window of ${check.windowLabel}: ${check.window === null ? "no limit" : check.window.toLocaleString() + " tokens"}`
               }
             >
-              · ~{check.promptTokens.toLocaleString()} in + {check.completionTokens.toLocaleString()} for the answer
-              {" / "}{check.window === null ? "no token limit" : `${check.window.toLocaleString()} tokens`}
+              · ~{check.promptTokens.toLocaleString()} prompt + {check.completionTokens.toLocaleString()} reply
+              {check.window === null ? " tokens (no limit)" : ` of ${check.window.toLocaleString()} tokens`}
             </span>
             <span className="spacer" />
             {busy ? (
