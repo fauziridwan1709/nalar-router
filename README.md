@@ -442,7 +442,12 @@ nalar-router/
 │   │   │   ├── interfaces/http/ routes, request schemas, SSE + OpenAI wire formats, error handler
 │   │   │   └── config.ts · gateway.ts · index.ts   composition root
 │   │   └── tests/               vitest, no network; architecture, error-catalog and OpenAI SDK contract tests
-│   └── console/                 React 19 + Vite console
+│   └── console/                 React 19 + Vite console, same layering:
+│       ├── src/domain/          types and pure rules (format, access, quota, playground reducer, snippets)
+│       ├── src/application/     the ConsoleApi port, useApi(), data hooks
+│       ├── src/infrastructure/  the HTTP adapter (fetch, CSRF, SSE parsing)
+│       ├── src/ui/              app shell, pages, components, styles
+│       └── tests/               architecture and domain tests
 ├── tools/eval/                  prepare-data · retrieval-eval · routing-eval · eval · probe · results/
 ├── data/                        KB slice + held-out / OOD / hard eval sets (from Bitext)
 ├── docs/
