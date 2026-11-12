@@ -198,7 +198,7 @@ export function retrievalText(masked: string) {
     .trim();
 }
 
-/** "2 email, 1 card" for metering and the audit trail; never the values */
+/** "email:2,card:1" for metering and the audit trail; never the values */
 export const summarizeCounts = (c: Partial<Record<PiiType, number>>) =>
   Object.entries(c).map(([t, n]) => `${t}:${n}`).join(",");
 

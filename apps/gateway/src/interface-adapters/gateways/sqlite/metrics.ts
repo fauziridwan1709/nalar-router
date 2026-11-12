@@ -62,6 +62,13 @@ function pareto(counts: Map<string, number>, maxItems = 8) {
 }
 
 type Group = { requests: number; tokens: number; costUsd: number };
+const addToMap = (m: Map<string, Group>, k: string, tokens: number, cost: number) => {
+  const g = m.get(k) ?? { requests: 0, tokens: 0, costUsd: 0 };
+  g.requests++;
+  g.tokens += tokens;
+  g.costUsd += cost;
+  m.set(k, g);
+};
 const addTo = (m: Record<string, Group>, k: string, tokens: number, cost: number) => {
   const g = (m[k] ??= { requests: 0, tokens: 0, costUsd: 0 });
   g.requests++;
@@ -151,11 +158,7 @@ export function computeMetrics(db: DB, range: RangeKey, opts: { tenantId?: strin
     if (r.intent && r.intent !== "unknown") byIntent.set(r.intent, (byIntent.get(r.intent) ?? 0) + 1);
     const issue = issueOf(r);
     if (issue) byIssue.set(issue, (byIssue.get(issue) ?? 0) + 1);
-    const t = byTenant.get(r.tenant_id) ?? { requests: 0, tokens: 0, costUsd: 0 };
-    t.requests++;
-    t.tokens += tokens;
-    t.costUsd += r.cost_usd;
-    byTenant.set(r.tenant_id, t);
+    addToMap(byTenant, r.tenant_id, tokens, r.cost_usd);
   }
   for (const b of buckets) {
     b._lat.sort((x, y) => x - y);

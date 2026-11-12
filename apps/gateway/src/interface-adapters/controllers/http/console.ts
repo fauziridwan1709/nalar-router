@@ -21,6 +21,7 @@ import { SESSION_MAX_MS, type User } from "../../../entities/auth/user.js";
 import { GatewayError } from "../../../entities/errors.js";
 import { PII_MODES, PII_TYPES } from "../../../entities/guardrails/pii.js";
 import { LIMITS } from "../../../entities/limits.js";
+import { CONFIDENCE_WEIGHTS } from "../../../entities/support/confidence.js";
 import type { Tenant } from "../../../entities/types.js";
 import { isOperator, playgroundTenant, scopeTenant } from "../../../use-cases/access.js";
 import { createApiKey, listApiKeys, revokeApiKey } from "../../../use-cases/apiKeys.js";
@@ -33,7 +34,7 @@ import { actorOf, askedTenant } from "./request.js";
 import { clearSessionCookie, readCookie, safeEq, sameOrigin, sessionCookieName, setSessionCookie } from "./security.js";
 import type { HttpSettings } from "./settings.js";
 import { ChaosBody } from "./shared.js";
-import { chatSpec, supportSpec, type RunCapability } from "./specs.js";
+import { chatSpec, parseBody, supportSpec, type RunCapability } from "./specs.js";
 
 const LoginBody = z
   .object({
@@ -101,9 +102,9 @@ export function mountConsole(app: Express, deps: GatewayDeps, cfg: HttpSettings,
     const parsed = LoginBody.safeParse(req.body ?? {});
     // one message for every bad input: don't coach a guesser on the format
     if (!parsed.success) throw new GatewayError(400, "invalid_request", "Enter your email address and password.");
-    const r = await signIn(deps, { ...parsed.data, ip: req.ip ?? "unknown", userAgent: req.header("user-agent") });
-    setSessionCookie(req, res, cfg, r.token, SESSION_MAX_MS);
-    res.json({ user: publicUser(r.user, r.tenant), csrfToken: r.csrf });
+    const signedIn = await signIn(deps, { ...parsed.data, ip: req.ip ?? "unknown", userAgent: req.header("user-agent") });
+    setSessionCookie(req, res, cfg, signedIn.token, SESSION_MAX_MS);
+    res.json({ user: publicUser(signedIn.user, signedIn.tenant), csrfToken: signedIn.csrf });
   });
 
   app.post("/api/auth/logout", session, csrf, (req, res) => {
@@ -125,11 +126,13 @@ export function mountConsole(app: Express, deps: GatewayDeps, cfg: HttpSettings,
   app.get("/api/console/config", session, (req, res) => {
     const tenants = isOperator(req.user!) ? deps.tenants.list() : [deps.tenants.get(req.user!.tenantId)!];
     res.json({
-      tenants: tenants.map((t) => ({ id: t.id, name: t.name, plan: t.plan, allowedTiers: t.allowedTiers, profile: t.profile })),
+      tenants: tenants.map((t) => ({ id: t.id, name: t.name, plan: t.plan, allowedTiers: t.allowedTiers, profile: t.profile, piiMode: t.piiPolicy.mode })),
       backends: deps.backends.map((b) => ({
         id: b.config.id, tier: b.config.tier, model: b.config.model, location: b.config.location, enabled: b.config.enabled,
         contextWindow: b.config.contextWindow ?? null,
       })),
+      // what the playground explains: how many KB entries the model sees, and how confidence is weighed
+      support: { contextK: deps.config.support.contextK, confidenceWeights: CONFIDENCE_WEIGHTS },
       // the playground validates against the same limits the API enforces
       limits: {
         ...LIMITS,
@@ -172,7 +175,7 @@ export function mountConsole(app: Express, deps: GatewayDeps, cfg: HttpSettings,
     const id = String(req.params.backend);
     // an unknown backend is a 404 before the body is looked at
     if (!deps.backends.some((b) => b.config.id === id)) throw new GatewayError(404, "not_found", "Backend not found.");
-    res.json(setFaultInjection(deps, actorOf(req), id, ChaosBody.parse(req.body ?? {})));
+    res.json(setFaultInjection(deps, actorOf(req), id, parseBody(ChaosBody, req.body)));
   });
 
   app.delete("/api/console/chaos", session, csrf, need("chaos:write"), (req, res) => {
@@ -190,7 +193,7 @@ export function mountConsole(app: Express, deps: GatewayDeps, cfg: HttpSettings,
 
   app.post("/api/console/keys", session, csrf, need("keys:create"), (req, res) => {
     const tenantId = ownScoped(req);
-    const body = KeyBody.parse(req.body ?? {});
+    const body = parseBody(KeyBody, req.body);
     // the only response that ever carries the plaintext secret
     res.status(201).json(createApiKey(deps, actorOf(req), tenantId, body));
   });
@@ -210,12 +213,12 @@ export function mountConsole(app: Express, deps: GatewayDeps, cfg: HttpSettings,
 
   app.put("/api/console/governance/pii", session, csrf, need("governance:write"), (req, res) => {
     const tenantId = ownScoped(req);
-    res.json(updatePiiPolicy(deps, actorOf(req), tenantId, PiiPolicyBody.parse(req.body ?? {})));
+    res.json(updatePiiPolicy(deps, actorOf(req), tenantId, parseBody(PiiPolicyBody, req.body)));
   });
 
   // a dry run of the detector: nothing is stored or sent to a model
   app.post("/api/console/governance/pii/test", session, csrf, need("governance:read"), (req, res) => {
-    const { text } = PiiTestBody.parse(req.body ?? {});
+    const { text } = parseBody(PiiTestBody, req.body);
     res.json(testPiiPolicy(deps, ownScoped(req), text));
   });
 
@@ -226,7 +229,7 @@ export function mountConsole(app: Express, deps: GatewayDeps, cfg: HttpSettings,
   // ---------- playground: the same two endpoints an API key calls, as the signed-in user's tenant ----------
   const playground = (endpoint: "support.answer" | "chat.completions", spec: typeof supportSpec) =>
     async (req: Request, res: Response) => {
-      const { tenant: asked, ...rest } = PlaygroundBody.parse(req.body ?? {});
+      const { tenant: asked, ...rest } = parseBody(PlaygroundBody, req.body);
       const tenant = playgroundTenant(deps, req.user!, asked);
       await runCapability(req, res, endpoint, { tenant, credential: `user:${req.user!.id}` }, spec(deps, res, rest));
     };

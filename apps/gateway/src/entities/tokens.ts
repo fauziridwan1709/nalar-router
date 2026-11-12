@@ -10,7 +10,7 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-export function estimateMessagesTokens(messages: { role: string; content: string }[]): number {
+export function estimateMessagesTokens(messages: { content: string }[]): number {
   // +4 per message for role/formatting overhead, +2 for the assistant priming
   return messages.reduce((n, m) => n + 4 + estimateTokens(m.content), 2);
 }

@@ -10,10 +10,10 @@
 import { BackendError } from "../entities/errors.js";
 import { buildClassifierMessages, parseVerdict, type ClassifierResult } from "../entities/routing/classifier.js";
 import { planRoute, type RoutePlan, type RouteSignals } from "../entities/routing/policy.js";
-import { estimateMessagesTokens, estimateTokens } from "../entities/tokens.js";
+import { attemptUsage } from "../entities/metering.js";
 import type { Tenant } from "../entities/types.js";
 import type { AppDeps } from "./deps.js";
-import { costOf, type AttemptRecord } from "./executor.js";
+import { costOf, failureCause, type AttemptRecord } from "./executor.js";
 import type { Backend } from "./ports/backend.js";
 import type { EventSink } from "./ports/sink.js";
 
@@ -58,55 +58,54 @@ async function classify(
 ): Promise<{ result: ClassifierResult; attempt: AttemptRecord | null }> {
   const backend = classifierBackend(deps);
   if (!backend) return { result: { status: "failed", error: "no classifier backend available" }, attempt: null };
-  const s = deps.config.classifier;
+  const settings = deps.config.classifier;
   const messages = buildClassifierMessages(text);
   const started = Date.now();
-  const ac = new AbortController();
-  const onAbort = () => ac.abort(new BackendError("aborted", "client disconnected", false));
+  const abort = new AbortController();
+  const onAbort = () => abort.abort(new BackendError("aborted", "client disconnected", false));
   ctx.clientSignal.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(() => ac.abort(new BackendError("timeout_total", `no verdict within ${s.timeoutMs} ms`)), s.timeoutMs);
+  const timer = setTimeout(() => abort.abort(new BackendError("timeout_total", `no verdict within ${settings.timeoutMs} ms`)), settings.timeoutMs);
 
   let out = "";
   let reasoned = "";
-  let usage: { promptTokens: number; completionTokens: number } | null = null;
-  let error: string | null = null;
-  let errKind: BackendError["kind"] | null = null;
+  let reported = null as { promptTokens: number; completionTokens: number } | null;
+  let failure: BackendError | null = null;
   try {
-    for await (const c of backend.stream({ messages, maxTokens: s.maxTokens, temperature: 0, signal: ac.signal })) {
-      if (c.type === "text") out += c.text;
-      else if (c.type === "reasoning") reasoned += c.text;
-      else usage = { promptTokens: c.promptTokens, completionTokens: c.completionTokens };
+    for await (const chunk of backend.stream({ messages, maxTokens: settings.maxTokens, temperature: 0, signal: abort.signal })) {
+      if (chunk.type === "text") out += chunk.text;
+      else if (chunk.type === "reasoning") reasoned += chunk.text;
+      else reported = { promptTokens: chunk.promptTokens, completionTokens: chunk.completionTokens };
     }
   } catch (e) {
-    const reason = ac.signal.aborted ? ac.signal.reason : e;
-    const be = reason instanceof BackendError ? reason : new BackendError("error", String((reason as Error)?.message ?? reason));
-    error = be.message;
-    errKind = be.kind;
+    failure = failureCause(e, abort.signal);
   } finally {
     clearTimeout(timer);
     ctx.clientSignal.removeEventListener("abort", onAbort);
-    if (!ac.signal.aborted) ac.abort();
+    if (!abort.signal.aborted) abort.abort();
   }
 
-  const verdict = error ? null : parseVerdict(out);
-  if (!error && !verdict) error = "unparseable verdict";
+  const verdict = failure ? null : parseVerdict(out);
+  const error = failure?.message ?? (verdict ? null : "unparseable verdict");
   const latencyMs = Date.now() - started;
-  const u = usage as { promptTokens: number; completionTokens: number } | null;
-  // same usage rules as the executor: provider-reported, else estimated, else none for an outright rejection
-  const rejected = !u && (errKind === "http" || (errKind === "error" && !out && !reasoned));
-  const promptTokens = u?.promptTokens ?? (rejected ? 0 : estimateMessagesTokens(messages));
-  const completionTokens = u?.completionTokens ?? (rejected ? 0 : estimateTokens(out) + estimateTokens(reasoned));
+  // the same usage rules as the executor
+  const usage = attemptUsage({
+    reported,
+    isMock: backend.config.kind === "mock",
+    rejected: failure?.kind === "http" || (failure?.kind === "error" && !out && !reasoned),
+    promptText: messages,
+    produced: out,
+    reasoned,
+  });
   const attempt: AttemptRecord = {
     seq: 0, backend: backend.config.id, model: backend.config.model, startedAt: started,
     outcome: "classified", error: error ?? undefined, latencyMs,
-    promptTokens, completionTokens,
-    usageSource: u ? (backend.config.kind === "mock" ? "estimated" : "provider") : rejected ? "none" : "estimated",
-    costUsd: costOf(backend, promptTokens, completionTokens),
+    ...usage,
+    costUsd: costOf(backend, usage.promptTokens, usage.completionTokens),
   };
   // Provider errors count against the breaker, so a dead provider stops being asked. A timeout
   // doesn't: the classifier's budget is tighter than the backend's own, and tripping the breaker
   // over it would take the fast tier out of the answer chain.
-  if (errKind === "error" || errKind === "http") deps.breaker.failure(backend.config.id, error!);
+  if (failure?.kind === "error" || failure?.kind === "http") deps.breaker.failure(backend.config.id, failure.message);
   const result: ClassifierResult = verdict
     ? { status: "ok", backend: backend.config.id, latencyMs, ...verdict }
     : { status: "failed", backend: backend.config.id, latencyMs, error: error! };

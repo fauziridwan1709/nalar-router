@@ -4,7 +4,8 @@
  * fallback and metering as the support assistant; output is OpenAI-compatible.
  */
 import type { ChatMessage, Sampling } from "./ports/backend.js";
-import { BackendError, publicAttemptError, type ErrorCode } from "../entities/errors.js";
+import { BackendError, GatewayError } from "../entities/errors.js";
+import { attemptEvent, failureOf, routeEvent } from "./events.js";
 import type { AppDeps } from "./deps.js";
 import type { RunResult } from "./capability.js";
 import type { Tenant } from "../entities/types.js";
@@ -13,7 +14,6 @@ import { executeWithFallback } from "./executor.js";
 import { planRoute, type RouteSignals } from "../entities/routing/policy.js";
 import { resolveRoute } from "./router.js";
 import { estimateMessagesTokens } from "../entities/tokens.js";
-import { GatewayError } from "../entities/errors.js";
 import { PII_LABEL, scanPii, summarizeCounts, type PiiType } from "../entities/guardrails/pii.js";
 
 /**
@@ -70,9 +70,9 @@ export async function runChat(
   // auto-smart classifies first (metered as attempt 0); other modes return the plan as is
   const { plan, attempts: routeAttempts } = await resolveRoute(deps, prepared.tenant, prepared.routeSignals, prepared.plan, ctx);
   for (const a of routeAttempts) {
-    ctx.sink.emit("attempt", { ...a, status: a.outcome, error: a.error ? publicAttemptError(a.outcome) : a.error });
+    ctx.sink.emit("attempt", attemptEvent(a));
   }
-  const routeReason = { rule: plan.rule, reason: plan.reason, mode: plan.mode, chain: plan.chain.map((b) => b.config.id), signals: plan.signals };
+  const routeReason = routeEvent(plan);
   ctx.sink.emit("route", routeReason);
   let firstTokenAt: number | null = null;
   const result = await executeWithFallback({
@@ -86,7 +86,7 @@ export async function runChat(
     includeReasoning: ctx.includeReasoning,
     onReasoning: (r) => ctx.sink.emit("reasoning", r),
     onAttemptStart: (a) => ctx.sink.emit("attempt", { ...a, status: "started" }),
-    onAttemptEnd: (a) => ctx.sink.emit("attempt", { ...a, status: a.outcome, error: a.error ? publicAttemptError(a.outcome) : a.error }),
+    onAttemptEnd: (a) => ctx.sink.emit("attempt", attemptEvent(a)),
     consume: async (text, actx) => {
       let committed = false;
       for await (const t of text) {
@@ -110,19 +110,14 @@ export async function runChat(
       model: result.backend.config.model, routeReason, latencyMs, ttftMs,
     };
   }
-  const err = result.status === "failed" ? result.error : new BackendError("error", "stopped");
-  const aborted = err.kind === "aborted";
+  // chat never stops on purpose (no refusals on the raw path), so anything else is a failure
+  const error = result.status === "failed" ? result.error : new BackendError("error", "stopped");
   const committed = result.status === "failed" && result.committed;
-  const code: ErrorCode = aborted ? "client_aborted" : committed ? "stream_interrupted" : "all_backends_failed";
-  ctx.sink.emit("error", {
-    code,
-    message: aborted ? "Client disconnected." : committed ? "The answer was interrupted." : "All model backends failed.",
-    partial: committed,
-  });
+  const failure = failureOf(error, committed);
+  ctx.sink.emit("error", { code: failure.code, message: failure.message, partial: committed });
   return {
-    outcome: aborted ? "client_aborted" : committed ? "partial" : "failed_all_backends",
-    httpStatus: aborted ? 499 : 502, attempts: [...routeAttempts, ...result.attempts], routeReason, latencyMs, ttftMs,
+    outcome: failure.outcome, httpStatus: failure.httpStatus, attempts: [...routeAttempts, ...result.attempts], routeReason, latencyMs, ttftMs,
     backend: result.backend?.config.id ?? null, model: result.backend?.config.model ?? null,
-    errorCode: code, errorMessage: err.message,
+    errorCode: failure.code, errorMessage: error.message,
   };
 }

@@ -8,7 +8,7 @@
  * point splices nothing. The cost is the fast attempt's tokens and its time to the header, paid
  * only on escalated requests.
  *
- * What counts as the fast model's fault. The combined confidence (support.ts confidenceOf) is
+ * What counts as the fast model's fault. The combined confidence (support/confidence.ts) is
  * 0.45 × retrieval vote + 0.35 × coverage + 0.2 × the model's own confidence, so 80% of it comes
  * from retrieval and no model can change it. The first live run escalated on "combined < 0.75" and
  * that was wasted: when the fast model agreed with retrieval, its score sat within 0.002 of the

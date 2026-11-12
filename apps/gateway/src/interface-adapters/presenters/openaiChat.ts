@@ -78,23 +78,23 @@ export class ChatSseSink implements StreamingSink {
   }
 }
 
-export function chatCompletionJson(s: CollectSink, done: any) {
-  const err = s.last("error");
+export function chatCompletionJson(events: CollectSink, done: any) {
+  const err = events.last("error");
   return {
     id: done.requestId,
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
     model: done.model,
-    choices: [{ index: 0, message: { role: "assistant", content: s.answer }, finish_reason: done.outcome === "success" ? "stop" : "error" }],
+    choices: [{ index: 0, message: { role: "assistant", content: events.answer }, finish_reason: done.outcome === "success" ? "stop" : "error" }],
     usage: done.usage && {
       prompt_tokens: done.usage.promptTokens, completion_tokens: done.usage.completionTokens, total_tokens: done.usage.totalTokens,
     },
     ...(err ? { error: err } : {}),
     x_router: {
       ...done,
-      route: s.last("route"),
-      attempts: s.all("attempt").filter((a: any) => a.status !== "started"),
-      ...(Object.keys(s.reasoning).length ? { reasoning: s.reasoning } : {}),
+      route: events.last("route"),
+      attempts: events.all("attempt").filter((a: any) => a.status !== "started"),
+      ...(Object.keys(events.reasoning).length ? { reasoning: events.reasoning } : {}),
     },
   };
 }

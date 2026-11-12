@@ -11,7 +11,7 @@ import { LIMITS } from "../../../entities/limits.js";
 import type { Tenant } from "../../../entities/types.js";
 import type { AppDeps } from "../../../use-cases/deps.js";
 import { runCapability, type CapabilitySpec, type CapabilityTransport } from "../../../use-cases/capability.js";
-import { prepareSupport, runSupport } from "../../../use-cases/support.js";
+import { answerBudget, prepareSupport, runSupport } from "../../../use-cases/support.js";
 import { guardChatMessages, prepareChat, runChat } from "../../../use-cases/chat.js";
 import { SseSink } from "../../presenters/sse.js";
 import { ChatSseSink, chatCompletionJson } from "../../presenters/openaiChat.js";
@@ -131,24 +131,24 @@ export function supportSpec(deps: AppDeps, res: Response, rawBody: unknown) {
     });
     return {
       estimatedPromptTokens: prepared.estimatedPromptTokens,
-      requestedMaxTokens: deps.config.support.maxAnswerTokens + (body.include_reasoning ? deps.config.support.reasoningExtraTokens : 0),
+      requestedMaxTokens: answerBudget(deps.config.support, !!body.include_reasoning),
       promptVersion,
       pii: prepared.pii.summary,
       stream: body.stream ?? true,
       makeSink: () => new SseSink(res),
       run: (ctx) => runSupport(deps, prepared, ctx),
-      respondJson: (s, done) => ({
+      respondJson: (events, done) => ({
         ...done,
-        attempts: s.all("attempt").filter((a: any) => a.status !== "started"),
-        answer: s.last("refusal")?.message ?? s.answer,
-        refused: !!s.last("refusal"),
-        refusal: s.last("refusal") ?? null,
-        intentDetail: s.last("intent") ?? null,
-        retrieved: s.last("retrieval"),
-        route: s.last("route"),
-        error: s.last("error") ?? null,
-        steps: s.all("step"),
-        reasoning: body.include_reasoning ? s.reasoning : undefined,
+        attempts: events.all("attempt").filter((a: any) => a.status !== "started"),
+        answer: events.last("refusal")?.message ?? events.answer,
+        refused: !!events.last("refusal"),
+        refusal: events.last("refusal") ?? null,
+        intentDetail: events.last("intent") ?? null,
+        retrieved: events.last("retrieval"),
+        route: events.last("route"),
+        error: events.last("error") ?? null,
+        steps: events.all("step"),
+        reasoning: body.include_reasoning ? events.reasoning : undefined,
       }),
     };
   };
@@ -181,7 +181,7 @@ export function chatSpec(deps: AppDeps, res: Response, rawBody: unknown) {
             frequency_penalty: body.frequency_penalty ?? undefined,
           },
         }),
-      respondJson: (s, done) => chatCompletionJson(s, done),
+      respondJson: (events, done) => chatCompletionJson(events, done),
     };
   };
 }

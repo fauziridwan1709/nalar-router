@@ -9,6 +9,7 @@ import { BackendError } from "../src/entities/errors.js";
 import { admit, getUsage } from "../src/interface-adapters/gateways/sqlite/quota.js";
 import { openDb } from "../src/frameworks/sqlite/db.js";
 import { getTenant } from "../src/interface-adapters/gateways/sqlite/tenants.js";
+import { attemptUsage } from "../src/entities/metering.js";
 import { computeMetrics, outcomeGroup } from "../src/interface-adapters/gateways/sqlite/metrics.js";
 import { FakeBackend, KB, TENANTS, cfg, fail, hang, reply } from "./helpers.js";
 import { PlaceholderRenderer, buildSlots, extractFromMessage, fillablePlaceholders } from "../src/entities/support/placeholders.js";
@@ -313,5 +314,21 @@ describe("dashboard metrics", () => {
   });
   it("groups outcomes into four states", () => {
     expect(["success", "refused_low_confidence", "quota_exceeded", "partial"].map(outcomeGroup)).toEqual(["success", "refused", "rejected", "failed"]);
+  });
+});
+
+describe("attempt usage", () => {
+  const base = { isMock: false, rejected: false, promptText: [{ content: "x".repeat(40) }], produced: "y".repeat(8), reasoned: "z".repeat(4) };
+  it("uses what the provider reported", () => {
+    expect(attemptUsage({ ...base, reported: { promptTokens: 7, completionTokens: 3 } })).toEqual({ promptTokens: 7, completionTokens: 3, usageSource: "provider" });
+  });
+  it("labels the mock backend's own count as an estimate", () => {
+    expect(attemptUsage({ ...base, isMock: true, reported: { promptTokens: 7, completionTokens: 3 } }).usageSource).toBe("estimated");
+  });
+  it("estimates when nothing was reported, counting reasoning as output", () => {
+    expect(attemptUsage({ ...base, reported: null })).toEqual({ promptTokens: 2 + 4 + 10, completionTokens: 2 + 1, usageSource: "estimated" });
+  });
+  it("bills nothing for a call the provider rejected outright", () => {
+    expect(attemptUsage({ ...base, reported: null, rejected: true })).toEqual({ promptTokens: 0, completionTokens: 0, usageSource: "none" });
   });
 });
