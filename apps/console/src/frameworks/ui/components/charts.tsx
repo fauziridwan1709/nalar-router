@@ -66,7 +66,11 @@ export function niceTicks(max: number, count = 4): number[] {
 }
 
 export const compact = (v: number) =>
-  Math.abs(v) >= 1e6 ? `${+(v / 1e6).toFixed(1)}M` : Math.abs(v) >= 1e4 ? `${+(v / 1e3).toFixed(1)}K` : v.toLocaleString();
+  Math.abs(v) >= 1e6
+    ? `${+(v / 1e6).toFixed(1)}M`
+    : Math.abs(v) >= 1e4
+      ? `${+(v / 1e3).toFixed(1)}K`
+      : v.toLocaleString();
 
 /** monotone cubic (Fritsch–Carlson): smooth, but never overshoots the data the way a spline would */
 function monotonePath(pts: [number, number][]) {
@@ -105,14 +109,32 @@ function monotonePath(pts: [number, number][]) {
   return d;
 }
 
-function Tip({ x, y, width, title, rows, keyShape }: { x: number; y: number; width: number; title: string; rows: { color: string; value: string; label: string }[]; keyShape: "line" | "rect" }) {
+function Tip({
+  x,
+  y,
+  width,
+  title,
+  rows,
+  keyShape,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  title: string;
+  rows: { color: string; value: string; label: string }[];
+  keyShape: "line" | "rect";
+}) {
   const left = Math.min(Math.max(0, x + 14), width - 190);
   return (
     <div className="tip" style={{ left, top: Math.max(0, y) }} role="status">
       <div className="t">{title}</div>
       {rows.map((r) => (
         <div className="r" key={r.label}>
-          {keyShape === "line" ? <i className="key-line" style={{ background: r.color }} /> : <i className="key-rect" style={{ background: r.color }} />}
+          {keyShape === "line" ? (
+            <i className="key-line" style={{ background: r.color }} />
+          ) : (
+            <i className="key-rect" style={{ background: r.color }} />
+          )}
           <b>{r.value}</b>
           <span>{r.label}</span>
         </div>
@@ -121,14 +143,26 @@ function Tip({ x, y, width, title, rows, keyShape }: { x: number; y: number; wid
   );
 }
 
-export function Legend({ items, shape }: { items: { label: string; color: string; shape?: "line" | "rect" | "dash" }[]; shape: "line" | "rect" }) {
+export function Legend({
+  items,
+  shape,
+}: {
+  items: { label: string; color: string; shape?: "line" | "rect" | "dash" }[];
+  shape: "line" | "rect";
+}) {
   return (
     <div className="legend">
       {items.map((i) => {
         const s = i.shape ?? shape;
         return (
           <span key={i.label}>
-            {s === "line" ? <i className="key-line" style={{ background: i.color }} /> : s === "dash" ? <i className="key-dash" style={{ borderColor: i.color }} /> : <i className="key-rect" style={{ background: i.color }} />}
+            {s === "line" ? (
+              <i className="key-line" style={{ background: i.color }} />
+            ) : s === "dash" ? (
+              <i className="key-dash" style={{ borderColor: i.color }} />
+            ) : (
+              <i className="key-rect" style={{ background: i.color }} />
+            )}
             {i.label}
           </span>
         );
@@ -173,25 +207,40 @@ export function StackedColumns<T>({ data, x, xLabel, series, format, height = 22
 
   return (
     <div ref={ref} className={`chart${loading ? " loading" : ""}`}>
-      <svg width={width} height={height} role="img" aria-label={`stacked columns: ${series.map((s) => s.label).join(", ")}`}>
+      <svg
+        width={width}
+        height={height}
+        role="img"
+        aria-label={`stacked columns: ${series.map((s) => s.label).join(", ")}`}
+      >
         <g className="axis">
           {ticks.map((t) => (
             <g key={t}>
               <line className={t === 0 ? "base-line" : "grid-line"} x1={PAD.l} x2={width - PAD.r} y1={y(t)} y2={y(t)} />
-              <text x={PAD.l - 8} y={y(t) + 4} textAnchor="end">{fractional ? format(t) : compact(t)}</text>
+              <text x={PAD.l - 8} y={y(t) + 4} textAnchor="end">
+                {fractional ? format(t) : compact(t)}
+              </text>
             </g>
           ))}
           {xTickIndexes(n).map((i) => (
-            <text key={i} x={PAD.l + band * i + band / 2} y={height - 6} textAnchor="middle">{xLabel(x(data[i]))}</text>
+            <text key={i} x={PAD.l + band * i + band / 2} y={height - 6} textAnchor="middle">
+              {xLabel(x(data[i]))}
+            </text>
           ))}
         </g>
-        {hover !== null && <rect className="hover-band" x={PAD.l + band * hover} y={PAD.t} width={band} height={ih} rx={4} />}
+        {hover !== null && (
+          <rect className="hover-band" x={PAD.l + band * hover} y={PAD.t} width={band} height={ih} rx={4} />
+        )}
         {data.map((d, i) => {
           const cx = PAD.l + band * i + band / 2;
           let acc = 0;
           const segs = series.map((s) => ({ s, v: s.get(d) ?? 0 })).filter((p) => p.v > 0);
           return (
-            <g key={i} className="anim-grow-y" style={{ animationDelay: `${Math.min(i * 18, 500)}ms`, opacity: hover === null || hover === i ? 1 : 0.4 }}>
+            <g
+              key={i}
+              className="anim-grow-y"
+              style={{ animationDelay: `${Math.min(i * 18, 500)}ms`, opacity: hover === null || hover === i ? 1 : 0.4 }}
+            >
               {segs.map((p, j) => {
                 const y0 = y(acc);
                 acc += p.v;
@@ -199,7 +248,13 @@ export function StackedColumns<T>({ data, x, xLabel, series, format, height = 22
                 const isTop = j === segs.length - 1;
                 const gap = j > 0 ? 2 : 0; // 2px surface gap between stacked segments
                 const h = Math.max(0, y0 - y1 - gap);
-                return <path key={p.s.key} d={roundedTop(cx - bw / 2, y1, bw, h, isTop ? Math.min(4, h) : 0)} fill={p.s.color} />;
+                return (
+                  <path
+                    key={p.s.key}
+                    d={roundedTop(cx - bw / 2, y1, bw, h, isTop ? Math.min(4, h) : 0)}
+                    fill={p.s.color}
+                  />
+                );
               })}
             </g>
           );
@@ -229,7 +284,9 @@ export function StackedColumns<T>({ data, x, xLabel, series, format, height = 22
           width={width}
           title={`${xLabel(x(data[hover]))} · ${format(totals[hover])} total`}
           keyShape="rect"
-          rows={[...series].reverse().map((s) => ({ color: s.color, value: format(s.get(data[hover]) ?? 0), label: s.label }))}
+          rows={[...series]
+            .reverse()
+            .map((s) => ({ color: s.color, value: format(s.get(data[hover]) ?? 0), label: s.label }))}
         />
       )}
     </div>
@@ -237,7 +294,16 @@ export function StackedColumns<T>({ data, x, xLabel, series, format, height = 22
 }
 
 /** smooth lines over time; nulls break the line. `area` adds a gradient wash (single series only). */
-export function LineChart<T>({ data, x, xLabel, series, format, height = 220, loading, area }: TimeProps<T> & { area?: boolean }) {
+export function LineChart<T>({
+  data,
+  x,
+  xLabel,
+  series,
+  format,
+  height = 220,
+  loading,
+  area,
+}: TimeProps<T> & { area?: boolean }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const gid = useId().replace(/:/g, "");
@@ -284,15 +350,26 @@ export function LineChart<T>({ data, x, xLabel, series, format, height = 220, lo
         <g className="axis">
           {ticks.map((t) => (
             <g key={t}>
-              <line className={t === 0 ? "base-line" : "grid-line"} x1={PAD.l} x2={width - PAD.r} y1={py(t)} y2={py(t)} />
-              <text x={PAD.l - 8} y={py(t) + 4} textAnchor="end">{format(t)}</text>
+              <line
+                className={t === 0 ? "base-line" : "grid-line"}
+                x1={PAD.l}
+                x2={width - PAD.r}
+                y1={py(t)}
+                y2={py(t)}
+              />
+              <text x={PAD.l - 8} y={py(t) + 4} textAnchor="end">
+                {format(t)}
+              </text>
             </g>
           ))}
           {xTickIndexes(n).map((i) => (
-            <text key={i} x={px(i)} y={height - 6} textAnchor="middle">{xLabel(x(data[i]))}</text>
+            <text key={i} x={px(i)} y={height - 6} textAnchor="middle">
+              {xLabel(x(data[i]))}
+            </text>
           ))}
         </g>
-        {area && paths[0] &&
+        {area &&
+          paths[0] &&
           paths[0].runs.map((pts, k) => {
             const line = monotonePath(pts);
             const poly = `${line} L${pts[pts.length - 1][0]},${py(0)} L${pts[0][0]},${py(0)} Z`;
@@ -300,19 +377,51 @@ export function LineChart<T>({ data, x, xLabel, series, format, height = 220, lo
           })}
         {paths.map(({ s, runs }) =>
           runs.map((pts, k) => (
-            <path key={`${s.key}${k}`} className="anim-draw" pathLength={1} d={monotonePath(pts)} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            <path
+              key={`${s.key}${k}`}
+              className="anim-draw"
+              pathLength={1}
+              d={monotonePath(pts)}
+              fill="none"
+              stroke={s.color}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
           )),
         )}
         {/* end dots: r=4, 2px surface ring */}
         {paths.map(({ s, last }) =>
-          last == null ? null : <circle key={s.key} className="anim-pop" cx={px(last)} cy={py(s.get(data[last])!)} r={4} fill={s.color} stroke="var(--surface)" strokeWidth={2} />,
+          last == null ? null : (
+            <circle
+              key={s.key}
+              className="anim-pop"
+              cx={px(last)}
+              cy={py(s.get(data[last])!)}
+              r={4}
+              fill={s.color}
+              stroke="var(--surface)"
+              strokeWidth={2}
+            />
+          ),
         )}
         {hover !== null && (
           <g>
             <line className="crosshair" x1={px(hover)} x2={px(hover)} y1={PAD.t} y2={PAD.t + ih} />
             {series.map((s) => {
               const v = s.get(data[hover]);
-              return v == null ? null : <circle key={s.key} className="hover-dot" cx={px(hover)} cy={py(v)} r={4.5} fill={s.color} stroke="var(--surface)" strokeWidth={2} />;
+              return v == null ? null : (
+                <circle
+                  key={s.key}
+                  className="hover-dot"
+                  cx={px(hover)}
+                  cy={py(v)}
+                  r={4.5}
+                  fill={s.color}
+                  stroke="var(--surface)"
+                  strokeWidth={2}
+                />
+              );
             })}
           </g>
         )}
@@ -351,13 +460,22 @@ export function LineChart<T>({ data, x, xLabel, series, format, height = 220, lo
   );
 }
 
-
 /**
  * Pareto: categories sorted by size (columns, share of total) with the running total (line).
  * Both are percentages of the same whole, so they share one 0–100% axis: no second y-scale.
  * The "vital few" (up to the bar that crosses 80%) are full strength; the rest are a lighter step.
  */
-export function Pareto({ rows, unit, height = 250, color = "var(--s1)" }: { rows: ParetoRow[]; unit: string; height?: number; color?: string }) {
+export function Pareto({
+  rows,
+  unit,
+  height = 250,
+  color = "var(--s1)",
+}: {
+  rows: ParetoRow[];
+  unit: string;
+  height?: number;
+  color?: string;
+}) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const n = rows.length;
@@ -377,12 +495,19 @@ export function Pareto({ rows, unit, height = 250, color = "var(--s1)" }: { rows
 
   return (
     <div ref={ref} className="chart">
-      <svg width={width} height={height} role="img" aria-label={`Pareto chart of ${unit}: ${rows.map((r) => `${r.label} ${pct(r.share)}`).join(", ")}`}>
+      <svg
+        width={width}
+        height={height}
+        role="img"
+        aria-label={`Pareto chart of ${unit}: ${rows.map((r) => `${r.label} ${pct(r.share)}`).join(", ")}`}
+      >
         <g className="axis">
           {[0, 0.25, 0.5, 0.75, 1].map((t) => (
             <g key={t}>
               <line className={t === 0 ? "base-line" : "grid-line"} x1={pad.l} x2={width - pad.r} y1={y(t)} y2={y(t)} />
-              <text x={pad.l - 8} y={y(t) + 4} textAnchor="end">{pct(t)}</text>
+              <text x={pad.l - 8} y={y(t) + 4} textAnchor="end">
+                {pct(t)}
+              </text>
             </g>
           ))}
           {rows.map((r, i) => (
@@ -394,8 +519,12 @@ export function Pareto({ rows, unit, height = 250, color = "var(--s1)" }: { rows
         </g>
         {/* the 80% reference */}
         <line x1={pad.l} x2={width - pad.r} y1={y(0.8)} y2={y(0.8)} className="ref-line" />
-        <text x={width - pad.r} y={y(0.8) - 5} textAnchor="end" className="ref-label">80%</text>
-        {hover !== null && <rect className="hover-band" x={pad.l + band * hover} y={pad.t} width={band} height={ih} rx={4} />}
+        <text x={width - pad.r} y={y(0.8) - 5} textAnchor="end" className="ref-label">
+          80%
+        </text>
+        {hover !== null && (
+          <rect className="hover-band" x={pad.l + band * hover} y={pad.t} width={band} height={ih} rx={4} />
+        )}
         {rows.map((r, i) => {
           const h = Math.max(r.count > 0 ? 2 : 0, y(0) - y(r.share));
           return (
@@ -408,9 +537,26 @@ export function Pareto({ rows, unit, height = 250, color = "var(--s1)" }: { rows
             />
           );
         })}
-        <path className="anim-draw anim-late" pathLength={1} d={monotonePath(linePts)} fill="none" stroke="var(--s2)" strokeWidth={2} strokeLinecap="round" />
+        <path
+          className="anim-draw anim-late"
+          pathLength={1}
+          d={monotonePath(linePts)}
+          fill="none"
+          stroke="var(--s2)"
+          strokeWidth={2}
+          strokeLinecap="round"
+        />
         {linePts.map(([px, py], i) => (
-          <circle key={i} className="anim-pop anim-late" cx={px} cy={py} r={hover === i ? 5 : 3.5} fill="var(--s2)" stroke="var(--surface)" strokeWidth={2} />
+          <circle
+            key={i}
+            className="anim-pop anim-late"
+            cx={px}
+            cy={py}
+            r={hover === i ? 5 : 3.5}
+            fill="var(--s2)"
+            stroke="var(--surface)"
+            strokeWidth={2}
+          />
         ))}
         {rows.map((r, i) => (
           <rect
@@ -437,7 +583,11 @@ export function Pareto({ rows, unit, height = 250, color = "var(--s1)" }: { rows
           title={rows[hover].label}
           keyShape="rect"
           rows={[
-            { color: vital(hover) ? color : `color-mix(in srgb, ${color} 32%, var(--surface))`, value: `${rows[hover].count.toLocaleString()} ${unit}`, label: `${pct(rows[hover].share)} of total` },
+            {
+              color: vital(hover) ? color : `color-mix(in srgb, ${color} 32%, var(--surface))`,
+              value: `${rows[hover].count.toLocaleString()} ${unit}`,
+              label: `${pct(rows[hover].share)} of total`,
+            },
             { color: "var(--s2)", value: pct(rows[hover].cumulative), label: "cumulative" },
           ]}
         />
@@ -455,7 +605,15 @@ export function Pareto({ rows, unit, height = 250, color = "var(--s1)" }: { rows
 }
 
 /** ranked horizontal bars, one series (slot 1), value at the tip */
-export function HBars({ rows, format, color = "var(--s1)" }: { rows: { label: string; value: number; sub?: string }[]; format: (v: number) => string; color?: string }) {
+export function HBars({
+  rows,
+  format,
+  color = "var(--s1)",
+}: {
+  rows: { label: string; value: number; sub?: string }[];
+  format: (v: number) => string;
+  color?: string;
+}) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const longest = Math.max(...rows.map((r) => r.label.length), 4);
@@ -482,24 +640,58 @@ export function HBars({ rows, format, color = "var(--s1)" }: { rows: { label: st
                 <title>{r.label}</title>
                 {short(r.label)}
               </text>
-              {w > 0 && <path className="anim-grow-x" style={{ animationDelay: `${i * 70}ms` }} d={path} fill={color} />}
-              <text className="anim-fade" x={labelW + w + 6} y={y + barH - 2} fill="var(--ink)" fontSize={12} style={{ fontVariantNumeric: "tabular-nums" }}>{format(r.value)}</text>
-              <rect x={0} y={i * rowH} width={width} height={rowH} fill="transparent" tabIndex={0} aria-label={`${r.label}: ${format(r.value)}`}
-                onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)} onFocus={() => setHover(i)} onBlur={() => setHover(null)} />
+              {w > 0 && (
+                <path className="anim-grow-x" style={{ animationDelay: `${i * 70}ms` }} d={path} fill={color} />
+              )}
+              <text
+                className="anim-fade"
+                x={labelW + w + 6}
+                y={y + barH - 2}
+                fill="var(--ink)"
+                fontSize={12}
+                style={{ fontVariantNumeric: "tabular-nums" }}
+              >
+                {format(r.value)}
+              </text>
+              <rect
+                x={0}
+                y={i * rowH}
+                width={width}
+                height={rowH}
+                fill="transparent"
+                tabIndex={0}
+                aria-label={`${r.label}: ${format(r.value)}`}
+                onPointerEnter={() => setHover(i)}
+                onPointerLeave={() => setHover(null)}
+                onFocus={() => setHover(i)}
+                onBlur={() => setHover(null)}
+              />
             </g>
           );
         })}
       </svg>
       {hover !== null && rows[hover].sub && (
-        <Tip x={labelW + 20} y={hover * rowH + rowH} width={width} title={rows[hover].label} keyShape="rect"
-          rows={[{ color, value: format(rows[hover].value), label: rows[hover].sub! }]} />
+        <Tip
+          x={labelW + 20}
+          y={hover * rowH + rowH}
+          width={width}
+          title={rows[hover].label}
+          keyShape="rect"
+          rows={[{ color, value: format(rows[hover].value), label: rows[hover].sub! }]}
+        />
       )}
     </div>
   );
 }
 
 /** tall segmented bar: one whole split into ≤6 parts, share printed inside when it fits */
-export function SegmentedBar({ parts, format }: { parts: { label: string; value: number; color: string; ink?: string }[]; format: (v: number) => string }) {
+export function SegmentedBar({
+  parts,
+  format,
+}: {
+  parts: { label: string; value: number; color: string; ink?: string }[];
+  format: (v: number) => string;
+}) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const total = parts.reduce((s, p) => s + p.value, 0) || 1;
@@ -508,7 +700,12 @@ export function SegmentedBar({ parts, format }: { parts: { label: string; value:
   let x = 0;
   return (
     <div ref={ref} className="chart">
-      <svg width={width} height={32} role="img" aria-label={live.map((p) => `${p.label} ${Math.round((p.value / total) * 100)}%`).join(", ")}>
+      <svg
+        width={width}
+        height={32}
+        role="img"
+        aria-label={live.map((p) => `${p.label} ${Math.round((p.value / total) * 100)}%`).join(", ")}
+      >
         <g className="anim-grow-x">
           {live.map((p, i) => {
             const w = ((width - gaps) * p.value) / total;
@@ -517,9 +714,24 @@ export function SegmentedBar({ parts, format }: { parts: { label: string; value:
             const el = (
               <g key={p.label} opacity={hover === null || hover === i ? 1 : 0.55}>
                 <rect x={x} y={0} width={w} height={32} rx={6} fill={p.color} />
-                {fits && <text x={x + 10} y={20} fontSize={12} fontWeight={600} fill={p.ink ?? "#ffffff"}>{share}</text>}
-                <rect x={x} y={0} width={w + 2} height={32} fill="transparent" tabIndex={0} aria-label={`${p.label}: ${format(p.value)} (${share})`}
-                  onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)} onFocus={() => setHover(i)} onBlur={() => setHover(null)} />
+                {fits && (
+                  <text x={x + 10} y={20} fontSize={12} fontWeight={600} fill={p.ink ?? "#ffffff"}>
+                    {share}
+                  </text>
+                )}
+                <rect
+                  x={x}
+                  y={0}
+                  width={w + 2}
+                  height={32}
+                  fill="transparent"
+                  tabIndex={0}
+                  aria-label={`${p.label}: ${format(p.value)} (${share})`}
+                  onPointerEnter={() => setHover(i)}
+                  onPointerLeave={() => setHover(null)}
+                  onFocus={() => setHover(i)}
+                  onBlur={() => setHover(null)}
+                />
               </g>
             );
             x += w + 2;
@@ -529,15 +741,35 @@ export function SegmentedBar({ parts, format }: { parts: { label: string; value:
       </svg>
       <Legend shape="rect" items={live.map((p) => ({ label: p.label, color: p.color }))} />
       {hover !== null && (
-        <Tip x={20} y={38} width={width} title={live[hover].label} keyShape="rect"
-          rows={[{ color: live[hover].color, value: format(live[hover].value), label: `${Math.round((live[hover].value / total) * 100)}% of model-served requests` }]} />
+        <Tip
+          x={20}
+          y={38}
+          width={width}
+          title={live[hover].label}
+          keyShape="rect"
+          rows={[
+            {
+              color: live[hover].color,
+              value: format(live[hover].value),
+              label: `${Math.round((live[hover].value / total) * 100)}% of model-served requests`,
+            },
+          ]}
+        />
       )}
     </div>
   );
 }
 
 /** 12-point trend with a soft area, in the accent; the current point is marked */
-export function Sparkline({ values, width = 132, height = 30 }: { values: (number | null)[]; width?: number; height?: number }) {
+export function Sparkline({
+  values,
+  width = 132,
+  height = 30,
+}: {
+  values: (number | null)[];
+  width?: number;
+  height?: number;
+}) {
   const gid = useId().replace(/:/g, "");
   const v = values.map((x) => x ?? 0);
   const max = Math.max(...v, 0) || 1;
@@ -553,15 +785,53 @@ export function Sparkline({ values, width = 132, height = 30 }: { values: (numbe
           <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
         </linearGradient>
       </defs>
-      {pts.length > 1 && <path className="anim-fade" d={`${d} L${pts[pts.length - 1][0]},${height} L${pts[0][0]},${height} Z`} fill={`url(#${gid})`} />}
-      <path className="anim-draw" pathLength={1} d={d} fill="none" stroke="var(--accent)" strokeWidth={1.5} strokeLinejoin="round" />
-      {v.length > 0 && <circle className="anim-pop anim-late" cx={px(v.length - 1)} cy={py(v[v.length - 1])} r={2.5} fill="var(--accent)" />}
+      {pts.length > 1 && (
+        <path
+          className="anim-fade"
+          d={`${d} L${pts[pts.length - 1][0]},${height} L${pts[0][0]},${height} Z`}
+          fill={`url(#${gid})`}
+        />
+      )}
+      <path
+        className="anim-draw"
+        pathLength={1}
+        d={d}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+      />
+      {v.length > 0 && (
+        <circle
+          className="anim-pop anim-late"
+          cx={px(v.length - 1)}
+          cy={py(v[v.length - 1])}
+          r={2.5}
+          fill="var(--accent)"
+        />
+      )}
     </svg>
   );
 }
 
 /** a chart panel with an always-available table view */
-export function ChartPanel({ title, sub, legend, table, children, tools, tour }: { title: string; sub?: ReactNode; legend?: ReactNode; table?: ReactNode; children: ReactNode; tools?: ReactNode; tour?: string }) {
+export function ChartPanel({
+  title,
+  sub,
+  legend,
+  table,
+  children,
+  tools,
+  tour,
+}: {
+  title: string;
+  sub?: ReactNode;
+  legend?: ReactNode;
+  table?: ReactNode;
+  children: ReactNode;
+  tools?: ReactNode;
+  tour?: string;
+}) {
   const [asTable, setAsTable] = useState(false);
   return (
     <section className="panel" data-tour={tour}>
@@ -574,8 +844,12 @@ export function ChartPanel({ title, sub, legend, table, children, tools, tour }:
           {tools}
           {table && (
             <div className="view-toggle" role="group" aria-label="View">
-              <button aria-pressed={!asTable} onClick={() => setAsTable(false)} title="Chart" aria-label="Show chart"><BarChart3 size={15} /></button>
-              <button aria-pressed={asTable} onClick={() => setAsTable(true)} title="Table" aria-label="Show table"><Table2 size={15} /></button>
+              <button aria-pressed={!asTable} onClick={() => setAsTable(false)} title="Chart" aria-label="Show chart">
+                <BarChart3 size={15} />
+              </button>
+              <button aria-pressed={asTable} onClick={() => setAsTable(true)} title="Table" aria-label="Show table">
+                <Table2 size={15} />
+              </button>
             </div>
           )}
         </div>
@@ -592,11 +866,19 @@ export function TableView<T>({ rows, cols }: { rows: T[]; cols: { label: string;
   return (
     <table className="table-view">
       <thead>
-        <tr>{cols.map((c) => <th key={c.label}>{c.label}</th>)}</tr>
+        <tr>
+          {cols.map((c) => (
+            <th key={c.label}>{c.label}</th>
+          ))}
+        </tr>
       </thead>
       <tbody>
         {rows.map((r, i) => (
-          <tr key={i}>{cols.map((c) => <td key={c.label}>{c.get(r)}</td>)}</tr>
+          <tr key={i}>
+            {cols.map((c) => (
+              <td key={c.label}>{c.get(r)}</td>
+            ))}
+          </tr>
         ))}
       </tbody>
     </table>

@@ -44,9 +44,12 @@ export function cascadeEscalation(i: CascadeInput): string | null {
   if (i.ceiling < i.refuseBelow) return null; // nobody can pass: retrieval alone keeps this below the bar
   if (i.intent === "unknown") return "fast model said the message is out of scope; asking for a second opinion";
   const why: string[] = [];
-  if (i.modelConfidence < i.modelConfidenceBelow) why.push(`fast model's own confidence ${i.modelConfidence} < ${i.modelConfidenceBelow}`);
+  if (i.modelConfidence < i.modelConfidenceBelow)
+    why.push(`fast model's own confidence ${i.modelConfidence} < ${i.modelConfidenceBelow}`);
   if (i.topIntent && i.intent !== i.topIntent && i.confidence < i.refuseBelow) {
-    why.push(`fast model said ${i.intent}, retrieval says ${i.topIntent}, so it would be refused (${i.confidence} < ${i.refuseBelow}; up to ${i.ceiling} is possible)`);
+    why.push(
+      `fast model said ${i.intent}, retrieval says ${i.topIntent}, so it would be refused (${i.confidence} < ${i.refuseBelow}; up to ${i.ceiling} is possible)`,
+    );
   }
   return why.length ? why.join("; ") : null;
 }

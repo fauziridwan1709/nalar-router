@@ -31,20 +31,32 @@ export function guardChatMessages(tenant: Tenant, messages: ChatMessage[]) {
   });
   const types = Object.keys(counts) as PiiType[];
   if (types.length && policy.mode === "block") {
-    throw new GatewayError(422, "pii_detected",
+    throw new GatewayError(
+      422,
+      "pii_detected",
       `The messages contain personal data (${types.map((t) => PII_LABEL[t].toLowerCase()).join(", ")}). This tenant's policy blocks it; remove it and try again.`,
-      { types, pii: summarizeCounts(counts) });
+      { types, pii: summarizeCounts(counts) },
+    );
   }
   return { messages: out, pii: types.length ? summarizeCounts(counts) : null };
 }
 
 /** `completionTokens`: the caller's max_tokens, which must fit in the model's context next to the messages */
-export function prepareChat(deps: AppDeps, tenant: Tenant, messages: ChatMessage[], model: string | undefined, completionTokens: number) {
+export function prepareChat(
+  deps: AppDeps,
+  tenant: Tenant,
+  messages: ChatMessage[],
+  model: string | undefined,
+  completionTokens: number,
+) {
   const estimatedPromptTokens = estimateMessagesTokens(messages);
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
   // route on the size of the newest user turn; a long history alone shouldn't force the big model
   const routeSignals: RouteSignals = {
-    queryTokens: Math.ceil(lastUser.length / 4), text: lastUser, turns: messages.length, hint: model,
+    queryTokens: Math.ceil(lastUser.length / 4),
+    text: lastUser,
+    turns: messages.length,
+    hint: model,
     context: { promptTokens: estimatedPromptTokens, completionTokens },
   };
   const plan = planRoute(deps.backends, tenant, routeSignals, deps.config.routing);
@@ -68,7 +80,13 @@ export async function runChat(
   },
 ): Promise<RunResult> {
   // auto-smart classifies first (metered as attempt 0); other modes return the plan as is
-  const { plan, attempts: routeAttempts } = await resolveRoute(deps, prepared.tenant, prepared.routeSignals, prepared.plan, ctx);
+  const { plan, attempts: routeAttempts } = await resolveRoute(
+    deps,
+    prepared.tenant,
+    prepared.routeSignals,
+    prepared.plan,
+    ctx,
+  );
   for (const a of routeAttempts) {
     ctx.sink.emit("attempt", attemptEvent(a));
   }
@@ -106,8 +124,14 @@ export async function runChat(
   const ttftMs = firstTokenAt ? firstTokenAt - ctx.startedAt : null;
   if (result.status === "ok") {
     return {
-      outcome: "success", httpStatus: 200, attempts: [...routeAttempts, ...result.attempts], backend: result.backend.config.id,
-      model: result.backend.config.model, routeReason, latencyMs, ttftMs,
+      outcome: "success",
+      httpStatus: 200,
+      attempts: [...routeAttempts, ...result.attempts],
+      backend: result.backend.config.id,
+      model: result.backend.config.model,
+      routeReason,
+      latencyMs,
+      ttftMs,
     };
   }
   // chat never stops on purpose (no refusals on the raw path), so anything else is a failure
@@ -116,8 +140,15 @@ export async function runChat(
   const failure = failureOf(error, committed);
   ctx.sink.emit("error", { code: failure.code, message: failure.message, partial: committed });
   return {
-    outcome: failure.outcome, httpStatus: failure.httpStatus, attempts: [...routeAttempts, ...result.attempts], routeReason, latencyMs, ttftMs,
-    backend: result.backend?.config.id ?? null, model: result.backend?.config.model ?? null,
-    errorCode: failure.code, errorMessage: error.message,
+    outcome: failure.outcome,
+    httpStatus: failure.httpStatus,
+    attempts: [...routeAttempts, ...result.attempts],
+    routeReason,
+    latencyMs,
+    ttftMs,
+    backend: result.backend?.config.id ?? null,
+    model: result.backend?.config.model ?? null,
+    errorCode: failure.code,
+    errorMessage: error.message,
   };
 }

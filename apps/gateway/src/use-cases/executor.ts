@@ -66,7 +66,9 @@ export function costOf(backend: Backend, promptTokens: number, completionTokens:
 /** the real cause of a failure: an abort surfaces as a generic AbortError, its reason says why */
 export function failureCause(error: unknown, signal: AbortSignal): BackendError {
   const reason = signal.aborted ? signal.reason : error;
-  return reason instanceof BackendError ? reason : new BackendError("error", (reason as Error)?.message ?? String(reason));
+  return reason instanceof BackendError
+    ? reason
+    : new BackendError("error", (reason as Error)?.message ?? String(reason));
 }
 
 /** infra failures count against the circuit breaker; bad output, refusals and client aborts do not */
@@ -82,13 +84,26 @@ export async function executeWithFallback(opts: ExecuteOptions): Promise<Execute
     const cfg = backend.config;
     seq++;
     if (opts.clientSignal.aborted) {
-      return { status: "failed", attempts, committed: false, error: new BackendError("aborted", "client disconnected", false) };
+      return {
+        status: "failed",
+        attempts,
+        committed: false,
+        error: new BackendError("aborted", "client disconnected", false),
+      };
     }
     if (opts.breaker.isOpen(cfg.id)) {
       const skipped: AttemptRecord = {
-        seq, backend: cfg.id, model: cfg.model, startedAt: now(), outcome: "skipped_circuit_open",
-        error: "circuit breaker open after repeated failures", latencyMs: 0,
-        promptTokens: 0, completionTokens: 0, usageSource: "none", costUsd: 0,
+        seq,
+        backend: cfg.id,
+        model: cfg.model,
+        startedAt: now(),
+        outcome: "skipped_circuit_open",
+        error: "circuit breaker open after repeated failures",
+        latencyMs: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        usageSource: "none",
+        costUsd: 0,
       };
       attempts.push(skipped);
       opts.onAttemptEnd?.(skipped);
@@ -144,8 +159,13 @@ async function runAttempt(backend: Backend, seq: number, opts: ExecuteOptions, n
   async function* text(): AsyncIterable<string> {
     requestSent = true;
     const request: BackendRequest = {
-      messages: opts.messages, maxTokens: opts.maxTokens, temperature: opts.temperature, sampling: opts.sampling,
-      hints: opts.hints, includeReasoning: opts.includeReasoning, signal: abort.signal,
+      messages: opts.messages,
+      maxTokens: opts.maxTokens,
+      temperature: opts.temperature,
+      sampling: opts.sampling,
+      hints: opts.hints,
+      includeReasoning: opts.includeReasoning,
+      signal: abort.signal,
     };
     for await (const chunk of backend.stream(request)) {
       if (chunk.type === "reasoning") {
@@ -170,7 +190,13 @@ async function runAttempt(backend: Backend, seq: number, opts: ExecuteOptions, n
   let error: BackendError | null = null;
   let stop: StopRequest | null = null;
   try {
-    await opts.consume(text(), { backend, attemptSeq: seq, commit: () => { committed = true; } });
+    await opts.consume(text(), {
+      backend,
+      attemptSeq: seq,
+      commit: () => {
+        committed = true;
+      },
+    });
   } catch (e) {
     if (e instanceof StopRequest) {
       outcome = "refused";
@@ -195,9 +221,14 @@ async function runAttempt(backend: Backend, seq: number, opts: ExecuteOptions, n
     reasoned,
   });
   const record: AttemptRecord = {
-    seq, backend: cfg.id, model: cfg.model, startedAt: started, outcome,
+    seq,
+    backend: cfg.id,
+    model: cfg.model,
+    startedAt: started,
+    outcome,
     error: error?.message ?? stop?.detail ?? undefined,
-    latencyMs: now() - started, ttftMs,
+    latencyMs: now() - started,
+    ttftMs,
     ...usage,
     costUsd: costOf(backend, usage.promptTokens, usage.completionTokens),
   };

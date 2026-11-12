@@ -18,12 +18,17 @@ export interface SignInInput {
   userAgent?: string;
 }
 
-export async function signIn(deps: GatewayDeps, input: SignInInput): Promise<{ user: User; tenant: Tenant | null; token: string; csrf: string }> {
+export async function signIn(
+  deps: GatewayDeps,
+  input: SignInInput,
+): Promise<{ user: User; tenant: Tenant | null; token: string; csrf: string }> {
   const { email, password, ip } = input;
   const { perAccount, perIp } = deps.signInLimits;
   const wait = Math.max(perAccount.blockedFor(`acct:${email}`), perIp.blockedFor(`ip:${ip}`));
   if (wait > 0) {
-    throw new GatewayError(429, "too_many_attempts", "Too many sign-in attempts. Try again later.", { retryAfterSeconds: wait });
+    throw new GatewayError(429, "too_many_attempts", "Too many sign-in attempts. Try again later.", {
+      retryAfterSeconds: wait,
+    });
   }
 
   const found = deps.users.findForLogin(email);
@@ -32,7 +37,13 @@ export async function signIn(deps: GatewayDeps, input: SignInInput): Promise<{ u
   if (!found?.user || !ok) {
     perAccount.fail(`acct:${email}`);
     perIp.fail(`ip:${ip}`);
-    deps.audit.record({ tenantId: found?.user?.tenantId ?? null, actor: null, action: "auth.login_failed", target: found?.user ? email : null, ip });
+    deps.audit.record({
+      tenantId: found?.user?.tenantId ?? null,
+      actor: null,
+      action: "auth.login_failed",
+      target: found?.user ? email : null,
+      ip,
+    });
     throw new GatewayError(401, "invalid_credentials", "Invalid email or password.");
   }
   perAccount.clear(`acct:${email}`);
@@ -43,7 +54,10 @@ export async function signIn(deps: GatewayDeps, input: SignInInput): Promise<{ u
 }
 
 /** the session behind a cookie token, or 401 */
-export function resolveSession(deps: Pick<GatewayDeps, "sessions">, token: string | null): { user: User; csrf: string } {
+export function resolveSession(
+  deps: Pick<GatewayDeps, "sessions">,
+  token: string | null,
+): { user: User; csrf: string } {
   const s = token ? deps.sessions.get(token) : null;
   if (!s) throw new GatewayError(401, "unauthenticated", "Sign in to continue.");
   return s;

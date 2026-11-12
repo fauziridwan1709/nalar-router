@@ -9,7 +9,10 @@ export class ChatSseSink implements StreamingSink {
   private trace: unknown[] = [];
   private start = Date.now();
   private includeUsage: boolean;
-  constructor(private res: Response, opts: { includeUsage?: boolean } = {}) {
+  constructor(
+    private res: Response,
+    opts: { includeUsage?: boolean } = {},
+  ) {
     this.includeUsage = !!opts.includeUsage;
     res.status(200);
     res.setHeader("content-type", "text/event-stream; charset=utf-8");
@@ -24,8 +27,12 @@ export class ChatSseSink implements StreamingSink {
   private chunk(delta: Record<string, unknown>, finish: string | null, extra: Record<string, unknown> = {}) {
     this.write(
       `data: ${JSON.stringify({
-        id: this.id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model: this.model,
-        choices: [{ index: 0, delta, finish_reason: finish }], ...extra,
+        id: this.id,
+        object: "chat.completion.chunk",
+        created: Math.floor(Date.now() / 1000),
+        model: this.model,
+        choices: [{ index: 0, delta, finish_reason: finish }],
+        ...extra,
       })}\n\n`,
     );
   }
@@ -50,16 +57,28 @@ export class ChatSseSink implements StreamingSink {
       case "done":
         this.chunk({}, data.outcome === "success" ? "stop" : "error", {
           usage: data.usage && {
-            prompt_tokens: data.usage.promptTokens, completion_tokens: data.usage.completionTokens, total_tokens: data.usage.totalTokens,
+            prompt_tokens: data.usage.promptTokens,
+            completion_tokens: data.usage.completionTokens,
+            total_tokens: data.usage.totalTokens,
           },
           x_router: { ...data, trace: this.trace },
         });
         // stream_options.include_usage: OpenAI sends usage in one extra chunk with no choices
         if (this.includeUsage && data.usage) {
-          this.write(`data: ${JSON.stringify({
-            id: this.id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model: this.model, choices: [],
-            usage: { prompt_tokens: data.usage.promptTokens, completion_tokens: data.usage.completionTokens, total_tokens: data.usage.totalTokens },
-          })}\n\n`);
+          this.write(
+            `data: ${JSON.stringify({
+              id: this.id,
+              object: "chat.completion.chunk",
+              created: Math.floor(Date.now() / 1000),
+              model: this.model,
+              choices: [],
+              usage: {
+                prompt_tokens: data.usage.promptTokens,
+                completion_tokens: data.usage.completionTokens,
+                total_tokens: data.usage.totalTokens,
+              },
+            })}\n\n`,
+          );
         }
         this.write("data: [DONE]\n\n");
         break;
@@ -85,9 +104,17 @@ export function chatCompletionJson(events: CollectSink, done: any) {
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
     model: done.model,
-    choices: [{ index: 0, message: { role: "assistant", content: events.answer }, finish_reason: done.outcome === "success" ? "stop" : "error" }],
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content: events.answer },
+        finish_reason: done.outcome === "success" ? "stop" : "error",
+      },
+    ],
     usage: done.usage && {
-      prompt_tokens: done.usage.promptTokens, completion_tokens: done.usage.completionTokens, total_tokens: done.usage.totalTokens,
+      prompt_tokens: done.usage.promptTokens,
+      completion_tokens: done.usage.completionTokens,
+      total_tokens: done.usage.totalTokens,
     },
     ...(err ? { error: err } : {}),
     x_router: {

@@ -14,7 +14,10 @@ const R = 8;
 const P = 1;
 
 const opts = (log2n: number, r: number, p: number): ScryptOptions => ({
-  N: 2 ** log2n, r, p, maxmem: 128 * r * 2 ** log2n * 2 + 1024 * 1024,
+  N: 2 ** log2n,
+  r,
+  p,
+  maxmem: 128 * r * 2 ** log2n * 2 + 1024 * 1024,
 });
 
 const scryptAsync = (pw: string, salt: Buffer, o: ScryptOptions) =>

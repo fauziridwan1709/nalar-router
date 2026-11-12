@@ -250,7 +250,10 @@ function compile(gl: WebGL2RenderingContext, fragment: string): WebGLProgram | n
  * returned cleanup runs. The canvas should fill a positioned parent; it is
  * sized to its CSS box at one pixel per CSS pixel, like the original.
  */
-export function mountSparkTrail(canvas: HTMLCanvasElement, { tint = DEFAULT_TINT }: SparkTrailOptions = {}): () => void {
+export function mountSparkTrail(
+  canvas: HTMLCanvasElement,
+  { tint = DEFAULT_TINT }: SparkTrailOptions = {},
+): () => void {
   const gl = canvas.getContext("webgl2", { alpha: true, premultipliedAlpha: true, antialias: false, depth: false });
   if (!gl) return () => {};
   const halfFloat = !!gl.getExtension("EXT_color_buffer_float");

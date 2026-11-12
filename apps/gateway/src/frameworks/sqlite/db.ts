@@ -244,10 +244,38 @@ const demoPassword = (env: string, fallback: string) =>
  * Seeded only when DEMO_MODE is on (see main/container.ts). Override the passwords with env vars.
  */
 export const DEMO_USERS: SeedUser[] = [
-  { id: "usr_ops", tenantId: "eval", email: "ops@nalar.example", name: "Platform Operator", role: "operator", ...demoPassword("DEMO_PASSWORD_OPERATOR", "Nalar-Ops-2026!") },
-  { id: "usr_acme_owner", tenantId: "acme", email: "owner@acme.example", name: "Ayu Lestari", role: "owner", ...demoPassword("DEMO_PASSWORD_OWNER", "Acme-Owner-2026!") },
-  { id: "usr_globex_dev", tenantId: "globex", email: "dev@globex.example", name: "Bima Pratama", role: "developer", ...demoPassword("DEMO_PASSWORD_DEVELOPER", "Globex-Dev-2026!") },
-  { id: "usr_initech_viewer", tenantId: "initech", email: "viewer@initech.example", name: "Citra Wulandari", role: "viewer", ...demoPassword("DEMO_PASSWORD_VIEWER", "Initech-View-2026!") },
+  {
+    id: "usr_ops",
+    tenantId: "eval",
+    email: "ops@nalar.example",
+    name: "Platform Operator",
+    role: "operator",
+    ...demoPassword("DEMO_PASSWORD_OPERATOR", "Nalar-Ops-2026!"),
+  },
+  {
+    id: "usr_acme_owner",
+    tenantId: "acme",
+    email: "owner@acme.example",
+    name: "Ayu Lestari",
+    role: "owner",
+    ...demoPassword("DEMO_PASSWORD_OWNER", "Acme-Owner-2026!"),
+  },
+  {
+    id: "usr_globex_dev",
+    tenantId: "globex",
+    email: "dev@globex.example",
+    name: "Bima Pratama",
+    role: "developer",
+    ...demoPassword("DEMO_PASSWORD_DEVELOPER", "Globex-Dev-2026!"),
+  },
+  {
+    id: "usr_initech_viewer",
+    tenantId: "initech",
+    email: "viewer@initech.example",
+    name: "Citra Wulandari",
+    role: "viewer",
+    ...demoPassword("DEMO_PASSWORD_VIEWER", "Initech-View-2026!"),
+  },
 ];
 
 export function openDb(path: string, seed: SeedTenant[] = DEMO_TENANTS, users: SeedUser[] = []): DB {
@@ -258,7 +286,8 @@ export function openDb(path: string, seed: SeedTenant[] = DEMO_TENANTS, users: S
   // migration for databases created before tenant profiles existed
   const cols = (db.prepare("PRAGMA table_info(tenants)").all() as { name: string }[]).map((c) => c.name);
   if (!cols.includes("profile")) db.exec("ALTER TABLE tenants ADD COLUMN profile TEXT NOT NULL DEFAULT '{}'");
-  if (!cols.includes("pii_policy")) db.exec(`ALTER TABLE tenants ADD COLUMN pii_policy TEXT NOT NULL DEFAULT '{"mode":"mask"}'`);
+  if (!cols.includes("pii_policy"))
+    db.exec(`ALTER TABLE tenants ADD COLUMN pii_policy TEXT NOT NULL DEFAULT '{"mode":"mask"}'`);
   const rcols = (db.prepare("PRAGMA table_info(requests)").all() as { name: string }[]).map((c) => c.name);
   if (!rcols.includes("credential")) db.exec("ALTER TABLE requests ADD COLUMN credential TEXT");
   if (!rcols.includes("pii")) db.exec("ALTER TABLE requests ADD COLUMN pii TEXT");
@@ -269,15 +298,31 @@ export function openDb(path: string, seed: SeedTenant[] = DEMO_TENANTS, users: S
       allowed_tiers=excluded.allowed_tiers, token_quota=excluded.token_quota, request_quota=excluded.request_quota,
       profile=excluded.profile`);
   for (const t of seed) {
-    upsert.run(t.id, t.name, t.plan, hashKey(t.apiKey), JSON.stringify(t.allowedTiers), t.tokenQuota, t.requestQuota,
-      JSON.stringify(t.profile ?? {}), Date.now());
+    upsert.run(
+      t.id,
+      t.name,
+      t.plan,
+      hashKey(t.apiKey),
+      JSON.stringify(t.allowedTiers),
+      t.tokenQuota,
+      t.requestQuota,
+      JSON.stringify(t.profile ?? {}),
+      Date.now(),
+    );
     // the seeded key is an ordinary api_keys row, so it can be listed, scoped and revoked like any other
     db.prepare(
       `INSERT INTO api_keys (id, tenant_id, name, prefix, last4, key_hash, scopes, created_by, created_at)
        VALUES (?, ?, 'Seeded demo key', ?, ?, ?, ?, NULL, ?)
        ON CONFLICT(id) DO UPDATE SET key_hash=excluded.key_hash, prefix=excluded.prefix, last4=excluded.last4`,
-    ).run(`key_seed_${t.id}`, t.id, displayPrefix(t.apiKey), t.apiKey.slice(-4), hashKey(t.apiKey),
-      JSON.stringify(["support.answer", "chat.completions", "usage.read"]), Date.now());
+    ).run(
+      `key_seed_${t.id}`,
+      t.id,
+      displayPrefix(t.apiKey),
+      t.apiKey.slice(-4),
+      hashKey(t.apiKey),
+      JSON.stringify(["support.answer", "chat.completions", "usage.read"]),
+      Date.now(),
+    );
   }
   // users are created once; an existing account keeps its password (hashing is deliberately slow)
   const userExists = db.prepare("SELECT 1 FROM users WHERE id = ? OR email = ?");

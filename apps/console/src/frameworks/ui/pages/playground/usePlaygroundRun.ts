@@ -34,13 +34,25 @@ export function usePlaygroundRun() {
 
   const busy = turns.some((turn) => turn.streaming);
   const current = turns.find((turn) => turn.id === selectedId) ?? turns[turns.length - 1];
-  const updateTurn = (id: number, change: (turn: Turn) => Turn) => setTurns((all) => all.map((turn) => (turn.id === id ? change(turn) : turn)));
+  const updateTurn = (id: number, change: (turn: Turn) => Turn) =>
+    setTurns((all) => all.map((turn) => (turn.id === id ? change(turn) : turn)));
 
   async function send(run: RunRequest) {
     const id = Date.now();
     const turn: Turn = {
-      id, endpoint: run.endpoint, stream: run.stream, raw: "", system: run.system, question: run.question, tenant: run.tenant,
-      answer: "", attempts: [], reasoning: [], trace: [], streaming: true, settings: run.settings,
+      id,
+      endpoint: run.endpoint,
+      stream: run.stream,
+      raw: "",
+      system: run.system,
+      question: run.question,
+      tenant: run.tenant,
+      answer: "",
+      attempts: [],
+      reasoning: [],
+      trace: [],
+      streaming: true,
+      settings: run.settings,
     };
     setTurns((all) => [...all, turn]);
     setSelectedId(id);

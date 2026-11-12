@@ -14,7 +14,8 @@ import { parseBody } from "./specs.js";
 export function mountAdmin(app: Express, deps: GatewayDeps, cfg: HttpSettings) {
   const adminAuth = (req: Request, _res: Response, next: NextFunction) => {
     const tok = req.header("x-admin-token") ?? bearer(req);
-    if (!tok || !safeEq(tok, cfg.adminToken)) return next(new GatewayError(401, "invalid_admin_token", "Admin token required."));
+    if (!tok || !safeEq(tok, cfg.adminToken))
+      return next(new GatewayError(401, "invalid_admin_token", "Admin token required."));
     next();
   };
   const tenantParam = (req: Request) => (req.query.tenant ? String(req.query.tenant) : undefined);

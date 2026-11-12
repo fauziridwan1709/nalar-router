@@ -42,7 +42,8 @@ export function securityHeaders(cfg: HttpSettings) {
 export const isSecure = (req: Request, cfg: HttpSettings) => cfg.auth.forceSecureCookies || req.secure;
 
 /** `__Host-` pins the cookie to this exact host over HTTPS; plain HTTP (local dev) can't use the prefix */
-export const sessionCookieName = (req: Request, cfg: HttpSettings) => (isSecure(req, cfg) ? "__Host-nalar_sid" : "nalar_sid");
+export const sessionCookieName = (req: Request, cfg: HttpSettings) =>
+  isSecure(req, cfg) ? "__Host-nalar_sid" : "nalar_sid";
 
 export function readCookie(req: Request, name: string): string | null {
   const header = req.header("cookie");
@@ -73,7 +74,10 @@ export function setSessionCookie(req: Request, res: Response, cfg: HttpSettings,
 }
 
 export function clearSessionCookie(req: Request, res: Response, cfg: HttpSettings) {
-  res.append("set-cookie", `${sessionCookieName(req, cfg)}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${isSecure(req, cfg) ? "; Secure" : ""}`);
+  res.append(
+    "set-cookie",
+    `${sessionCookieName(req, cfg)}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${isSecure(req, cfg) ? "; Secure" : ""}`,
+  );
 }
 
 /**

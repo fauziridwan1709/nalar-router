@@ -41,7 +41,11 @@ export const config = {
     /** creates one operator account at boot (outside demo mode this is the only way in) */
     bootstrapOperator:
       env.BOOTSTRAP_OPERATOR_EMAIL && env.BOOTSTRAP_OPERATOR_PASSWORD
-        ? { email: env.BOOTSTRAP_OPERATOR_EMAIL, password: env.BOOTSTRAP_OPERATOR_PASSWORD, tenantId: env.BOOTSTRAP_OPERATOR_TENANT ?? "eval" }
+        ? {
+            email: env.BOOTSTRAP_OPERATOR_EMAIL,
+            password: env.BOOTSTRAP_OPERATOR_PASSWORD,
+            tenantId: env.BOOTSTRAP_OPERATOR_TENANT ?? "eval",
+          }
         : null,
   },
 

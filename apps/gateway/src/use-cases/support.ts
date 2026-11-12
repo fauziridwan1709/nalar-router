@@ -27,7 +27,12 @@ import { buildSupportMessages, type PromptVersion } from "../entities/support/pr
 import { SupportOutputParser } from "../entities/support/parser.js";
 import type { RetrievalResult } from "../entities/support/retrieval.js";
 import { confidenceOf, type Confidence } from "../entities/support/confidence.js";
-import { buildSlots, fillablePlaceholders, PlaceholderRenderer, type SlotValue } from "../entities/support/placeholders.js";
+import {
+  buildSlots,
+  fillablePlaceholders,
+  PlaceholderRenderer,
+  type SlotValue,
+} from "../entities/support/placeholders.js";
 import type { RunContext, RunResult } from "./capability.js";
 export type { RunResult };
 export { confidenceOf };
@@ -87,21 +92,42 @@ export function prepareSupport(deps: AppDeps, tenant: Tenant, input: SupportInpu
   // through the same renderer, so the provider never sees them but the customer still does
   const slots = buildSlots(input.message, tenant.profile ?? {});
   for (const [slot, value] of scan?.readBack ?? []) slots.set(slot, { value, source: "pii" });
-  const fillable = [...new Set([...fillablePlaceholders(contextHits.map((h) => h.entry.answer), slots), ...(scan?.findings.map((f) => f.slot) ?? [])])].sort();
+  const fillable = [
+    ...new Set([
+      ...fillablePlaceholders(
+        contextHits.map((h) => h.entry.answer),
+        slots,
+      ),
+      ...(scan?.findings.map((f) => f.slot) ?? []),
+    ]),
+  ].sort();
   const messages = buildSupportMessages(input.promptVersion, modelText, contextHits, deps.intents, fillable);
   const estimatedPromptTokens = messages.reduce((n, m) => n + estimateTokens(m.content) + 4, 2);
   const support = deps.config.support;
   const routeSignals: RouteSignals = {
-    queryTokens: estimateTokens(modelText), text: modelText, retrievalTopShare: retrieval.topShare, hint: input.model, cascadeCapable: true,
+    queryTokens: estimateTokens(modelText),
+    text: modelText,
+    retrievalTopShare: retrieval.topShare,
+    hint: input.model,
+    cascadeCapable: true,
     // the prompt (instructions + KB context + message) and the answer budget must fit the model's window
     context: { promptTokens: estimatedPromptTokens, completionTokens: answerBudget(support, !!input.includeReasoning) },
   };
   const plan = planRoute(deps.backends, tenant, routeSignals, deps.config.routing);
   return {
-    retrieval, plan, tenant, routeSignals, messages, estimatedPromptTokens,
+    retrieval,
+    plan,
+    tenant,
+    routeSignals,
+    messages,
+    estimatedPromptTokens,
     includeReasoning: !!input.includeReasoning,
     slots: input.placeholders === "raw" ? null : slots,
-    pii: { mode: policy.mode, findings: scan?.findings ?? [], summary: scan?.findings.length ? summarizeCounts(scan.counts) : null },
+    pii: {
+      mode: policy.mode,
+      findings: scan?.findings ?? [],
+      summary: scan?.findings.length ? summarizeCounts(scan.counts) : null,
+    },
   };
 }
 
@@ -122,15 +148,30 @@ export async function runSupport(deps: AppDeps, prepared: Prepared, ctx: RunCont
   const gate = scopeGate(prepared.retrieval, settings);
   sink.emit("step", { name: "scope_gate", passed: !gate.refuse, detail: gate.detail });
   if (gate.refuse) {
-    sink.emit("refusal", { reason: "out_of_scope", message: OUT_OF_SCOPE_MESSAGE, coverage: round3(prepared.retrieval.coverage) });
+    sink.emit("refusal", {
+      reason: "out_of_scope",
+      message: OUT_OF_SCOPE_MESSAGE,
+      coverage: round3(prepared.retrieval.coverage),
+    });
     return {
-      outcome: "refused_out_of_scope", httpStatus: 200, attempts: [], routeReason: routeEvent(prepared.plan),
-      intent: null, confidence: round3(prepared.retrieval.coverage), latencyMs: Date.now() - ctx.startedAt,
+      outcome: "refused_out_of_scope",
+      httpStatus: 200,
+      attempts: [],
+      routeReason: routeEvent(prepared.plan),
+      intent: null,
+      confidence: round3(prepared.retrieval.coverage),
+      latencyMs: Date.now() - ctx.startedAt,
     };
   }
 
   // auto-smart: classify (metered as attempt 0), then route on the verdict; other modes pass through
-  const { plan, attempts: routeAttempts } = await resolveRoute(deps, prepared.tenant, prepared.routeSignals, prepared.plan, ctx);
+  const { plan, attempts: routeAttempts } = await resolveRoute(
+    deps,
+    prepared.tenant,
+    prepared.routeSignals,
+    prepared.plan,
+    ctx,
+  );
   if (prepared.plan.needsClassifier) {
     for (const attempt of routeAttempts) sink.emit("attempt", attemptEvent(attempt));
     sink.emit("route", routeEvent(plan));
@@ -147,7 +188,9 @@ export async function runSupport(deps: AppDeps, prepared: Prepared, ctx: RunCont
     clientSignal: ctx.clientSignal,
     includeReasoning: prepared.includeReasoning,
     // the extractive backend answers with the best-matching KB entry
-    hints: topEntry ? { extractive: { intent: topEntry.intent, answer: topEntry.answer, confidence: prepared.retrieval.topShare } } : undefined,
+    hints: topEntry
+      ? { extractive: { intent: topEntry.intent, answer: topEntry.answer, confidence: prepared.retrieval.topShare } }
+      : undefined,
     onReasoning: (r) => sink.emit("reasoning", r),
     onAttemptStart: (a) => sink.emit("attempt", { ...a, status: "started" }),
     onAttemptEnd: (a) => sink.emit("attempt", attemptEvent(a)),
@@ -173,9 +216,11 @@ function emitGuardrailStep(sink: EventSink, pii: Prepared["pii"]) {
     mode: pii.mode,
     masked: pii.findings.map((f) => ({ type: f.type, label: PII_LABEL[f.type], placeholder: `{{${f.slot}}}` })),
     detail:
-      pii.mode === "off" ? "PII guardrail is off for this tenant"
-      : count ? `masked ${count} value${count === 1 ? "" : "s"} before retrieval and the model`
-      : "no personal data found",
+      pii.mode === "off"
+        ? "PII guardrail is off for this tenant"
+        : count
+          ? `masked ${count} value${count === 1 ? "" : "s"} before retrieval and the model`
+          : "no personal data found",
   });
 }
 
@@ -185,7 +230,11 @@ function emitRetrieval(sink: EventSink, retrieval: RetrievalResult, contextK: nu
     topIntent: retrieval.topIntent,
     votes: retrieval.votes.slice(0, 5).map((v) => ({ intent: v.intent, share: round3(v.share) })),
     entries: retrieval.hits.slice(0, contextK).map((h) => ({
-      id: h.entry.id, intent: h.entry.intent, score: round3(h.score), question: h.entry.question, answer: h.entry.answer,
+      id: h.entry.id,
+      intent: h.entry.intent,
+      score: round3(h.score),
+      question: h.entry.question,
+      answer: h.entry.answer,
     })),
   });
 }
@@ -202,7 +251,10 @@ function scopeGate(retrieval: RetrievalResult, settings: SupportSettings): { ref
     return { refuse: false, detail: `long message (${terms} terms): lexical gate skipped, model decides scope` };
   }
   if (retrieval.coverage < settings.minCoverage) {
-    return { refuse: true, detail: `short message (${terms} terms) with coverage ${coverage} < ${settings.minCoverage}: refuse without a model call` };
+    return {
+      refuse: true,
+      detail: `short message (${terms} terms) with coverage ${coverage} < ${settings.minCoverage}: refuse without a model call`,
+    };
   }
   return { refuse: false, detail: `coverage ${coverage} ≥ ${settings.minCoverage}: in scope` };
 }
@@ -342,7 +394,9 @@ class SupportAttempt {
     if (!filled.length) return;
     this.sink.emit("step", {
       name: "placeholders_rendered",
-      detail: filled.map((f) => `{{${f.name}}} → ${f.source === "pii" ? "restored" : `"${f.value}"`} (${f.source})`).join("; "),
+      detail: filled
+        .map((f) => `{{${f.name}}} → ${f.source === "pii" ? "restored" : `"${f.value}"`} (${f.source})`)
+        .join("; "),
       // restored personal data goes to the answer only, never into trace events or logs
       slots: filled.map((f) => (f.source === "pii" ? { ...f, value: "(restored in the answer)" } : f)),
     });
@@ -379,10 +433,15 @@ function toRunResult(
   }
 
   const failure = failureOf(result.error, result.committed);
-  const message = failure.code === "all_backends_failed" ? "All model backends failed or returned unusable output." : failure.message;
+  const message =
+    failure.code === "all_backends_failed" ? "All model backends failed or returned unusable output." : failure.message;
   sink.emit("error", { code: failure.code, message, partial: result.committed });
   return {
-    ...common, outcome: failure.outcome, httpStatus: failure.httpStatus, ttftMs, errorCode: failure.code,
+    ...common,
+    outcome: failure.outcome,
+    httpStatus: failure.httpStatus,
+    ttftMs,
+    errorCode: failure.code,
     errorMessage: result.error.message + (answer.chars ? ` (after ${answer.chars} chars streamed)` : ""),
   };
 }

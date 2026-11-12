@@ -86,7 +86,8 @@ export function summarize(attempts: AttemptRecord[]): MeterSummary {
   const promptTokens = attempts.reduce((n, a) => n + a.promptTokens, 0);
   const completionTokens = attempts.reduce((n, a) => n + a.completionTokens, 0);
   const sources = new Set(attempts.filter((a) => a.usageSource !== "none").map((a) => a.usageSource));
-  const usageSource = sources.size === 0 ? "none" : sources.size > 1 ? "mixed" : ([...sources][0] as "provider" | "estimated");
+  const usageSource =
+    sources.size === 0 ? "none" : sources.size > 1 ? "mixed" : ([...sources][0] as "provider" | "estimated");
   return {
     promptTokens,
     completionTokens,
@@ -98,4 +99,3 @@ export function summarize(attempts: AttemptRecord[]): MeterSummary {
     fallbackUsed: attempts.filter((a) => a.outcome !== "classified" && a.outcome !== "escalated").length > 1,
   };
 }
-

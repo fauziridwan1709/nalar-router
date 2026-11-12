@@ -64,14 +64,22 @@ async function classify(
   const abort = new AbortController();
   const onAbort = () => abort.abort(new BackendError("aborted", "client disconnected", false));
   ctx.clientSignal.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(() => abort.abort(new BackendError("timeout_total", `no verdict within ${settings.timeoutMs} ms`)), settings.timeoutMs);
+  const timer = setTimeout(
+    () => abort.abort(new BackendError("timeout_total", `no verdict within ${settings.timeoutMs} ms`)),
+    settings.timeoutMs,
+  );
 
   let out = "";
   let reasoned = "";
   let reported = null as { promptTokens: number; completionTokens: number } | null;
   let failure: BackendError | null = null;
   try {
-    for await (const chunk of backend.stream({ messages, maxTokens: settings.maxTokens, temperature: 0, signal: abort.signal })) {
+    for await (const chunk of backend.stream({
+      messages,
+      maxTokens: settings.maxTokens,
+      temperature: 0,
+      signal: abort.signal,
+    })) {
       if (chunk.type === "text") out += chunk.text;
       else if (chunk.type === "reasoning") reasoned += chunk.text;
       else reported = { promptTokens: chunk.promptTokens, completionTokens: chunk.completionTokens };
@@ -97,8 +105,13 @@ async function classify(
     reasoned,
   });
   const attempt: AttemptRecord = {
-    seq: 0, backend: backend.config.id, model: backend.config.model, startedAt: started,
-    outcome: "classified", error: error ?? undefined, latencyMs,
+    seq: 0,
+    backend: backend.config.id,
+    model: backend.config.model,
+    startedAt: started,
+    outcome: "classified",
+    error: error ?? undefined,
+    latencyMs,
     ...usage,
     costUsd: costOf(backend, usage.promptTokens, usage.completionTokens),
   };

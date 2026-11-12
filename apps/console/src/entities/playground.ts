@@ -3,8 +3,17 @@
  * same events always produce the same turn, whether they arrived streamed or from a JSON body.
  */
 import type {
-  AttemptEvent, DoneEvent, EventPayloads, FilledSlot, GatewayEvent, IntentEvent, MetaEvent, RefusalEvent,
-  RetrievalEvent, RouteEvent, StepEvent,
+  AttemptEvent,
+  DoneEvent,
+  EventPayloads,
+  FilledSlot,
+  GatewayEvent,
+  IntentEvent,
+  MetaEvent,
+  RefusalEvent,
+  RetrievalEvent,
+  RouteEvent,
+  StepEvent,
 } from "./events";
 import { fmtMs, fmtN, fmtUsd, humanize } from "./format";
 import type { PlaygroundEndpoint } from "./models";
@@ -18,7 +27,9 @@ export interface FirstTokenEntry {
 type TracedPayloads = Omit<EventPayloads, "token" | "reasoning"> & { first_token: FirstTokenEntry };
 
 /** one line of the trace timeline: an event and the server-side time it happened */
-export type TraceEntry = { [Name in keyof TracedPayloads]: { event: Name; t: number; data: TracedPayloads[Name] } }[keyof TracedPayloads];
+export type TraceEntry = {
+  [Name in keyof TracedPayloads]: { event: Name; t: number; data: TracedPayloads[Name] };
+}[keyof TracedPayloads];
 
 export interface TurnError {
   code: string;
@@ -102,7 +113,11 @@ function appendReasoning(blocks: Turn["reasoning"], chunk: EventPayloads["reason
 /** adds the first-token line at the gateway's measured time to first token, in time order */
 function withFirstToken(trace: TraceEntry[], done: DoneEvent): TraceEntry[] {
   if (done.ttftMs == null) return trace;
-  const firstToken: TraceEntry = { event: "first_token", t: done.ttftMs, data: { ttftMs: done.ttftMs, backend: done.backend } };
+  const firstToken: TraceEntry = {
+    event: "first_token",
+    t: done.ttftMs,
+    data: { ttftMs: done.ttftMs, backend: done.backend },
+  };
   return [...trace, firstToken].sort((a, b) => a.t - b.t);
 }
 
@@ -132,7 +147,9 @@ export function describeStep(step: StepEvent): string {
 export function describeTraceEntry(entry: TraceEntry): string {
   switch (entry.event) {
     case "meta": {
-      const budget = entry.data.admission ? `, up to ${fmtN(entry.data.admission.maxCompletionTokens)} completion tokens` : "";
+      const budget = entry.data.admission
+        ? `, up to ${fmtN(entry.data.admission.maxCompletionTokens)} completion tokens`
+        : "";
       return `authenticated; quota admitted${budget}`;
     }
     case "route":
@@ -192,12 +209,30 @@ export function traceTone(entry: TraceEntry): Tone {
 }
 
 /** on the trace, a classifier call or a refusal isn't a failure; a cascade escalation is worth noticing */
-const ATTEMPT_TRACE_TONE: Record<string, Tone> = { started: "", ok: "", classified: "", refused: "", escalated: "warn" };
+const ATTEMPT_TRACE_TONE: Record<string, Tone> = {
+  started: "",
+  ok: "",
+  classified: "",
+  refused: "",
+  escalated: "warn",
+};
 
-const ATTEMPT_TONE: Record<string, Tone> = { ok: "good", started: "", classified: "", refused: "warn", escalated: "warn" };
+const ATTEMPT_TONE: Record<string, Tone> = {
+  ok: "good",
+  started: "",
+  classified: "",
+  refused: "warn",
+  escalated: "warn",
+};
 /** an attempt's status tag: anything not listed is a failure */
 export const attemptTone = (status: string): Tone => ATTEMPT_TONE[status] ?? "bad";
 
-const SLOT_TONE: Record<FilledSlot["source"], Tone> = { fallback: "warn", message: "good", pii: "pii", profile: "", ui_label: "" };
+const SLOT_TONE: Record<FilledSlot["source"], Tone> = {
+  fallback: "warn",
+  message: "good",
+  pii: "pii",
+  profile: "",
+  ui_label: "",
+};
 /** a filled placeholder's source tag */
 export const slotTone = (source: FilledSlot["source"]): Tone => SLOT_TONE[source] ?? "";

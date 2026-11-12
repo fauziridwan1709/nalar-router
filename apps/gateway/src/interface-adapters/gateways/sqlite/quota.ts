@@ -66,7 +66,16 @@ export function admit(db: DB, tenant: Tenant, input: AdmitInput, now = Date.now(
       db.prepare(
         `INSERT INTO requests (id, tenant_id, endpoint, created_at, finished_at, outcome, http_status, error_code, error_message, counts_against_quota, prompt_version, credential)
          VALUES (?, ?, ?, ?, ?, 'quota_exceeded', 429, 'quota_exceeded', ?, 0, ?, ?)`,
-      ).run(input.requestId, tenant.id, input.endpoint, now, now, denial.message, input.promptVersion ?? null, input.credential ?? null);
+      ).run(
+        input.requestId,
+        tenant.id,
+        input.endpoint,
+        now,
+        now,
+        denial.message,
+        input.promptVersion ?? null,
+        input.credential ?? null,
+      );
       db.exec("COMMIT");
       began = false;
       throw new GatewayError(429, "quota_exceeded", denial.message, {

@@ -7,14 +7,31 @@ import { useId, useState, type ReactNode } from "react";
 import { Selector } from "@astryxdesign/core/Selector";
 import { useToast } from "@astryxdesign/core/Toast";
 import {
-  Activity, BarChart3, Boxes, Check, CircleAlert, CircleCheck, CircleMinus, CircleX, Coins, Copy, FlaskConical, Gauge, House, KeyRound,
-  ListTree, MessageSquareText, ScrollText, ServerCog, ShieldCheck, Users, type LucideIcon,
+  Activity,
+  BarChart3,
+  Boxes,
+  Check,
+  CircleAlert,
+  CircleCheck,
+  CircleMinus,
+  CircleX,
+  Coins,
+  Copy,
+  FlaskConical,
+  Gauge,
+  House,
+  KeyRound,
+  ListTree,
+  MessageSquareText,
+  ScrollText,
+  ServerCog,
+  ShieldCheck,
+  Users,
+  type LucideIcon,
 } from "lucide-react";
 import type { Group } from "../../../entities/models";
 import { groupOf } from "../../../entities/outcomes";
 import { humanize } from "../../../entities/format";
-
-
 
 /** outcome groups use the reserved status palette, always with an icon + a text label */
 export const GROUP: Record<Group, { label: string; color: string; Icon: LucideIcon }> = {
@@ -53,9 +70,12 @@ export function Outcome({ outcome }: { outcome: string }) {
 
 /** attempt outcome → hop style; anything not listed is a failure (struck through) */
 const HOP_CLASS: Record<string, string> = {
-  ok: "ok", skipped_circuit_open: "skip", refused: "refused",
+  ok: "ok",
+  skipped_circuit_open: "skip",
+  refused: "refused",
   // routing steps, not failures: auto-smart's classifier call and an auto-cascade escalation
-  classified: "router", escalated: "escalated",
+  classified: "router",
+  escalated: "escalated",
 };
 
 /** the attempt trail of one request: failed hops struck through, the serving hop outlined */
@@ -70,10 +90,7 @@ export function RouteStrip({ trail }: { trail: string | null | undefined }) {
       {hops.map((h, i) => (
         <span key={i} style={{ display: "contents" }}>
           {i > 0 && <span className="arrow">›</span>}
-          <span
-            className={`hop ${HOP_CLASS[h.outcome] ?? "fail"}`}
-            title={`${h.backend}: ${humanize(h.outcome)}`}
-          >
+          <span className={`hop ${HOP_CLASS[h.outcome] ?? "fail"}`} title={`${h.backend}: ${humanize(h.outcome)}`}>
             {h.backend}
           </span>
         </span>
@@ -91,7 +108,17 @@ export interface Option {
 
 /** the Astryx Selector, with the props this console uses */
 export function Select({
-  label, value, onChange, options, hideLabel = true, size = "sm", width, search, variant = "input", tour, disabled,
+  label,
+  value,
+  onChange,
+  options,
+  hideLabel = true,
+  size = "sm",
+  width,
+  search,
+  variant = "input",
+  tour,
+  disabled,
 }: {
   label: string;
   value: string;
@@ -123,7 +150,15 @@ export function Select({
   );
 }
 
-export function CopyButton({ text, label = "Copy", what = "Copied to clipboard" }: { text: string; label?: string; what?: string }) {
+export function CopyButton({
+  text,
+  label = "Copy",
+  what = "Copied to clipboard",
+}: {
+  text: string;
+  label?: string;
+  what?: string;
+}) {
   const toast = useToast();
   const [done, setDone] = useState(false);
   return (
@@ -147,7 +182,17 @@ export function CopyButton({ text, label = "Copy", what = "Copied to clipboard" 
   );
 }
 
-export function Empty({ icon: I, title, children, action }: { icon?: LucideIcon; title: string; children?: ReactNode; action?: ReactNode }) {
+export function Empty({
+  icon: I,
+  title,
+  children,
+  action,
+}: {
+  icon?: LucideIcon;
+  title: string;
+  children?: ReactNode;
+  action?: ReactNode;
+}) {
   return (
     <div className="empty">
       {I && (
@@ -162,7 +207,6 @@ export function Empty({ icon: I, title, children, action }: { icon?: LucideIcon;
   );
 }
 
-
 /** the mark: one input fanning out to three backends, on the brand-orange gradient */
 export function Logo({ size = 22 }: { size?: number }) {
   const id = `nlg${useId().replace(/[^\w-]/g, "")}`; // several logos can be on screen at once; gradient ids must not collide
@@ -175,7 +219,13 @@ export function Logo({ size = 22 }: { size?: number }) {
         </linearGradient>
       </defs>
       <rect width="28" height="28" rx="8" fill={`url(#${id})`} />
-      <path d="M7 14h5M15 14c3 0 3-6 6-6M15 14c3 0 3 6 6 6M15 14h6" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+      <path
+        d="M7 14h5M15 14c3 0 3-6 6-6M15 14c3 0 3 6 6 6M15 14h6"
+        stroke="#fff"
+        strokeWidth="1.8"
+        fill="none"
+        strokeLinecap="round"
+      />
       <circle cx="13.5" cy="14" r="2" fill="#fff" />
     </svg>
   );

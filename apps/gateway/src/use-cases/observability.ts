@@ -6,8 +6,10 @@ import { isOperator, redactRequest, type Actor } from "./access.js";
 import type { GatewayDeps } from "./deps.js";
 
 export function dashboardMetrics(deps: GatewayDeps, range: string, opts: { tenantId?: string; backend?: string }) {
-  if (!isRangeKey(range)) throw new GatewayError(400, "invalid_request", `range must be one of ${Object.keys(RANGES).join(", ")}`);
-  if (opts.backend && !deps.backends.some((b) => b.config.id === opts.backend)) throw new GatewayError(400, "invalid_request", "Unknown backend.");
+  if (!isRangeKey(range))
+    throw new GatewayError(400, "invalid_request", `range must be one of ${Object.keys(RANGES).join(", ")}`);
+  if (opts.backend && !deps.backends.some((b) => b.config.id === opts.backend))
+    throw new GatewayError(400, "invalid_request", "Unknown backend.");
   return deps.reporting.metrics(range, opts);
 }
 
@@ -20,9 +22,16 @@ export function requestLog(deps: GatewayDeps, user: User | null, opts: { tenantI
 /** one request with its attempts; operators reading another tenant's request leave an audit entry */
 export function requestDetailFor(deps: GatewayDeps, actor: Actor, id: string) {
   const d = /^req_[a-z0-9]{1,40}$/.test(id) ? deps.reporting.requestDetail(id) : null;
-  if (!d || (!isOperator(actor.user) && d.tenant_id !== actor.user.tenantId)) throw new GatewayError(404, "not_found", "Request not found.");
+  if (!d || (!isOperator(actor.user) && d.tenant_id !== actor.user.tenantId))
+    throw new GatewayError(404, "not_found", "Request not found.");
   if (d.tenant_id !== actor.user.tenantId) {
-    deps.audit.record({ tenantId: d.tenant_id, actor: actor.user, action: "data.cross_tenant_read", target: id, ip: actor.ip });
+    deps.audit.record({
+      tenantId: d.tenant_id,
+      actor: actor.user,
+      action: "data.cross_tenant_read",
+      target: id,
+      ip: actor.ip,
+    });
   }
   return redactRequest(actor.user, d);
 }
@@ -30,7 +39,8 @@ export function requestDetailFor(deps: GatewayDeps, actor: Actor, id: string) {
 /** for an API key (its own tenant only) or the admin token (any tenant: `tenantId` undefined) */
 export function requestDetail(deps: GatewayDeps, id: string, tenantId?: string) {
   const d = deps.reporting.requestDetail(id);
-  if (!d || (tenantId !== undefined && d.tenant_id !== tenantId)) throw new GatewayError(404, "not_found", "Request not found.");
+  if (!d || (tenantId !== undefined && d.tenant_id !== tenantId))
+    throw new GatewayError(404, "not_found", "Request not found.");
   return d;
 }
 

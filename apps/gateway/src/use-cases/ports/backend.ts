@@ -1,7 +1,6 @@
 import type { BackendConfig, ChatMessage } from "../../entities/types.js";
 export type { ChatMessage };
 
-
 export interface Sampling {
   top_p?: number;
   stop?: string | string[];

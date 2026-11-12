@@ -19,11 +19,15 @@ gw.health.start();
 const server = app.listen(config.port, (err?: Error) => {
   if (err) return;
   const enabled = gw.backends.filter((b) => b.config.enabled).map((b) => `${b.config.id}(${b.config.model})`);
-  console.log(`nalar-router on :${config.port} | backends: ${enabled.join(", ")} | KB ${gw.kb.entries.length} entries | demo=${config.demoMode}`);
+  console.log(
+    `nalar-router on :${config.port} | backends: ${enabled.join(", ")} | KB ${gw.kb.entries.length} entries | demo=${config.demoMode}`,
+  );
 });
 server.on("error", (err: NodeJS.ErrnoException) => {
   console.error(
-    err.code === "EADDRINUSE" ? `port ${config.port} is already in use; stop the other process or set PORT` : "server failed to start",
+    err.code === "EADDRINUSE"
+      ? `port ${config.port} is already in use; stop the other process or set PORT`
+      : "server failed to start",
     err.code === "EADDRINUSE" ? "" : err,
   );
   process.exit(1);

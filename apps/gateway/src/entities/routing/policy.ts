@@ -35,7 +35,11 @@ import { contextLengthExceeded, fitsContext, type ContextNeed } from "./context.
 
 /** heuristic = `auto`; the model names are what callers send */
 export type AutoMode = "heuristic" | "smart" | "cascade";
-export const AUTO_MODELS: Record<string, AutoMode> = { auto: "heuristic", "auto-smart": "smart", "auto-cascade": "cascade" };
+export const AUTO_MODELS: Record<string, AutoMode> = {
+  auto: "heuristic",
+  "auto-smart": "smart",
+  "auto-cascade": "cascade",
+};
 export const isAutoModel = (m: string | undefined) => m === undefined || m in AUTO_MODELS;
 
 export interface RouteSignals {
@@ -122,9 +126,14 @@ export function planRoute<B extends RoutableBackend>(
   // the text itself isn't kept: route reasons are stored and shown, and the text may be long
   const { text: _text, cascadeCapable: _cascadeCapable, ...kept } = signals;
   const candidates: Candidates<B> = {
-    enabled, allowed, usable, tooSmall,
+    enabled,
+    allowed,
+    usable,
+    tooSmall,
     inOrder: (tiers) => tiers.flatMap((t) => usable.filter((b) => b.config.tier === t)),
-    contextNote: tooSmall.length ? `; skipped ${tooSmall.map((b) => b.config.id).join(", ")} (context window too small)` : "",
+    contextNote: tooSmall.length
+      ? `; skipped ${tooSmall.map((b) => b.config.id).join(", ")} (context window too small)`
+      : "",
     signals: { ...kept, allowedTiers: tenant.allowedTiers },
   };
 
@@ -141,12 +150,21 @@ export function planRoute<B extends RoutableBackend>(
  * The caller named a backend or a tier: try it first, then fall back in the default order.
  * Unknown, off-plan or too-small choices are errors, never a silent switch to another model.
  */
-function planPinned<B extends RoutableBackend>(hint: string, c: Candidates<B>, tenant: Tenant, need: RouteSignals["context"]): RoutePlan<B> {
+function planPinned<B extends RoutableBackend>(
+  hint: string,
+  c: Candidates<B>,
+  tenant: Tenant,
+  need: RouteSignals["context"],
+): RoutePlan<B> {
   const byId = c.enabled.find((b) => b.config.id === hint);
   const wanted = byId ? [byId] : c.enabled.filter((b) => b.config.tier === hint);
   if (!wanted.length) {
     throw new GatewayError(400, "unknown_model", `Unknown or disabled model/tier "${hint}".`, {
-      available: [...Object.keys(AUTO_MODELS), ...new Set(c.enabled.map((b) => b.config.tier)), ...c.enabled.map((b) => b.config.id)],
+      available: [
+        ...Object.keys(AUTO_MODELS),
+        ...new Set(c.enabled.map((b) => b.config.tier)),
+        ...c.enabled.map((b) => b.config.id),
+      ],
     });
   }
   const onPlan = wanted.filter((b) => tenant.allowedTiers.includes(b.config.tier));
@@ -171,13 +189,23 @@ function planPinned<B extends RoutableBackend>(hint: string, c: Candidates<B>, t
 }
 
 /** auto, auto-smart and auto-cascade: fast first, or strong first when the request looks hard */
-function planAuto<B extends RoutableBackend>(c: Candidates<B>, tenant: Tenant, signals: RouteSignals, opts: RouteOptions): RoutePlan<B> {
+function planAuto<B extends RoutableBackend>(
+  c: Candidates<B>,
+  tenant: Tenant,
+  signals: RouteSignals,
+  opts: RouteOptions,
+): RoutePlan<B> {
   const sig = c.signals;
   const order = c.inOrder;
   const usable = c.usable;
   const contextNote = c.contextNote;
   const complexity = assessComplexity(
-    { text: signals.text ?? "", queryTokens: signals.queryTokens, turns: signals.turns, retrievalTopShare: signals.retrievalTopShare },
+    {
+      text: signals.text ?? "",
+      queryTokens: signals.queryTokens,
+      turns: signals.turns,
+      retrievalTopShare: signals.retrievalTopShare,
+    },
     opts,
   );
   sig.complexity = complexity;
@@ -213,10 +241,21 @@ function planAuto<B extends RoutableBackend>(c: Candidates<B>, tenant: Tenant, s
 
   if (requested === "cascade") {
     if (!signals.cascadeCapable) {
-      return decide("heuristic", "auto", heuristicWantsStrong, heuristic, "auto-cascade needs the support header, so the heuristic routed this: ");
+      return decide(
+        "heuristic",
+        "auto",
+        heuristicWantsStrong,
+        heuristic,
+        "auto-cascade needs the support header, so the heuristic routed this: ",
+      );
     }
     if (!hasStrong) {
-      return decide("cascade", "cascade", false, `no strong tier to escalate to (${planHasStrong ? "none enabled" : `plan "${tenant.plan}"`}), so the cascade stays on fast; ${heuristic}`);
+      return decide(
+        "cascade",
+        "cascade",
+        false,
+        `no strong tier to escalate to (${planHasStrong ? "none enabled" : `plan "${tenant.plan}"`}), so the cascade stays on fast; ${heuristic}`,
+      );
     }
     return {
       chain: order(TIER_ORDER_FAST_FIRST),
@@ -236,13 +275,25 @@ function planAuto<B extends RoutableBackend>(c: Candidates<B>, tenant: Tenant, s
     const c = signals.classifier;
     if (!c) {
       // provisional: the classifier runs after admission, then planRoute is called again with it
-      return { ...decide("smart", "smart", heuristicWantsStrong, heuristic), rule: "smart_pending", needsClassifier: true };
+      return {
+        ...decide("smart", "smart", heuristicWantsStrong, heuristic),
+        rule: "smart_pending",
+        needsClassifier: true,
+      };
     }
     if (c.status === "failed" || c.confidence < opts.classifierMinConfidence) {
-      const why = c.status === "failed" ? `classifier failed (${c.error})` : `classifier unsure (${c.label} at ${c.confidence} < ${opts.classifierMinConfidence})`;
-      return { ...decide("smart", "smart", heuristicWantsStrong, heuristic, `${why}, so the heuristic decided: `), rule: "smart_fallback_heuristic" };
+      const why =
+        c.status === "failed"
+          ? `classifier failed (${c.error})`
+          : `classifier unsure (${c.label} at ${c.confidence} < ${opts.classifierMinConfidence})`;
+      return {
+        ...decide("smart", "smart", heuristicWantsStrong, heuristic, `${why}, so the heuristic decided: `),
+        rule: "smart_fallback_heuristic",
+      };
     }
-    const why = `classifier says ${c.label} (${c.confidence}${c.why ? `, "${c.why}"` : ""})` + (ambiguous ? `; ${ambiguous.id} (${ambiguous.detail})` : "");
+    const why =
+      `classifier says ${c.label} (${c.confidence}${c.why ? `, "${c.why}"` : ""})` +
+      (ambiguous ? `; ${ambiguous.id} (${ambiguous.detail})` : "");
     return decide("smart", "smart", c.label === "complex" || !!ambiguous, why);
   }
 

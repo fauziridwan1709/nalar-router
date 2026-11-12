@@ -4,7 +4,6 @@ import { parsePolicy, type PiiPolicy } from "../../../entities/guardrails/pii.js
 import type { Tenant } from "../../../entities/types.js";
 export type { Tenant };
 
-
 function rowToTenant(r: any): Tenant {
   return {
     id: r.id,

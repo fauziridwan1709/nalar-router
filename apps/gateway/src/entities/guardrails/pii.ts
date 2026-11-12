@@ -102,7 +102,8 @@ interface Detector {
 }
 
 const ID_CONTEXT = /\b(order|purchase|invoice|tracking|track|reference|ref|ticket|case|account no|acct)\b[^\n]{0,20}$/i;
-const PHONE_CONTEXT = /\b(phone|call|text|sms|whats\s?app|wa|tel|telp|hp|mobile|cell|reach me|contact me|number is)\b[^\n]{0,20}$/i;
+const PHONE_CONTEXT =
+  /\b(phone|call|text|sms|whats\s?app|wa|tel|telp|hp|mobile|cell|reach me|contact me|number is)\b[^\n]{0,20}$/i;
 
 const DETECTORS: Detector[] = [
   { type: "email", re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g },
@@ -200,13 +201,17 @@ export function retrievalText(masked: string) {
 
 /** "email:2,card:1" for metering and the audit trail; never the values */
 export const summarizeCounts = (c: Partial<Record<PiiType, number>>) =>
-  Object.entries(c).map(([t, n]) => `${t}:${n}`).join(",");
+  Object.entries(c)
+    .map(([t, n]) => `${t}:${n}`)
+    .join(",");
 
 export function parsePolicy(raw: unknown): PiiPolicy {
   try {
     const p = typeof raw === "string" ? JSON.parse(raw) : raw;
     const mode = (PII_MODES as readonly string[]).includes(p?.mode) ? (p.mode as PiiMode) : DEFAULT_PII_POLICY.mode;
-    const types = Array.isArray(p?.types) ? (p.types as string[]).filter((t): t is PiiType => (PII_TYPES as readonly string[]).includes(t)) : [...PII_TYPES];
+    const types = Array.isArray(p?.types)
+      ? (p.types as string[]).filter((t): t is PiiType => (PII_TYPES as readonly string[]).includes(t))
+      : [...PII_TYPES];
     return { mode, types };
   } catch {
     return { ...DEFAULT_PII_POLICY };

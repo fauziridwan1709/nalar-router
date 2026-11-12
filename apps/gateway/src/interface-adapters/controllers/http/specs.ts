@@ -18,7 +18,11 @@ import { ChatSseSink, chatCompletionJson } from "../../presenters/openaiChat.js"
 
 export const SupportBody = z
   .object({
-    message: z.string().trim().min(1, "message must not be empty").max(LIMITS.supportMessageChars, `message too long (max ${LIMITS.supportMessageChars} chars)`),
+    message: z
+      .string()
+      .trim()
+      .min(1, "message must not be empty")
+      .max(LIMITS.supportMessageChars, `message too long (max ${LIMITS.supportMessageChars} chars)`),
     model: z.string().max(64).optional(),
     prompt_version: z.enum(["v1", "v2", "v3"]).optional(),
     placeholders: z.enum(["fill", "raw"]).optional(),
@@ -40,7 +44,9 @@ const ChatContent = z
       return v.map((p) => p.text as string).join("\n");
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: Array.isArray(v) ? "only text content parts are supported" : "expected a string or an array of text parts",
+      message: Array.isArray(v)
+        ? "only text content parts are supported"
+        : "expected a string or an array of text parts",
     });
     return z.NEVER;
   })
@@ -60,8 +66,14 @@ export const ChatBody = z
       .array(ChatMessageIn)
       .min(1)
       .max(LIMITS.chatMaxMessages)
-      .refine((m) => m.some((x) => x.role === "user" && x.content.trim()), "at least one non-empty user message is required")
-      .refine((m) => m.reduce((n, x) => n + x.content.length, 0) <= LIMITS.chatTotalChars, `conversation too long (max ${LIMITS.chatTotalChars} chars)`),
+      .refine(
+        (m) => m.some((x) => x.role === "user" && x.content.trim()),
+        "at least one non-empty user message is required",
+      )
+      .refine(
+        (m) => m.reduce((n, x) => n + x.content.length, 0) <= LIMITS.chatTotalChars,
+        `conversation too long (max ${LIMITS.chatTotalChars} chars)`,
+      ),
     model: z.string().max(64).optional(),
     /** OpenAI's default: one JSON body unless the caller asks for a stream */
     stream: z.boolean().optional(),
@@ -111,8 +123,13 @@ export function expressTransport(res: Response): CapabilityTransport {
 
 /** binds the use case to the composed dependencies, for the route handlers */
 export function createCapabilityRunner(deps: AppDeps) {
-  return (req: Request, res: Response, endpoint: string, who: { tenant: Tenant; credential: string }, build: (tenant: Tenant) => CapabilitySpec) =>
-    runCapability(deps, expressTransport(res), endpoint, who, build);
+  return (
+    req: Request,
+    res: Response,
+    endpoint: string,
+    who: { tenant: Tenant; credential: string },
+    build: (tenant: Tenant) => CapabilitySpec,
+  ) => runCapability(deps, expressTransport(res), endpoint, who, build);
 }
 
 export type RunCapability = ReturnType<typeof createCapabilityRunner>;

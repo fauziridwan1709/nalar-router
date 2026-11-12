@@ -10,7 +10,10 @@ export function createHttpConsoleApi(): ConsoleApi {
   return {
     auth: {
       async signIn(email, password) {
-        const r = await call<{ user: SessionUser; csrfToken: string }>("/api/auth/login", { method: "POST", json: { email, password } });
+        const r = await call<{ user: SessionUser; csrfToken: string }>("/api/auth/login", {
+          method: "POST",
+          json: { email, password },
+        });
         setCsrf(r.csrfToken);
         return r.user;
       },
@@ -43,13 +46,17 @@ export function createHttpConsoleApi(): ConsoleApi {
     request: (id) => call(`/api/console/requests/${enc(id)}`),
     keys: async (tenant) => (await call<{ keys: ApiKey[] }>(`/api/console/keys${qs({ tenant })}`)).keys,
     createKey: (tenant, body) => call(`/api/console/keys${qs({ tenant })}`, { method: "POST", json: body }),
-    revokeKey: async (id, tenant) => void (await call(`/api/console/keys/${enc(id)}${qs({ tenant })}`, { method: "DELETE" })),
+    revokeKey: async (id, tenant) =>
+      void (await call(`/api/console/keys/${enc(id)}${qs({ tenant })}`, { method: "DELETE" })),
     audit: (tenant) => call(`/api/console/audit${qs({ tenant })}`),
     members: (tenant) => call(`/api/console/members${qs({ tenant })}`),
     governance: (tenant) => call(`/api/console/governance${qs({ tenant })}`),
-    setPiiPolicy: async (tenant, policy) => void (await call(`/api/console/governance/pii${qs({ tenant })}`, { method: "PUT", json: policy })),
-    testPii: (tenant, text) => call(`/api/console/governance/pii/test${qs({ tenant })}`, { method: "POST", json: { text } }),
+    setPiiPolicy: async (tenant, policy) =>
+      void (await call(`/api/console/governance/pii${qs({ tenant })}`, { method: "PUT", json: policy })),
+    testPii: (tenant, text) =>
+      call(`/api/console/governance/pii/test${qs({ tenant })}`, { method: "POST", json: { text } }),
     evals: () => call("/api/console/evals"),
-    playground: (endpoint, body, stream, h, signal) => runPlaygroundRequest(endpoint, body, stream, h.onEvent, h.onRaw, signal),
+    playground: (endpoint, body, stream, h, signal) =>
+      runPlaygroundRequest(endpoint, body, stream, h.onEvent, h.onRaw, signal),
   };
 }

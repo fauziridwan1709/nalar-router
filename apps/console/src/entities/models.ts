@@ -5,9 +5,23 @@
 
 export type Role = "operator" | "owner" | "developer" | "viewer";
 export type Permission =
-  | "dashboard:read" | "requests:read" | "usage:read" | "evals:read" | "backends:read" | "playground:run"
-  | "keys:read" | "keys:create" | "keys:revoke_own" | "keys:revoke_any" | "audit:read" | "tenants:all" | "quota:reset" | "chaos:write"
-  | "governance:read" | "governance:write" | "members:read";
+  | "dashboard:read"
+  | "requests:read"
+  | "usage:read"
+  | "evals:read"
+  | "backends:read"
+  | "playground:run"
+  | "keys:read"
+  | "keys:create"
+  | "keys:revoke_own"
+  | "keys:revoke_any"
+  | "audit:read"
+  | "tenants:all"
+  | "quota:reset"
+  | "chaos:write"
+  | "governance:read"
+  | "governance:write"
+  | "members:read";
 
 export interface SessionUser {
   id: string;
@@ -33,7 +47,14 @@ export type PiiMode = "mask" | "block" | "off";
 export interface ConsoleConfig {
   tenants: ConsoleTenant[];
   /** contextWindow: max tokens in + out per call, or null when the backend has no limit */
-  backends: { id: string; tier: string; model: string; location: string; enabled: boolean; contextWindow: number | null }[];
+  backends: {
+    id: string;
+    tier: string;
+    model: string;
+    location: string;
+    enabled: boolean;
+    contextWindow: number | null;
+  }[];
   intents: string[];
   keyScopes: string[];
   keyExpiryDays: number[];
@@ -75,7 +96,13 @@ export interface BackendStatus {
   model: string;
   enabled: boolean;
   location: string;
-  health?: { label: "online" | "offline"; availability: string; reason?: string; checkedAt: number | null; probeLatencyMs?: number | null };
+  health?: {
+    label: "online" | "offline";
+    availability: string;
+    reason?: string;
+    checkedAt: number | null;
+    probeLatencyMs?: number | null;
+  };
   breaker: { state: string; reopensInMs?: number; lastError?: string | null; consecutiveFailures?: number };
   chaos?: { failRate: number; mode: string; addedLatencyMs: number };
   /** operators only: prices (USD per 1M tokens) and timeouts */
@@ -258,7 +285,13 @@ export interface Governance {
   tenant: { id: string; name: string };
   piiPolicy: { mode: PiiMode; types: string[] };
   piiTypes: { id: string; label: string }[];
-  stats: { windowDays: number; requests: number; requestsWithPii: number; blocked: number; byType: Record<string, number> };
+  stats: {
+    windowDays: number;
+    requests: number;
+    requestsWithPii: number;
+    blocked: number;
+    byType: Record<string, number>;
+  };
   canEdit: boolean;
 }
 
@@ -290,8 +323,16 @@ export interface EvalRun {
 }
 
 export type PlaygroundEndpoint = "support" | "chat";
-export const ENDPOINT_PATH: Record<PlaygroundEndpoint, string> = { support: "/v1/support/answer", chat: "/v1/chat/completions" };
+export const ENDPOINT_PATH: Record<PlaygroundEndpoint, string> = {
+  support: "/v1/support/answer",
+  chat: "/v1/chat/completions",
+};
 
 export type PlaygroundBody =
   | { message: string; model?: string; prompt_version?: string; include_reasoning?: boolean; tenant?: string }
-  | { messages: { role: "system" | "user" | "assistant"; content: string }[]; model?: string; include_reasoning?: boolean; tenant?: string };
+  | {
+      messages: { role: "system" | "user" | "assistant"; content: string }[];
+      model?: string;
+      include_reasoning?: boolean;
+      tenant?: string;
+    };

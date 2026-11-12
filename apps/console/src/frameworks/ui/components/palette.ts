@@ -8,4 +8,5 @@ export const BACKEND_COLOR: Record<string, { color: string; ink: string }> = {
   "no model call": { color: "var(--axis)", ink: "#ffffff" },
 };
 /** tenants get slots by their fixed position in the tenant list, so a filter never repaints them */
-export const tenantColor = (ids: string[], id: string) => ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)"][ids.indexOf(id)] ?? "var(--axis)";
+export const tenantColor = (ids: string[], id: string) =>
+  ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)"][ids.indexOf(id)] ?? "var(--axis)";

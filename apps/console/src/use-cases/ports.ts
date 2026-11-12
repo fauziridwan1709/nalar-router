@@ -4,8 +4,23 @@
  * implements it over HTTP, and tests can pass a fake.
  */
 import type {
-  ApiKey, AuditEntry, BackendStatus, ConsoleConfig, DemoAccount, EvalRun, Governance, Member, Metrics,
-  PiiTestResult, PlaygroundBody, PlaygroundEndpoint, Range, RequestDetail, RequestRow, SessionUser, TenantUsage,
+  ApiKey,
+  AuditEntry,
+  BackendStatus,
+  ConsoleConfig,
+  DemoAccount,
+  EvalRun,
+  Governance,
+  Member,
+  Metrics,
+  PiiTestResult,
+  PlaygroundBody,
+  PlaygroundEndpoint,
+  Range,
+  RequestDetail,
+  RequestRow,
+  SessionUser,
+  TenantUsage,
 } from "../entities/models";
 import { ApiError } from "../entities/errors";
 import type { GatewayEvent } from "../entities/events";
@@ -37,7 +52,10 @@ export interface ConsoleApi {
   requests(q: { limit: number; tenant?: string }): Promise<RequestRow[]>;
   request(id: string): Promise<RequestDetail>;
   keys(tenant?: string): Promise<ApiKey[]>;
-  createKey(tenant: string | undefined, body: { name: string; scopes: string[]; expiresInDays: number | null }): Promise<{ key: ApiKey; secret: string }>;
+  createKey(
+    tenant: string | undefined,
+    body: { name: string; scopes: string[]; expiresInDays: number | null },
+  ): Promise<{ key: ApiKey; secret: string }>;
   revokeKey(id: string, tenant?: string): Promise<void>;
   audit(tenant?: string): Promise<AuditEntry[]>;
   members(tenant?: string): Promise<Member[]>;
@@ -46,5 +64,11 @@ export interface ConsoleApi {
   testPii(tenant: string | undefined, text: string): Promise<PiiTestResult>;
   evals(): Promise<EvalRun[]>;
   /** one playground run, streamed or not; throws ApiError when the gateway refuses it */
-  playground(endpoint: PlaygroundEndpoint, body: PlaygroundBody, stream: boolean, handlers: PlaygroundHandlers, signal?: AbortSignal): Promise<{ status: number }>;
+  playground(
+    endpoint: PlaygroundEndpoint,
+    body: PlaygroundBody,
+    stream: boolean,
+    handlers: PlaygroundHandlers,
+    signal?: AbortSignal,
+  ): Promise<{ status: number }>;
 }

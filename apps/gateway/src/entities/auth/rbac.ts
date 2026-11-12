@@ -31,11 +31,28 @@ export const PERMISSIONS = [
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
-const READ: Permission[] = ["dashboard:read", "requests:read", "usage:read", "evals:read", "backends:read", "governance:read"];
+const READ: Permission[] = [
+  "dashboard:read",
+  "requests:read",
+  "usage:read",
+  "evals:read",
+  "backends:read",
+  "governance:read",
+];
 
 export const GRANTS: Record<Role, readonly Permission[]> = {
   operator: PERMISSIONS,
-  owner: [...READ, "playground:run", "keys:read", "keys:create", "keys:revoke_own", "keys:revoke_any", "audit:read", "governance:write", "members:read"],
+  owner: [
+    ...READ,
+    "playground:run",
+    "keys:read",
+    "keys:create",
+    "keys:revoke_own",
+    "keys:revoke_any",
+    "audit:read",
+    "governance:write",
+    "members:read",
+  ],
   developer: [...READ, "playground:run", "keys:read", "keys:create", "keys:revoke_own"],
   viewer: READ,
 };

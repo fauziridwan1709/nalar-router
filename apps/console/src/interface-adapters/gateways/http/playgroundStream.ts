@@ -22,7 +22,11 @@ export async function runPlaygroundRequest(
   onRaw: (raw: string) => void,
   signal?: AbortSignal,
 ): Promise<{ status: number }> {
-  const res = await request(`/api/console/playground/${endpoint}`, { method: "POST", body: JSON.stringify({ ...body, stream }), signal });
+  const res = await request(`/api/console/playground/${endpoint}`, {
+    method: "POST",
+    body: JSON.stringify({ ...body, stream }),
+    signal,
+  });
   const isSse = res.headers.get("content-type")?.includes("text/event-stream");
   if (!isSse) {
     await readJsonResponse(res, endpoint, onEvent, onRaw);
@@ -32,7 +36,8 @@ export async function runPlaygroundRequest(
 
   const requestId = res.headers.get("x-request-id");
   if (endpoint === "chat" && requestId) onEvent(gatewayEvent("meta", { requestId, t: 0 }));
-  const parseBlock = endpoint === "support" ? (block: string) => parseSupportBlock(block, onEvent) : chatChunkParser(onEvent);
+  const parseBlock =
+    endpoint === "support" ? (block: string) => parseSupportBlock(block, onEvent) : chatChunkParser(onEvent);
   await readSseBlocks(res, parseBlock, onRaw);
   return { status: res.status };
 }
@@ -93,7 +98,10 @@ function chatChunkParser(emit: Emit) {
       const chunk = JSON.parse(payload);
       if (chunk.error) emit(gatewayEvent("error", chunk.error));
       const delta = chunk.choices?.[0]?.delta ?? {};
-      if (delta.reasoning) emit(gatewayEvent("reasoning", { seq: currentAttempt, backend: chunk.x_router_backend, text: delta.reasoning }));
+      if (delta.reasoning)
+        emit(
+          gatewayEvent("reasoning", { seq: currentAttempt, backend: chunk.x_router_backend, text: delta.reasoning }),
+        );
       if (delta.content) emit(gatewayEvent("token", { text: delta.content }));
       if (chunk.x_router) {
         const { trace: _trace, ...done } = chunk.x_router;
@@ -115,11 +123,18 @@ async function readJsonResponse(res: Response, endpoint: PlaygroundEndpoint, emi
   // a run that reached a model (even a failed one) carries its result; anything else is a plain error
   const ran = json && (endpoint === "chat" ? json.x_router : json.requestId);
   if (!json || !ran) {
-    if (res.ok) throw new ApiError(res.status, "bad_response", "The gateway sent a response the console couldn't read.");
-    throw new ApiError(res.status, json?.error?.code ?? "http_error", json?.error?.message ?? "Something went wrong. Try again.", json?.error?.details);
+    if (res.ok)
+      throw new ApiError(res.status, "bad_response", "The gateway sent a response the console couldn't read.");
+    throw new ApiError(
+      res.status,
+      json?.error?.code ?? "http_error",
+      json?.error?.message ?? "Something went wrong. Try again.",
+      json?.error?.details,
+    );
   }
   onRaw(JSON.stringify(json, null, 2));
-  const events = endpoint === "chat" ? chatJsonEvents(json as ChatJsonBody) : supportJsonEvents(json as SupportJsonBody);
+  const events =
+    endpoint === "chat" ? chatJsonEvents(json as ChatJsonBody) : supportJsonEvents(json as SupportJsonBody);
   for (const e of events) emit(e);
 }
 
@@ -157,7 +172,13 @@ interface ChatJsonBody {
   id: string;
   choices?: { message?: { content?: string } }[];
   error?: unknown;
-  x_router: { route?: unknown; attempts?: WireAttempt[]; reasoning?: Record<string, string>; latencyMs: number; [summaryField: string]: unknown };
+  x_router: {
+    route?: unknown;
+    attempts?: WireAttempt[];
+    reasoning?: Record<string, string>;
+    latencyMs: number;
+    [summaryField: string]: unknown;
+  };
 }
 
 const timeOf = (e: GatewayEvent) => ("t" in e.data ? (e.data.t ?? 0) : 0);
@@ -171,7 +192,19 @@ const reasoningEvents = (reasoning: Record<string, string> | undefined, attempts
 
 /** the support JSON body, replayed as the events its stream would have sent */
 function supportJsonEvents(json: SupportJsonBody): GatewayEvent[] {
-  const { attempts = [], answer, refused, refusal, intentDetail, retrieved, route, error, steps = [], reasoning, ...done } = json;
+  const {
+    attempts = [],
+    answer,
+    refused,
+    refusal,
+    intentDetail,
+    retrieved,
+    route,
+    error,
+    steps = [],
+    reasoning,
+    ...done
+  } = json;
   const timed = byTime([
     ...(route ? [gatewayEvent("route", route)] : []),
     ...(retrieved ? [gatewayEvent("retrieval", retrieved)] : []),
@@ -197,7 +230,10 @@ function chatJsonEvents(json: ChatJsonBody): GatewayEvent[] {
   return [
     gatewayEvent("meta", { requestId: json.id, t: 0 }),
     ...reasoningEvents(reasoning, attempts),
-    ...byTime([...(route ? [gatewayEvent("route", route)] : []), ...attempts.map((attempt) => gatewayEvent("attempt", attempt))]),
+    ...byTime([
+      ...(route ? [gatewayEvent("route", route)] : []),
+      ...attempts.map((attempt) => gatewayEvent("attempt", attempt)),
+    ]),
     ...(json.error ? [gatewayEvent("error", json.error)] : []),
     ...(content ? [gatewayEvent("token", { text: content })] : []),
     gatewayEvent("done", { ...done, attempts: attempts.length, t: done.latencyMs }),

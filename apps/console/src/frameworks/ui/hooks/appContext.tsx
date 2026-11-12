@@ -2,7 +2,6 @@ import { createContext, useContext } from "react";
 import type { Permission, SessionUser, ConsoleConfig } from "../../../entities/models";
 import type { Page } from "../../../entities/access";
 
-
 export interface AppCtx {
   user: SessionUser;
   cfg: ConsoleConfig;

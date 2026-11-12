@@ -12,14 +12,26 @@ import { getTenant } from "../src/interface-adapters/gateways/sqlite/tenants.js"
 import { attemptUsage } from "../src/entities/metering.js";
 import { computeMetrics, outcomeGroup } from "../src/interface-adapters/gateways/sqlite/metrics.js";
 import { FakeBackend, KB, TENANTS, cfg, fail, hang, reply } from "./helpers.js";
-import { PlaceholderRenderer, buildSlots, extractFromMessage, fillablePlaceholders } from "../src/entities/support/placeholders.js";
+import {
+  PlaceholderRenderer,
+  buildSlots,
+  extractFromMessage,
+  fillablePlaceholders,
+} from "../src/entities/support/placeholders.js";
 
 const INTENTS = new Set(["cancel_order", "track_order", "get_refund", "unknown"]);
 const tenant = (id: string) => {
   const t = TENANTS.find((x) => x.id === id)!;
   return {
-    id: t.id, name: t.name, plan: t.plan, allowedTiers: t.allowedTiers, tokenQuota: t.tokenQuota, requestQuota: t.requestQuota,
-    quotaResetAt: 0, profile: t.profile ?? {}, piiPolicy: { mode: "mask" as const, types: [] },
+    id: t.id,
+    name: t.name,
+    plan: t.plan,
+    allowedTiers: t.allowedTiers,
+    tokenQuota: t.tokenQuota,
+    requestQuota: t.requestQuota,
+    quotaResetAt: 0,
+    profile: t.profile ?? {},
+    piiPolicy: { mode: "mask" as const, types: [] },
   };
 };
 
@@ -34,7 +46,7 @@ describe("output parser", () => {
   });
   it("tolerates code fences, <think> blocks and percent confidence", () => {
     const p = new SupportOutputParser(INTENTS);
-    p.push("<think>hmm</think>```json\n{\"intent\": \"get_refund\", \"confidence\": 85}\n```\n###\nSure");
+    p.push('<think>hmm</think>```json\n{"intent": "get_refund", "confidence": 85}\n```\n###\nSure');
     expect(p.parsedHeader).toEqual({ intent: "get_refund", modelConfidence: 0.85 });
   });
   it("rejects unknown labels and non-JSON as unusable", () => {
@@ -65,27 +77,49 @@ describe("retrieval", () => {
 });
 
 describe("routing policy", () => {
-  const backends = [new FakeBackend(cfg("f", "fast"), fail()), new FakeBackend(cfg("s", "strong"), fail()), new FakeBackend(cfg("m", "degraded"), fail())];
-  const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5, classifierMinConfidence: 0.6, cascadeModelConfidenceBelow: 0.7 };
+  const backends = [
+    new FakeBackend(cfg("f", "fast"), fail()),
+    new FakeBackend(cfg("s", "strong"), fail()),
+    new FakeBackend(cfg("m", "degraded"), fail()),
+  ];
+  const opts = {
+    longQueryTokens: 60,
+    ambiguousVoteShare: 0.6,
+    complexityThreshold: 0.5,
+    classifierMinConfidence: 0.6,
+    cascadeModelConfidenceBelow: 0.7,
+  };
   it("defaults to fast with fallback chain", () => {
     const p = planRoute(backends, tenant("pro"), { queryTokens: 10, retrievalTopShare: 0.9 }, opts);
     expect(p.chain.map((b) => b.config.id)).toEqual(["f", "s", "m"]);
     expect(p.rule).toBe("auto_default_fast");
   });
   it("escalates ambiguous or long queries to strong", () => {
-    expect(planRoute(backends, tenant("pro"), { queryTokens: 10, retrievalTopShare: 0.4 }, opts).chain[0].config.id).toBe("s");
-    expect(planRoute(backends, tenant("pro"), { queryTokens: 200, retrievalTopShare: 1 }, opts).rule).toBe("auto_escalate_strong");
+    expect(
+      planRoute(backends, tenant("pro"), { queryTokens: 10, retrievalTopShare: 0.4 }, opts).chain[0].config.id,
+    ).toBe("s");
+    expect(planRoute(backends, tenant("pro"), { queryTokens: 200, retrievalTopShare: 1 }, opts).rule).toBe(
+      "auto_escalate_strong",
+    );
   });
   it("never routes outside the tenant plan", () => {
     const p = planRoute(backends, tenant("free"), { queryTokens: 200 }, opts);
     expect(p.chain.map((b) => b.config.id)).toEqual(["f", "m"]);
     expect(p.rule).toBe("auto_escalate_denied_by_plan");
-    expect(() => planRoute(backends, tenant("free"), { queryTokens: 1, hint: "strong" }, opts)).toThrow(/does not include/);
+    expect(() => planRoute(backends, tenant("free"), { queryTokens: 1, hint: "strong" }, opts)).toThrow(
+      /does not include/,
+    );
   });
 });
 
 describe("query complexity", () => {
-  const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5, classifierMinConfidence: 0.6, cascadeModelConfidenceBelow: 0.7 };
+  const opts = {
+    longQueryTokens: 60,
+    ambiguousVoteShare: 0.6,
+    complexityThreshold: 0.5,
+    classifierMinConfidence: 0.6,
+    cascadeModelConfidenceBelow: 0.7,
+  };
   const assess = (text: string, extra: { retrievalTopShare?: number; turns?: number } = {}) =>
     assessComplexity({ text, queryTokens: Math.ceil(text.length / 4), ...extra }, opts);
   const ids = (text: string, extra = {}) => assess(text, extra).signals.map((s) => s.id);
@@ -116,19 +150,37 @@ describe("query complexity", () => {
     expect(ids("refund of $17.50 for order 12345")).toEqual([]);
   });
   it("escalates on combined signals and on each of the original rules alone", () => {
-    expect(assess("Compare standard and express shipping, explain the trade-offs and recommend one").level).toBe("complex");
+    expect(assess("Compare standard and express shipping, explain the trade-offs and recommend one").level).toBe(
+      "complex",
+    );
     expect(assess("cancel order", { retrievalTopShare: 0.4 }).score).toBe(0.5);
     expect(assess("x ".repeat(200)).score).toBeGreaterThanOrEqual(0.5);
   });
   it("is capped at 1", () => {
-    expect(assess("Why? Compare, explain the trade-offs, analyze. ```js\nf()\n``` " + "x ".repeat(200), { retrievalTopShare: 0.1, turns: 9 }).score).toBe(1);
+    expect(
+      assess("Why? Compare, explain the trade-offs, analyze. ```js\nf()\n``` " + "x ".repeat(200), {
+        retrievalTopShare: 0.1,
+        turns: 9,
+      }).score,
+    ).toBe(1);
   });
 });
 
 describe("complexity-based routing", () => {
-  const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5, classifierMinConfidence: 0.6, cascadeModelConfidenceBelow: 0.7 };
-  const backends = [new FakeBackend(cfg("f", "fast"), reply("x")), new FakeBackend(cfg("s", "strong"), reply("x")), new FakeBackend(cfg("m", "degraded"), reply("x"))];
-  const route = (text: string, t = "pro") => planRoute(backends, tenant(t), { queryTokens: Math.ceil(text.length / 4), text, retrievalTopShare: 1 }, opts);
+  const opts = {
+    longQueryTokens: 60,
+    ambiguousVoteShare: 0.6,
+    complexityThreshold: 0.5,
+    classifierMinConfidence: 0.6,
+    cascadeModelConfidenceBelow: 0.7,
+  };
+  const backends = [
+    new FakeBackend(cfg("f", "fast"), reply("x")),
+    new FakeBackend(cfg("s", "strong"), reply("x")),
+    new FakeBackend(cfg("m", "degraded"), reply("x")),
+  ];
+  const route = (text: string, t = "pro") =>
+    planRoute(backends, tenant(t), { queryTokens: Math.ceil(text.length / 4), text, retrievalTopShare: 1 }, opts);
 
   it("starts a complex request on the strong tier and records why", () => {
     const p = route("Compare the standard and express shipping options, explain the trade-offs and recommend one.");
@@ -144,7 +196,10 @@ describe("complexity-based routing", () => {
     expect(p.reason).toMatch(/simple enough for the fast tier: complexity 0 < 0\.5/);
   });
   it("respects the plan when a complex request can't escalate", () => {
-    const p = route("Compare the standard and express shipping options, explain the trade-offs and recommend one.", "free");
+    const p = route(
+      "Compare the standard and express shipping options, explain the trade-offs and recommend one.",
+      "free",
+    );
     expect(p.rule).toBe("auto_escalate_denied_by_plan");
     expect(p.chain[0].config.id).toBe("f");
   });
@@ -160,16 +215,32 @@ describe("executor", () => {
     if (!any) throw new BackendError("unusable_output", "empty");
   };
   const run = (chain: FakeBackend[], breaker = new CircuitBreaker(3, 10_000)) =>
-    executeWithFallback({ chain, breaker, messages: [{ role: "user", content: "hi" }], maxTokens: 50, clientSignal: new AbortController().signal, consume: consumeAll });
+    executeWithFallback({
+      chain,
+      breaker,
+      messages: [{ role: "user", content: "hi" }],
+      maxTokens: 50,
+      clientSignal: new AbortController().signal,
+      consume: consumeAll,
+    });
 
   it("falls back on error and records both attempts with cost", async () => {
-    const r = await run([new FakeBackend(cfg("a", "fast"), fail()), new FakeBackend(cfg("b", "degraded"), reply("ok there"))]);
+    const r = await run([
+      new FakeBackend(cfg("a", "fast"), fail()),
+      new FakeBackend(cfg("b", "degraded"), reply("ok there")),
+    ]);
     expect(r.status).toBe("ok");
-    expect(r.attempts.map((a) => [a.backend, a.outcome])).toEqual([["a", "error"], ["b", "ok"]]);
+    expect(r.attempts.map((a) => [a.backend, a.outcome])).toEqual([
+      ["a", "error"],
+      ["b", "ok"],
+    ]);
     expect(r.attempts[1].costUsd).toBeCloseTo((100 * 1 + 20 * 2) / 1e6);
   });
   it("falls back when the first token is too slow", async () => {
-    const r = await run([new FakeBackend(cfg("slow", "fast", { firstTokenTimeoutMs: 50 }), hang), new FakeBackend(cfg("b", "degraded"), reply("ok"))]);
+    const r = await run([
+      new FakeBackend(cfg("slow", "fast", { firstTokenTimeoutMs: 50 }), hang),
+      new FakeBackend(cfg("b", "degraded"), reply("ok")),
+    ]);
     expect(r.attempts[0].outcome).toBe("timeout_first_token");
     expect(r.attempts[0].usageSource).toBe("estimated");
     expect(r.status).toBe("ok");
@@ -203,7 +274,9 @@ describe("quota", () => {
     const a = admit(db, t, { requestId: "r1", endpoint: "x", estimatedPromptTokens: 400, requestedMaxTokens: 500 });
     expect(a.maxCompletionTokens).toBe(500); // 900 - 400
     expect(getUsage(db, t).tokensReserved).toBe(900);
-    expect(() => admit(db, t, { requestId: "r2", endpoint: "x", estimatedPromptTokens: 10, requestedMaxTokens: 10 })).toThrow(/token quota exhausted/);
+    expect(() =>
+      admit(db, t, { requestId: "r2", endpoint: "x", estimatedPromptTokens: 10, requestedMaxTokens: 10 }),
+    ).toThrow(/token quota exhausted/);
     const row = db.prepare("SELECT outcome, counts_against_quota FROM requests WHERE id='r2'").get() as any;
     expect(row).toEqual({ outcome: "quota_exceeded", counts_against_quota: 0 });
   });
@@ -222,7 +295,9 @@ describe("quota", () => {
 });
 
 describe("placeholder rendering", () => {
-  const slots = buildSlots("please cancel order #A-12345, refund $49.90", { "Customer Support Phone Number": "+62 21 555 0100" });
+  const slots = buildSlots("please cancel order #A-12345, refund $49.90", {
+    "Customer Support Phone Number": "+62 21 555 0100",
+  });
   const render = (chunks: string[]) => {
     const r = new PlaceholderRenderer(slots);
     return { text: chunks.map((c) => r.push(c)).join("") + r.flush(), r };
@@ -236,8 +311,14 @@ describe("placeholder rendering", () => {
   });
 
   it("fills from message > profile > UI label > fallback, even when split across chunks", () => {
-    const { text, r } = render(["Order {{Ord", "er Number}} will be refunded {{Currency Symbol}}{{Refund Amount}}. Call {", "{Customer Support Phone Number}} or open '{{Online Order Interaction}}' with {{Tracking Number}}."]);
-    expect(text).toBe("Order A-12345 will be refunded $49.90. Call +62 21 555 0100 or open 'Orders' with your tracking number.");
+    const { text, r } = render([
+      "Order {{Ord",
+      "er Number}} will be refunded {{Currency Symbol}}{{Refund Amount}}. Call {",
+      "{Customer Support Phone Number}} or open '{{Online Order Interaction}}' with {{Tracking Number}}.",
+    ]);
+    expect(text).toBe(
+      "Order A-12345 will be refunded $49.90. Call +62 21 555 0100 or open 'Orders' with your tracking number.",
+    );
     expect(Object.fromEntries(r.report().map((x) => [x.name, x.source]))).toMatchObject({
       "Order Number": "message",
       "Customer Support Phone Number": "profile",
@@ -268,9 +349,18 @@ describe("placeholder rendering", () => {
 
   it("uses already-streamed text as context and handles a currency sign before the slot", () => {
     const r = new PlaceholderRenderer(buildSlots("ETA please", {}));
-    const out = ["your order with the order ", "number ", "{{Order", " Number}}. Refund of $", "{{", "Refund Amount", "}} is on its way, total $5."]
-      .map((c) => r.push(c))
-      .join("") + r.flush();
+    const out =
+      [
+        "your order with the order ",
+        "number ",
+        "{{Order",
+        " Number}}. Refund of $",
+        "{{",
+        "Refund Amount",
+        "}} is on its way, total $5.",
+      ]
+        .map((c) => r.push(c))
+        .join("") + r.flush();
     expect(out).toBe("your order with the order number on file. Refund of the refund amount is on its way, total $5.");
   });
 
@@ -313,22 +403,47 @@ describe("dashboard metrics", () => {
     expect(computeMetrics(db, "1h", { now, tenantId: "free" }).totals.requests).toBe(2);
   });
   it("groups outcomes into four states", () => {
-    expect(["success", "refused_low_confidence", "quota_exceeded", "partial"].map(outcomeGroup)).toEqual(["success", "refused", "rejected", "failed"]);
+    expect(["success", "refused_low_confidence", "quota_exceeded", "partial"].map(outcomeGroup)).toEqual([
+      "success",
+      "refused",
+      "rejected",
+      "failed",
+    ]);
   });
 });
 
 describe("attempt usage", () => {
-  const base = { isMock: false, rejected: false, promptText: [{ content: "x".repeat(40) }], produced: "y".repeat(8), reasoned: "z".repeat(4) };
+  const base = {
+    isMock: false,
+    rejected: false,
+    promptText: [{ content: "x".repeat(40) }],
+    produced: "y".repeat(8),
+    reasoned: "z".repeat(4),
+  };
   it("uses what the provider reported", () => {
-    expect(attemptUsage({ ...base, reported: { promptTokens: 7, completionTokens: 3 } })).toEqual({ promptTokens: 7, completionTokens: 3, usageSource: "provider" });
+    expect(attemptUsage({ ...base, reported: { promptTokens: 7, completionTokens: 3 } })).toEqual({
+      promptTokens: 7,
+      completionTokens: 3,
+      usageSource: "provider",
+    });
   });
   it("labels the mock backend's own count as an estimate", () => {
-    expect(attemptUsage({ ...base, isMock: true, reported: { promptTokens: 7, completionTokens: 3 } }).usageSource).toBe("estimated");
+    expect(
+      attemptUsage({ ...base, isMock: true, reported: { promptTokens: 7, completionTokens: 3 } }).usageSource,
+    ).toBe("estimated");
   });
   it("estimates when nothing was reported, counting reasoning as output", () => {
-    expect(attemptUsage({ ...base, reported: null })).toEqual({ promptTokens: 2 + 4 + 10, completionTokens: 2 + 1, usageSource: "estimated" });
+    expect(attemptUsage({ ...base, reported: null })).toEqual({
+      promptTokens: 2 + 4 + 10,
+      completionTokens: 2 + 1,
+      usageSource: "estimated",
+    });
   });
   it("bills nothing for a call the provider rejected outright", () => {
-    expect(attemptUsage({ ...base, reported: null, rejected: true })).toEqual({ promptTokens: 0, completionTokens: 0, usageSource: "none" });
+    expect(attemptUsage({ ...base, reported: null, rejected: true })).toEqual({
+      promptTokens: 0,
+      completionTokens: 0,
+      usageSource: "none",
+    });
   });
 });

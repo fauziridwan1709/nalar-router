@@ -31,7 +31,12 @@ describe("OpenAI SDK compatibility", () => {
 
   it("streams chunks, with a usage chunk when stream_options.include_usage is set", async () => {
     const c = await client();
-    const stream = await c.chat.completions.create({ model: "auto", messages, stream: true, stream_options: { include_usage: true } });
+    const stream = await c.chat.completions.create({
+      model: "auto",
+      messages,
+      stream: true,
+      stream_options: { include_usage: true },
+    });
     let text = "";
     let usage;
     for await (const chunk of stream) {
@@ -46,8 +51,15 @@ describe("OpenAI SDK compatibility", () => {
     const c = await client();
     const r = await c.chat.completions.create({
       model: "fast",
-      messages: [{ role: "developer", content: "Be brief." }, { role: "user", content: [{ type: "text", text: "hi" }] }],
-      max_completion_tokens: 64, top_p: 0.9, stop: ["\n\n"], seed: 1, user: "end-user-1",
+      messages: [
+        { role: "developer", content: "Be brief." },
+        { role: "user", content: [{ type: "text", text: "hi" }] },
+      ],
+      max_completion_tokens: 64,
+      top_p: 0.9,
+      stop: ["\n\n"],
+      seed: 1,
+      user: "end-user-1",
     });
     expect(r.choices[0].message.content).toBe("Hello there");
   });
@@ -59,8 +71,12 @@ describe("OpenAI SDK compatibility", () => {
   });
 
   it("raises the SDK's typed errors", async () => {
-    await expect((await client("nope")).chat.completions.create({ model: "auto", messages })).rejects.toBeInstanceOf(AuthenticationError);
+    await expect((await client("nope")).chat.completions.create({ model: "auto", messages })).rejects.toBeInstanceOf(
+      AuthenticationError,
+    );
     await close?.();
-    await expect((await client()).chat.completions.create({ model: "auto", messages, n: 2 })).rejects.toBeInstanceOf(BadRequestError);
+    await expect((await client()).chat.completions.create({ model: "auto", messages, n: 2 })).rejects.toBeInstanceOf(
+      BadRequestError,
+    );
   });
 });

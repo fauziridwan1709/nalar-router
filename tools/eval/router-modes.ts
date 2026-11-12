@@ -20,7 +20,8 @@ const DATA = resolve(HERE, "../../data");
 const RESULTS = resolve(HERE, "results");
 const args = Object.fromEntries(
   process.argv.slice(2).reduce<[string, string][]>((acc, a, i, all) => {
-    if (a.startsWith("--")) acc.push([a.slice(2), all[i + 1]?.startsWith("--") || all[i + 1] === undefined ? "true" : all[i + 1]]);
+    if (a.startsWith("--"))
+      acc.push([a.slice(2), all[i + 1]?.startsWith("--") || all[i + 1] === undefined ? "true" : all[i + 1]]);
     return acc;
   }, []),
 );
@@ -41,16 +42,32 @@ const EXAMPLES = [
 ];
 
 interface Row {
-  set: string; id: string; message: string; model: string; status: number; outcome?: string; backend?: string;
-  intent?: string; confidence?: number; costUsd?: number; tokens?: number; latencyMs?: number;
-  rule?: string; reason?: string; attempts: string[];
+  set: string;
+  id: string;
+  message: string;
+  model: string;
+  status: number;
+  outcome?: string;
+  backend?: string;
+  intent?: string;
+  confidence?: number;
+  costUsd?: number;
+  tokens?: number;
+  latencyMs?: number;
+  rule?: string;
+  reason?: string;
+  attempts: string[];
 }
 
 async function run(): Promise<Row[]> {
   const read = (f: string) => JSON.parse(readFileSync(resolve(DATA, f), "utf8"));
   const rows = [
-    ...read("eval.json").slice(0, 5).map((r: any) => ({ set: "eval", id: r.id, message: r.message })),
-    ...read("eval-hard.json").filter((r: any) => r.expect !== "refuse").map((r: any) => ({ set: "hard", id: r.id, message: r.message })),
+    ...read("eval.json")
+      .slice(0, 5)
+      .map((r: any) => ({ set: "eval", id: r.id, message: r.message })),
+    ...read("eval-hard.json")
+      .filter((r: any) => r.expect !== "refuse")
+      .map((r: any) => ({ set: "hard", id: r.id, message: r.message })),
     ...EXAMPLES.map((m, i) => ({ set: "example", id: `ex-${i + 1}`, message: m })),
   ];
   const out: Row[] = [];
@@ -62,14 +79,32 @@ async function run(): Promise<Row[]> {
         body: JSON.stringify({ message: r.message, model, stream: false }),
       });
       const j: any = await res.json();
-      const d: any = j.requestId ? await (await fetch(`${BASE}/admin/requests/${j.requestId}`, { headers: { "x-admin-token": ADMIN } })).json() : {};
+      const d: any = j.requestId
+        ? await (await fetch(`${BASE}/admin/requests/${j.requestId}`, { headers: { "x-admin-token": ADMIN } })).json()
+        : {};
       const row: Row = {
-        ...r, model, status: res.status, outcome: j.outcome, backend: j.backend, intent: j.intent, confidence: j.confidence,
-        costUsd: j.costUsd, tokens: j.usage?.totalTokens, latencyMs: j.latencyMs, rule: d.route_reason?.rule, reason: d.route_reason?.reason,
+        ...r,
+        model,
+        status: res.status,
+        outcome: j.outcome,
+        backend: j.backend,
+        intent: j.intent,
+        confidence: j.confidence,
+        costUsd: j.costUsd,
+        tokens: j.usage?.totalTokens,
+        latencyMs: j.latencyMs,
+        rule: d.route_reason?.rule,
+        reason: d.route_reason?.reason,
         attempts: (d.attempts ?? []).map((a: any) => `${a.backend}:${a.outcome}`),
       };
       out.push(row);
-      console.log(r.id.padEnd(8), model.padEnd(13), String(j.outcome).padEnd(22), String(j.backend).padEnd(12), row.attempts.map((a) => a.split(":")[1]).join(">"));
+      console.log(
+        r.id.padEnd(8),
+        model.padEnd(13),
+        String(j.outcome).padEnd(22),
+        String(j.backend).padEnd(12),
+        row.attempts.map((a) => a.split(":")[1]).join(">"),
+      );
       await new Promise((ok) => setTimeout(ok, DELAY));
     }
   }
@@ -77,7 +112,8 @@ async function run(): Promise<Row[]> {
 }
 
 function render(rows: Row[], source: string): string {
-  const pct = (xs: number[], p: number) => [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))];
+  const pct = (xs: number[], p: number) =>
+    [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))];
   const has = (r: Row, o: string) => r.attempts.some((a) => a.endsWith(`:${o}`));
   const lines = [
     `# Router modes, live (${source})`,
@@ -97,11 +133,24 @@ function render(rows: Row[], source: string): string {
         ` | $${((rs.reduce((n, r) => n + (r.costUsd ?? 0), 0) / rs.length) * 1000).toFixed(3)} | ${pct(lat, 0.5)} ms | ${Math.round(lat.reduce((a, b) => a + b, 0) / lat.length)} ms |`,
     );
   }
-  lines.push("", "## Every request", "", "| id | mode | outcome | served by | attempts | rule | reason |", "|---|---|---|---|---|---|---|");
+  lines.push(
+    "",
+    "## Every request",
+    "",
+    "| id | mode | outcome | served by | attempts | rule | reason |",
+    "|---|---|---|---|---|---|---|",
+  );
   for (const r of rows) {
-    lines.push(`| ${r.id} | \`${r.model}\` | ${r.outcome} | ${r.backend ?? "-"} | ${r.attempts.join(" › ")} | \`${r.rule}\` | ${(r.reason ?? "").replace(/\|/g, "/")} |`);
+    lines.push(
+      `| ${r.id} | \`${r.model}\` | ${r.outcome} | ${r.backend ?? "-"} | ${r.attempts.join(" › ")} | \`${r.rule}\` | ${(r.reason ?? "").replace(/\|/g, "/")} |`,
+    );
   }
-  lines.push("", "## Messages", "", ...[...new Map(rows.map((r) => [r.id, r.message])).entries()].map(([id, m]) => `- **${id}**: ${m}`));
+  lines.push(
+    "",
+    "## Messages",
+    "",
+    ...[...new Map(rows.map((r) => [r.id, r.message])).entries()].map(([id, m]) => `- **${id}**: ${m}`),
+  );
   return lines.join("\n") + "\n";
 }
 

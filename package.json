@@ -3,8 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.13" },
-  "workspaces": ["apps/gateway", "apps/console", "tools/eval"],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "workspaces": [
+    "apps/gateway",
+    "apps/console",
+    "tools/eval"
+  ],
   "scripts": {
     "build": "npm run build -w @nalar-router/gateway && npm run build -w @nalar-router/console",
     "start": "npm start -w @nalar-router/gateway",
@@ -16,6 +22,11 @@
     "retrieval-eval": "npm run retrieval-eval -w @nalar-router/eval",
     "routing-eval": "npm run routing-eval -w @nalar-router/eval --",
     "eval": "npm run eval -w @nalar-router/eval --",
-    "router-modes-eval": "npm run router-modes-eval -w @nalar-router/eval --"
+    "router-modes-eval": "npm run router-modes-eval -w @nalar-router/eval --",
+    "format": "prettier --write \"apps/*/src/**/*.{ts,tsx,css}\" \"apps/*/tests/**/*.ts\" \"tools/**/*.ts\"",
+    "format:check": "prettier --check \"apps/*/src/**/*.{ts,tsx,css}\" \"apps/*/tests/**/*.ts\" \"tools/**/*.ts\""
+  },
+  "devDependencies": {
+    "prettier": "^3.10.1"
   }
 }

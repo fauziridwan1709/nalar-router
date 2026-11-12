@@ -62,7 +62,9 @@ for (const r of rows) {
     );
   }
 }
-console.log(`${rows.length} messages (eval ${rows.filter((r) => r.set === "eval").length}, hard ${rows.filter((r) => r.set === "hard").length}, ood ${rows.filter((r) => r.set === "ood").length}, examples ${EXAMPLES.length})`);
+console.log(
+  `${rows.length} messages (eval ${rows.filter((r) => r.set === "eval").length}, hard ${rows.filter((r) => r.set === "hard").length}, ood ${rows.filter((r) => r.set === "ood").length}, examples ${EXAMPLES.length})`,
+);
 console.log(`strong tier first: old rule ${oldStrong}, complexity ${newStrong}; route changed for ${changed}\n`);
 console.log("set     old    → new    score level    [signals]");
 console.log(lines.join("\n"));

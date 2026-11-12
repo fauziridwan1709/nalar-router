@@ -14,7 +14,6 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DATA = resolve(HERE, "../../data");
 
-
 const kb: KbEntry[] = JSON.parse(readFileSync(resolve(DATA, "kb.json"), "utf8"));
 const holdout: { message: string; expectedIntent: string }[] = JSON.parse(
   readFileSync(resolve(DATA, "retrieval-holdout.json"), "utf8"),

@@ -25,4 +25,5 @@ export interface ApiKey {
 }
 
 /** what a list may show: the public prefix plus 2 characters, and the last 4 (16 of 192 bits) */
-export const displayPrefix = (secret: string) => (secret.startsWith(KEY_PREFIX) ? secret.slice(0, KEY_PREFIX.length + 2) : secret.slice(0, 4));
+export const displayPrefix = (secret: string) =>
+  secret.startsWith(KEY_PREFIX) ? secret.slice(0, KEY_PREFIX.length + 2) : secret.slice(0, 4);

@@ -22,10 +22,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DATA = resolve(HERE, "../../data");
 const RESULTS = resolve(HERE, "results");
 
-
 const args = Object.fromEntries(
   process.argv.slice(2).reduce<[string, string][]>((acc, a, i, all) => {
-    if (a.startsWith("--")) acc.push([a.slice(2), all[i + 1]?.startsWith("--") || all[i + 1] === undefined ? "true" : all[i + 1]]);
+    if (a.startsWith("--"))
+      acc.push([a.slice(2), all[i + 1]?.startsWith("--") || all[i + 1] === undefined ? "true" : all[i + 1]]);
     return acc;
   }, []),
 );
@@ -41,12 +41,22 @@ const LIMIT = args.limit ? Number(args.limit) : Infinity;
 const SKIP_OOD = args["no-ood"] === "true";
 const DELAY_MS = Number(args.delay ?? 0); // spacing between calls for strict free-tier RPM limits
 
-interface Case { id: string; message: string; expectedIntent: string | null; referenceAnswer?: string; shouldRefuse?: boolean }
+interface Case {
+  id: string;
+  message: string;
+  expectedIntent: string | null;
+  referenceAnswer?: string;
+  shouldRefuse?: boolean;
+}
 const inDomain: Case[] = JSON.parse(readFileSync(resolve(DATA, "eval.json"), "utf8")).slice(0, LIMIT);
 const ood: Case[] = SKIP_OOD ? [] : JSON.parse(readFileSync(resolve(DATA, "eval-ood.json"), "utf8"));
 
 // ---------- metrics ----------
-const words = (s: string) => s.toLowerCase().replace(/\{\{[^}]*\}\}/g, " placeholder ").match(/[a-z0-9]+/g) ?? [];
+const words = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/\{\{[^}]*\}\}/g, " placeholder ")
+    .match(/[a-z0-9]+/g) ?? [];
 export function rougeL(cand: string, ref: string) {
   const a = words(cand);
   const b = words(ref);
@@ -131,12 +141,23 @@ Reply with JSON only: {"score": <1-5>, "reason": "<one sentence>"}`;
     const res = await fetch(`${BASE}/v1/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${KEY}` },
-      body: JSON.stringify({ model: JUDGE, stream: false, temperature: 0, max_tokens: 400, messages: [{ role: "user", content: prompt }] }),
+      body: JSON.stringify({
+        model: JUDGE,
+        stream: false,
+        temperature: 0,
+        max_tokens: 400,
+        messages: [{ role: "user", content: prompt }],
+      }),
     });
     const j: any = await res.json().catch(() => ({}));
     const text: string = j?.choices?.[0]?.message?.content ?? "";
     const m = /"score"\s*:\s*([1-5])/.exec(text);
-    if (m) return { score: Number(m[1]), reason: /"reason"\s*:\s*"([^"]*)"/.exec(text)?.[1] ?? "", costUsd: j?.x_router?.costUsd ?? 0 };
+    if (m)
+      return {
+        score: Number(m[1]),
+        reason: /"reason"\s*:\s*"([^"]*)"/.exec(text)?.[1] ?? "",
+        costUsd: j?.x_router?.costUsd ?? 0,
+      };
     await sleep(1000);
   }
   return { score: null, reason: "judge output unparseable", costUsd: 0 };
@@ -144,7 +165,13 @@ Reply with JSON only: {"score": <1-5>, "reason": "<one sentence>"}`;
 
 // ---------- run ----------
 const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-const report: any = { stamp, base: BASE, judge: JUDGE, n: { inDomain: inDomain.length, ood: ood.length }, configs: [] as any[] };
+const report: any = {
+  stamp,
+  base: BASE,
+  judge: JUDGE,
+  n: { inDomain: inDomain.length, ood: ood.length },
+  configs: [] as any[],
+};
 
 for (const c of CONFIGS) {
   console.log(`\n=== ${c.name} ===`);
@@ -203,22 +230,43 @@ for (const c of CONFIGS) {
     falseRefusals: ind.filter((r) => r.refused).length,
     oodCorrectlyRefused: oodRows.filter((r) => r.refused).length,
     oodTotal: oodRows.length,
-    errors: rows.filter((r) => !["success", "refused_out_of_scope", "refused_low_confidence"].includes(r.outcome)).length,
+    errors: rows.filter((r) => !["success", "refused_out_of_scope", "refused_low_confidence"].includes(r.outcome))
+      .length,
     fallbacks: rows.filter((r) => r.fallback).length,
     answersWithRawPlaceholders: answered.filter((r) => r.leakedPlaceholders > 0).length,
     rougeLMean: mean(answered.map((r) => r.rougeL).filter((x) => x != null)),
     judgeMean: mean(answered.map((r) => r.judgeScore).filter((x) => x != null)),
     judgeN: answered.filter((r) => r.judgeScore != null).length,
-    latencyP50: pct(ind.map((r) => r.latencyMs), 0.5),
-    latencyP95: pct(ind.map((r) => r.latencyMs), 0.95),
-    ttftP50: pct(ind.map((r) => r.ttftMs).filter((x) => x != null), 0.5),
-    ttftP95: pct(ind.map((r) => r.ttftMs).filter((x) => x != null), 0.95),
+    latencyP50: pct(
+      ind.map((r) => r.latencyMs),
+      0.5,
+    ),
+    latencyP95: pct(
+      ind.map((r) => r.latencyMs),
+      0.95,
+    ),
+    ttftP50: pct(
+      ind.map((r) => r.ttftMs).filter((x) => x != null),
+      0.5,
+    ),
+    ttftP95: pct(
+      ind.map((r) => r.ttftMs).filter((x) => x != null),
+      0.95,
+    ),
     tokensTotal: rows.reduce((n, r) => n + r.tokens, 0),
-    tokensPerModelCall: modelCalls.length ? Math.round(modelCalls.reduce((n, r) => n + r.tokens, 0) / modelCalls.length) : 0,
+    tokensPerModelCall: modelCalls.length
+      ? Math.round(modelCalls.reduce((n, r) => n + r.tokens, 0) / modelCalls.length)
+      : 0,
     costTotalUsd: rows.reduce((n, r) => n + r.costUsd, 0),
     costPer1kRequestsUsd: (rows.reduce((n, r) => n + r.costUsd, 0) / rows.length) * 1000,
-    backends: rows.reduce((m: Record<string, number>, r) => ((m[r.backend ?? "none"] = (m[r.backend ?? "none"] ?? 0) + 1), m), {}),
-    usageSources: rows.reduce((m: Record<string, number>, r) => ((m[r.usageSource ?? "none"] = (m[r.usageSource ?? "none"] ?? 0) + 1), m), {}),
+    backends: rows.reduce(
+      (m: Record<string, number>, r) => ((m[r.backend ?? "none"] = (m[r.backend ?? "none"] ?? 0) + 1), m),
+      {},
+    ),
+    usageSources: rows.reduce(
+      (m: Record<string, number>, r) => ((m[r.usageSource ?? "none"] = (m[r.usageSource ?? "none"] ?? 0) + 1), m),
+      {},
+    ),
   };
   report.configs.push({ ...summary, rows });
   console.log(JSON.stringify(summary, null, 2));
@@ -236,19 +284,34 @@ const md = [
   `|---|${report.configs.map(() => "---").join("|")}|`,
   ...[
     ["intent accuracy (all, refusal = wrong)", (c: any) => `${f(c.intentAccuracy * 100, 1)}%`],
-    ["intent accuracy (answered only)", (c: any) => (c.intentAccuracyAnswered == null ? "–" : `${f(c.intentAccuracyAnswered * 100, 1)}%`)],
+    [
+      "intent accuracy (answered only)",
+      (c: any) => (c.intentAccuracyAnswered == null ? "–" : `${f(c.intentAccuracyAnswered * 100, 1)}%`),
+    ],
     ["false refusals (in-domain)", (c: any) => `${c.falseRefusals}/${inDomain.length}`],
     ["OOD correctly refused", (c: any) => `${c.oodCorrectlyRefused}/${c.oodTotal}`],
     ["answer quality: ROUGE-L F1 (mean)", (c: any) => f(c.rougeLMean)],
-    ["answer quality: LLM judge 1–5 (mean)", (c: any) => (c.judgeMean == null ? "–" : `${f(c.judgeMean)} (n=${c.judgeN})`)],
+    [
+      "answer quality: LLM judge 1–5 (mean)",
+      (c: any) => (c.judgeMean == null ? "–" : `${f(c.judgeMean)} (n=${c.judgeN})`),
+    ],
     ["latency p50 / p95", (c: any) => `${ms(c.latencyP50)} / ${ms(c.latencyP95)}`],
     ["time to first token p50 / p95", (c: any) => `${ms(c.ttftP50)} / ${ms(c.ttftP95)}`],
     ["tokens per model call (mean)", (c: any) => String(c.tokensPerModelCall)],
     ["total est. cost (35 req)", (c: any) => `$${c.costTotalUsd.toFixed(5)}`],
     ["est. cost per 1k requests", (c: any) => `$${c.costPer1kRequestsUsd.toFixed(3)}`],
-    ["answers showing raw {{placeholders}}", (c: any) => `${c.answersWithRawPlaceholders}/${c.answered ?? inDomain.length}`],
+    [
+      "answers showing raw {{placeholders}}",
+      (c: any) => `${c.answersWithRawPlaceholders}/${c.answered ?? inDomain.length}`,
+    ],
     ["errors / fallbacks", (c: any) => `${c.errors} / ${c.fallbacks}`],
-    ["served by", (c: any) => Object.entries(c.backends).map(([k, v]) => `${k}:${v}`).join(", ")],
+    [
+      "served by",
+      (c: any) =>
+        Object.entries(c.backends)
+          .map(([k, v]) => `${k}:${v}`)
+          .join(", "),
+    ],
   ].map(([label, fn]: any) => `| ${label} | ${report.configs.map(fn).join(" | ")} |`),
   ``,
   `## Misclassified / refused in-domain cases`,
@@ -258,7 +321,10 @@ const md = [
     ``,
     ...c.rows
       .filter((r: any) => r.expectedIntent && !r.correctIntent)
-      .map((r: any) => `- \`${r.id}\` "${r.message}" → expected \`${r.expectedIntent}\`, got \`${r.predicted ?? "-"}\`${r.refused ? ` (refused: ${r.refusalReason})` : ""}`),
+      .map(
+        (r: any) =>
+          `- \`${r.id}\` "${r.message}" → expected \`${r.expectedIntent}\`, got \`${r.predicted ?? "-"}\`${r.refused ? ` (refused: ${r.refusalReason})` : ""}`,
+      ),
     ``,
   ]),
 ].join("\n");

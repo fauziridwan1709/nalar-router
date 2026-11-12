@@ -15,23 +15,30 @@ import { groupOf } from "../../../entities/outcomes";
 import { useApi } from "../hooks/api";
 import { levelOf, share, sharePct, tokenShare, type Level } from "../../../entities/quota";
 
-
 const LEVEL: Record<Level, { label: string; Icon: LucideIcon; color: string }> = {
   ok: { label: "Within limits", Icon: CircleCheck, color: "var(--good)" },
   near: { label: "Near a limit", Icon: CircleAlert, color: "var(--warning)" },
   out: { label: "Rejecting requests", Icon: CircleX, color: "var(--critical)" },
 };
 
-
 function Bar({ used, total, label }: { used: number; total: number; label: string }) {
   const p = share(used, total);
   return (
     <div className="q-bar">
       <div className="q-bar-top">
-        <span className="num"><b>{fmtN(used)}</b> <span className="muted">of {fmtN(total)}</span></span>
+        <span className="num">
+          <b>{fmtN(used)}</b> <span className="muted">of {fmtN(total)}</span>
+        </span>
         <span className="num muted">{sharePct(p)}</span>
       </div>
-      <div className={`meter ${p >= 1 ? "crit" : p >= 0.8 ? "warn" : ""}`} role="meter" aria-label={label} aria-valuenow={used} aria-valuemin={0} aria-valuemax={total}>
+      <div
+        className={`meter ${p >= 1 ? "crit" : p >= 0.8 ? "warn" : ""}`}
+        role="meter"
+        aria-label={label}
+        aria-valuenow={used}
+        aria-valuemin={0}
+        aria-valuemax={total}
+      >
         <div className="anim-meter" style={{ width: `${Math.max(p * 100, used > 0 ? 1.5 : 0)}%` }} />
       </div>
     </div>
@@ -42,7 +49,9 @@ function Status({ u }: { u: TenantUsage }) {
   const { label, Icon, color } = LEVEL[levelOf(u)];
   return (
     <div>
-      <span className="state"><Icon size={15} color={color} aria-hidden /> {label}</span>
+      <span className="state">
+        <Icon size={15} color={color} aria-hidden /> {label}
+      </span>
       {u.quotaRejections > 0 && <div className="tiny muted">{fmtN(u.quotaRejections)} refused with 429 this month</div>}
     </div>
   );
@@ -56,10 +65,14 @@ export function Quotas() {
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const load = useCallback(
-    () => api.usage(scope).then((usage) => {
-      setUsage(usage);
-      setErr(null);
-    }).catch((e) => setErr((e as Error).message)),
+    () =>
+      api
+        .usage(scope)
+        .then((usage) => {
+          setUsage(usage);
+          setErr(null);
+        })
+        .catch((e) => setErr((e as Error).message)),
     [scope],
   );
   useEffect(() => {
@@ -83,7 +96,8 @@ export function Quotas() {
   const attention = rows.filter((u) => levelOf(u) !== "ok");
 
   const reset = (u: TenantUsage) =>
-    api.resetQuota(u.tenant)
+    api
+      .resetQuota(u.tenant)
       .then(() => {
         toast({ body: `Quota reset for ${shortName(u.name)}`, type: "info" });
         load();
@@ -95,21 +109,56 @@ export function Quotas() {
       <PageHeader
         title="Quotas"
         sub="Monthly token and request limits per tenant. Quotas fail closed: if a check can't complete, the request is rejected, not served unmetered."
-        actions={period && <span className="period-pill">{fmtDay(period.start)} – {fmtDay(period.end)} UTC · resets in {daysLeft} day{daysLeft === 1 ? "" : "s"}</span>}
+        actions={
+          period && (
+            <span className="period-pill">
+              {fmtDay(period.start)} – {fmtDay(period.end)} UTC · resets in {daysLeft} day{daysLeft === 1 ? "" : "s"}
+            </span>
+          )
+        }
       />
       {err && <div className="banner error">{err}</div>}
 
       <div className="grid c4">
-        <StatCard k="Tokens this month" value={usage ? tokensUsed : null} fmt={(v) => fmtN(Math.round(v))} sub={usage ? `of ${fmtN(tokenQuota)} · ${sharePct(share(tokensUsed, tokenQuota))}` : undefined} />
-        <StatCard k="Requests this month" value={usage ? requestsUsed : null} fmt={(v) => fmtN(Math.round(v))} sub={usage ? `of ${fmtN(requestQuota)} · ${sharePct(share(requestsUsed, requestQuota))}` : undefined} />
-        <StatCard k="Estimated spend" value={usage ? cost : null} fmt={(v) => fmtUsd(v)} info="Provider list prices × metered tokens, including failed attempts" />
+        <StatCard
+          k="Tokens this month"
+          value={usage ? tokensUsed : null}
+          fmt={(v) => fmtN(Math.round(v))}
+          sub={usage ? `of ${fmtN(tokenQuota)} · ${sharePct(share(tokensUsed, tokenQuota))}` : undefined}
+        />
+        <StatCard
+          k="Requests this month"
+          value={usage ? requestsUsed : null}
+          fmt={(v) => fmtN(Math.round(v))}
+          sub={usage ? `of ${fmtN(requestQuota)} · ${sharePct(share(requestsUsed, requestQuota))}` : undefined}
+        />
+        <StatCard
+          k="Estimated spend"
+          value={usage ? cost : null}
+          fmt={(v) => fmtUsd(v)}
+          info="Provider list prices × metered tokens, including failed attempts"
+        />
         {single ? (
-          <StatCard k="Resets in" value={daysLeft} fmt={(v) => `${Math.round(v)} day${Math.round(v) === 1 ? "" : "s"}`}
-            sub={period ? `${fmtDay(period.end)}, 00:00 UTC` : undefined} />
+          <StatCard
+            k="Resets in"
+            value={daysLeft}
+            fmt={(v) => `${Math.round(v)} day${Math.round(v) === 1 ? "" : "s"}`}
+            sub={period ? `${fmtDay(period.end)}, 00:00 UTC` : undefined}
+          />
         ) : (
-          <StatCard k="Need attention" value={usage ? attention.length : null} fmt={(v) => fmtN(Math.round(v))}
-            sub={usage ? (attention.length ? attention.map((u) => shortName(u.name)).join(", ") : "Every tenant is under 80% and admitting requests") : undefined}
-            info="A tenant needs attention at 80% of either limit, or as soon as a request is refused with 429 quota_exceeded" />
+          <StatCard
+            k="Need attention"
+            value={usage ? attention.length : null}
+            fmt={(v) => fmtN(Math.round(v))}
+            sub={
+              usage
+                ? attention.length
+                  ? attention.map((u) => shortName(u.name)).join(", ")
+                  : "Every tenant is under 80% and admitting requests"
+                : undefined
+            }
+            info="A tenant needs attention at 80% of either limit, or as soon as a request is refused with 429 quota_exceeded"
+          />
         )}
       </div>
 
@@ -128,11 +177,21 @@ export function Quotas() {
               <th style={{ width: "22%" }}>Requests</th>
               <th className="r">Spend</th>
               <th>Status</th>
-              {can("quota:reset") && <th className="r"><span className="sr-only">Actions</span></th>}
+              {can("quota:reset") && (
+                <th className="r">
+                  <span className="sr-only">Actions</span>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
-            {!usage && <tr><td colSpan={6} className="muted">Loading…</td></tr>}
+            {!usage && (
+              <tr>
+                <td colSpan={6} className="muted">
+                  Loading…
+                </td>
+              </tr>
+            )}
             {rows.map((u) => {
               const isOpen = expanded === u.tenant;
               return (
@@ -147,21 +206,40 @@ export function Quotas() {
                         {!single && <ChevronRight size={15} className="q-chev" aria-hidden />}
                         <div>
                           <b>{shortName(u.name)}</b>
-                          <div className="tiny muted"><span className="mono">{u.tenant}</span> · <span className="plan-pill">{u.plan}</span></div>
+                          <div className="tiny muted">
+                            <span className="mono">{u.tenant}</span> · <span className="plan-pill">{u.plan}</span>
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td><Bar label={`${shortName(u.name)} tokens this month`} used={u.tokenQuota - u.tokensRemaining} total={u.tokenQuota} /></td>
-                    <td><Bar label={`${shortName(u.name)} requests this month`} used={u.requestsUsed} total={u.requestQuota} /></td>
+                    <td>
+                      <Bar
+                        label={`${shortName(u.name)} tokens this month`}
+                        used={u.tokenQuota - u.tokensRemaining}
+                        total={u.tokenQuota}
+                      />
+                    </td>
+                    <td>
+                      <Bar
+                        label={`${shortName(u.name)} requests this month`}
+                        used={u.requestsUsed}
+                        total={u.requestQuota}
+                      />
+                    </td>
                     <td className="r num">{fmtUsd(u.costUsd)}</td>
-                    <td><Status u={u} /></td>
+                    <td>
+                      <Status u={u} />
+                    </td>
                     {can("quota:reset") && (
                       <td className="r">
-                        <button className="btn sm ghost" title="Reset this month's usage (demo helper, audited)"
+                        <button
+                          className="btn sm ghost"
+                          title="Reset this month's usage (demo helper, audited)"
                           onClick={(e) => {
                             e.stopPropagation();
                             reset(u);
-                          }}>
+                          }}
+                        >
                           <RotateCcw size={13} /> Reset
                         </button>
                       </td>
@@ -169,7 +247,9 @@ export function Quotas() {
                   </tr>
                   {isOpen && (
                     <tr className="q-detail">
-                      <td colSpan={6}><Detail u={u} /></td>
+                      <td colSpan={6}>
+                        <Detail u={u} />
+                      </td>
                     </tr>
                   )}
                 </Fragment>
@@ -194,27 +274,52 @@ function Detail({ u }: { u: TenantUsage }) {
         <dd className="num">{fmtN(u.requestsRemaining)}</dd>
         <dt>Admission</dt>
         <dd>
-          {u.rejecting
-            ? <span>New requests are refused: each needs room for its prompt plus at least a short answer, and {fmtN(u.tokensRemaining)} tokens are left.</span>
-            : <span className="muted">Each request reserves its prompt plus its answer budget before any model is called.</span>}
+          {u.rejecting ? (
+            <span>
+              New requests are refused: each needs room for its prompt plus at least a short answer, and{" "}
+              {fmtN(u.tokensRemaining)} tokens are left.
+            </span>
+          ) : (
+            <span className="muted">
+              Each request reserves its prompt plus its answer budget before any model is called.
+            </span>
+          )}
         </dd>
         <dt>In flight</dt>
-        <dd className="num">{fmtN(u.tokensReserved)} tokens <span className="muted">reserved, not yet metered</span></dd>
+        <dd className="num">
+          {fmtN(u.tokensReserved)} tokens <span className="muted">reserved, not yet metered</span>
+        </dd>
       </dl>
       <dl>
         <dt>Model tiers</dt>
-        <dd>{u.allowedTiers.map((t) => <span key={t} className="tag">{t}</span>)}</dd>
+        <dd>
+          {u.allowedTiers.map((t) => (
+            <span key={t} className="tag">
+              {t}
+            </span>
+          ))}
+        </dd>
         <dt>Company profile</dt>
-        <dd>{u.profileFields ? `${u.profileFields} fields fill answer placeholders` : <span className="muted">Not set: answers use generic phrases</span>}</dd>
+        <dd>
+          {u.profileFields ? (
+            `${u.profileFields} fields fill answer placeholders`
+          ) : (
+            <span className="muted">Not set: answers use generic phrases</span>
+          )}
+        </dd>
       </dl>
       <div>
-        <div className="tiny muted" style={{ marginBottom: 6 }}>Requests by outcome, all time</div>
+        <div className="tiny muted" style={{ marginBottom: 6 }}>
+          Requests by outcome, all time
+        </div>
         <ul className="q-outcomes">
           {(Object.keys(GROUP) as Group[]).map((g) => {
             const I = GROUP[g].Icon;
             return (
               <li key={g}>
-                <span className="state"><I size={14} color={GROUP[g].color} aria-hidden /> {GROUP[g].label}</span>
+                <span className="state">
+                  <I size={14} color={GROUP[g].color} aria-hidden /> {GROUP[g].label}
+                </span>
                 <b className="num">{fmtN(outcomes[g])}</b>
               </li>
             );

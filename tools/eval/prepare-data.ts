@@ -101,7 +101,8 @@ mkdirSync(DATA, { recursive: true });
 writeFileSync(resolve(DATA, "kb.json"), JSON.stringify(kb));
 writeFileSync(resolve(DATA, "eval.json"), JSON.stringify(evalCases.map(toCase), null, 2));
 writeFileSync(resolve(DATA, "eval-ood.json"), JSON.stringify(ood, null, 2));
-writeFileSync(resolve(DATA, "retrieval-holdout.json"),
+writeFileSync(
+  resolve(DATA, "retrieval-holdout.json"),
   JSON.stringify(holdout.map((r) => ({ message: r.instruction, expectedIntent: r.intent }))),
 );
 writeFileSync(resolve(DATA, "intents.json"), JSON.stringify(intents, null, 2));

@@ -25,10 +25,25 @@ export type RouteReason = ReturnType<typeof routeEvent>;
 /** how a run that produced no complete answer ends: the client left, the stream broke, or nothing worked */
 export function failureOf(error: BackendError, committed: boolean) {
   if (error.kind === "aborted") {
-    return { code: "client_aborted" as ErrorCode, outcome: "client_aborted" as const, httpStatus: 499, message: "Client disconnected." };
+    return {
+      code: "client_aborted" as ErrorCode,
+      outcome: "client_aborted" as const,
+      httpStatus: 499,
+      message: "Client disconnected.",
+    };
   }
   if (committed) {
-    return { code: "stream_interrupted" as ErrorCode, outcome: "partial" as const, httpStatus: 502, message: "The answer was interrupted." };
+    return {
+      code: "stream_interrupted" as ErrorCode,
+      outcome: "partial" as const,
+      httpStatus: 502,
+      message: "The answer was interrupted.",
+    };
   }
-  return { code: "all_backends_failed" as ErrorCode, outcome: "failed_all_backends" as const, httpStatus: 502, message: "All model backends failed." };
+  return {
+    code: "all_backends_failed" as ErrorCode,
+    outcome: "failed_all_backends" as const,
+    httpStatus: 502,
+    message: "All model backends failed.",
+  };
 }

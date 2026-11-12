@@ -9,30 +9,115 @@ import { abortableSleep } from "../src/interface-adapters/gateways/llm/chaos.js"
 import type { KbEntry } from "../src/entities/support/retrieval.js";
 
 export const KB: KbEntry[] = [
-  { id: "c1", question: "how do I cancel my order", intent: "cancel_order", category: "ORDER", answer: "To cancel order {{Order Number}}, go to Orders and press Cancel." },
-  { id: "c2", question: "I want to cancel order {{Order Number}}", intent: "cancel_order", category: "ORDER", answer: "You can cancel from the Orders page." },
-  { id: "c3", question: "help cancelling purchase", intent: "cancel_order", category: "ORDER", answer: "Cancel via Orders > Cancel." },
-  { id: "t1", question: "where is my package, track order", intent: "track_order", category: "ORDER", answer: "Track it in Orders > Track." },
-  { id: "t2", question: "track my order status", intent: "track_order", category: "ORDER", answer: "Use the tracking link." },
-  { id: "r1", question: "I want a refund for my purchase", intent: "get_refund", category: "REFUND", answer: "Request a refund in Orders > Refund." },
-  { id: "r2", question: "how to get my money back refund", intent: "get_refund", category: "REFUND", answer: "Refunds take 5-7 days." },
+  {
+    id: "c1",
+    question: "how do I cancel my order",
+    intent: "cancel_order",
+    category: "ORDER",
+    answer: "To cancel order {{Order Number}}, go to Orders and press Cancel.",
+  },
+  {
+    id: "c2",
+    question: "I want to cancel order {{Order Number}}",
+    intent: "cancel_order",
+    category: "ORDER",
+    answer: "You can cancel from the Orders page.",
+  },
+  {
+    id: "c3",
+    question: "help cancelling purchase",
+    intent: "cancel_order",
+    category: "ORDER",
+    answer: "Cancel via Orders > Cancel.",
+  },
+  {
+    id: "t1",
+    question: "where is my package, track order",
+    intent: "track_order",
+    category: "ORDER",
+    answer: "Track it in Orders > Track.",
+  },
+  {
+    id: "t2",
+    question: "track my order status",
+    intent: "track_order",
+    category: "ORDER",
+    answer: "Use the tracking link.",
+  },
+  {
+    id: "r1",
+    question: "I want a refund for my purchase",
+    intent: "get_refund",
+    category: "REFUND",
+    answer: "Request a refund in Orders > Refund.",
+  },
+  {
+    id: "r2",
+    question: "how to get my money back refund",
+    intent: "get_refund",
+    category: "REFUND",
+    answer: "Refunds take 5-7 days.",
+  },
 ];
 
 export const TENANTS: SeedTenant[] = [
   {
-    id: "pro", name: "Pro", plan: "pro", apiKey: "k-pro", allowedTiers: ["fast", "strong", "degraded"], tokenQuota: 100_000, requestQuota: 100,
+    id: "pro",
+    name: "Pro",
+    plan: "pro",
+    apiKey: "k-pro",
+    allowedTiers: ["fast", "strong", "degraded"],
+    tokenQuota: 100_000,
+    requestQuota: 100,
     profile: { "Customer Support Phone Number": "+62 21 555 0100", "Website URL": "pro.example" },
   },
-  { id: "free", name: "Free", plan: "free", apiKey: "k-free", allowedTiers: ["fast", "degraded"], tokenQuota: 100_000, requestQuota: 100 },
-  { id: "tiny", name: "Tiny", plan: "trial", apiKey: "k-tiny", allowedTiers: ["fast", "degraded"], tokenQuota: 900, requestQuota: 2 },
+  {
+    id: "free",
+    name: "Free",
+    plan: "free",
+    apiKey: "k-free",
+    allowedTiers: ["fast", "degraded"],
+    tokenQuota: 100_000,
+    requestQuota: 100,
+  },
+  {
+    id: "tiny",
+    name: "Tiny",
+    plan: "trial",
+    apiKey: "k-tiny",
+    allowedTiers: ["fast", "degraded"],
+    tokenQuota: 900,
+    requestQuota: 2,
+  },
 ];
 
 export const USERS: SeedUser[] = [
   { id: "u_op", tenantId: "pro", email: "op@test.example", name: "Op", role: "operator", password: "op-pass-1" },
-  { id: "u_owner", tenantId: "pro", email: "owner@test.example", name: "Owner", role: "owner", password: "owner-pass-1" },
+  {
+    id: "u_owner",
+    tenantId: "pro",
+    email: "owner@test.example",
+    name: "Owner",
+    role: "owner",
+    password: "owner-pass-1",
+  },
   { id: "u_dev", tenantId: "pro", email: "dev@test.example", name: "Dev", role: "developer", password: "dev-pass-1" },
-  { id: "u_dev2", tenantId: "pro", email: "dev2@test.example", name: "Dev 2", role: "developer", password: "dev2-pass-1" },
-  { id: "u_viewer", tenantId: "free", email: "viewer@test.example", name: "Viewer", role: "viewer", password: "viewer-pass-1" },
+  {
+    id: "u_dev2",
+    tenantId: "pro",
+    email: "dev2@test.example",
+    name: "Dev 2",
+    role: "developer",
+    password: "dev2-pass-1",
+  },
+  {
+    id: "u_viewer",
+    tenantId: "free",
+    email: "viewer@test.example",
+    name: "Viewer",
+    role: "viewer",
+    password: "viewer-pass-1",
+  },
 ];
 
 export type Script = (req: BackendRequest) => AsyncIterable<StreamChunk>;
@@ -55,8 +140,17 @@ export class FakeBackend implements Backend {
 
 export function cfg(id: string, tier: BackendConfig["tier"], over: Partial<BackendConfig> = {}): BackendConfig {
   return {
-    id, kind: "openai-compatible", location: "cloud", tier, model: `${id}-model`, priceInPerM: 1, priceOutPerM: 2,
-    firstTokenTimeoutMs: 300, totalTimeoutMs: 2_000, enabled: true, ...over,
+    id,
+    kind: "openai-compatible",
+    location: "cloud",
+    tier,
+    model: `${id}-model`,
+    priceInPerM: 1,
+    priceOutPerM: 2,
+    firstTokenTimeoutMs: 300,
+    totalTimeoutMs: 2_000,
+    enabled: true,
+    ...over,
   };
 }
 
@@ -77,8 +171,10 @@ export const think = (thought: string, text: string): Script =>
   };
 
 /** a fast backend that also serves auto-smart's classifier call: `verdict` for that, `then` for the rest */
-export const withClassifier = (verdict: Script, then: Script): Script => (req) =>
-  (req.messages[1]?.content.startsWith("Message to classify:") ? verdict : then)(req);
+export const withClassifier =
+  (verdict: Script, then: Script): Script =>
+  (req) =>
+    (req.messages[1]?.content.startsWith("Message to classify:") ? verdict : then)(req);
 
 export const fail = (msg = "boom"): Script =>
   async function* () {
@@ -99,8 +195,12 @@ export async function startServer(
   } = {},
 ) {
   const config = {
-    ...baseConfig, demoMode: over.demoMode ?? true, adminToken: "adm", auth: { ...baseConfig.auth, ...over.auth },
-    routing: { ...baseConfig.routing, ...over.routing }, classifier: { ...baseConfig.classifier, ...over.classifier },
+    ...baseConfig,
+    demoMode: over.demoMode ?? true,
+    adminToken: "adm",
+    auth: { ...baseConfig.auth, ...over.auth },
+    routing: { ...baseConfig.routing, ...over.routing },
+    classifier: { ...baseConfig.classifier, ...over.classifier },
   };
   const gw: Gateway = createGateway(config, { db: openDb(":memory:", TENANTS, USERS), backends, kbEntries: KB });
   const app = createApp(gw, gw.config);

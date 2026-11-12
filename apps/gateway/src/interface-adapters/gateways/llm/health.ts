@@ -67,9 +67,7 @@ export class HealthMonitor implements HealthReader {
 
   async probeAll() {
     await Promise.all(
-      this.backends
-        .filter((b) => b.config.enabled && b.config.kind === "openai-compatible")
-        .map((b) => this.probe(b)),
+      this.backends.filter((b) => b.config.enabled && b.config.kind === "openai-compatible").map((b) => this.probe(b)),
     );
   }
 

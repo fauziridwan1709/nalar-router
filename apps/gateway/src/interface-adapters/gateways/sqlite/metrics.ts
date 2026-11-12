@@ -76,23 +76,29 @@ const addTo = (m: Record<string, Group>, k: string, tokens: number, cost: number
   g.costUsd += cost;
 };
 
-export function computeMetrics(db: DB, range: RangeKey, opts: { tenantId?: string; backend?: string; now?: number } = {}) {
+export function computeMetrics(
+  db: DB,
+  range: RangeKey,
+  opts: { tenantId?: string; backend?: string; now?: number } = {},
+) {
   const { spanMs, bucketMs } = RANGES[range];
   const now = opts.now ?? Date.now();
   // align buckets to wall-clock boundaries so labels read 10:00, 10:05, …
   const end = Math.ceil((now + 1) / bucketMs) * bucketMs;
   const start = end - spanMs;
-  const allRows = (
-    opts.tenantId
-      ? db.prepare(
+  const allRows = (opts.tenantId
+    ? db
+        .prepare(
           `SELECT created_at, tenant_id, outcome, backend, fallback_used, prompt_tokens, completion_tokens, latency_ms, cost_usd, intent, error_code, pii
              FROM requests WHERE created_at >= ? AND created_at < ? AND outcome != 'in_progress' AND tenant_id = ?`,
-        ).all(start, end, opts.tenantId)
-      : db.prepare(
+        )
+        .all(start, end, opts.tenantId)
+    : db
+        .prepare(
           `SELECT created_at, tenant_id, outcome, backend, fallback_used, prompt_tokens, completion_tokens, latency_ms, cost_usd, intent, error_code, pii
              FROM requests WHERE created_at >= ? AND created_at < ? AND outcome != 'in_progress'`,
-        ).all(start, end)
-  ) as unknown as Row[];
+        )
+        .all(start, end)) as unknown as Row[];
   const rows = opts.backend ? allRows.filter((r) => r.backend === opts.backend) : allRows;
 
   const n = Math.round(spanMs / bucketMs);
@@ -186,15 +192,24 @@ export function computeMetrics(db: DB, range: RangeKey, opts: { tenantId?: strin
       fallbackRate: modelCalls ? fallbacks / modelCalls : null,
       p50: percentile(allLat, 0.5),
       p95: percentile(allLat, 0.95),
-      outcomes: rows.reduce(
-        (m, r) => ((m[outcomeGroup(r.outcome)] += 1), m),
-        { success: 0, refused: 0, rejected: 0, failed: 0 },
-      ),
+      outcomes: rows.reduce((m, r) => ((m[outcomeGroup(r.outcome)] += 1), m), {
+        success: 0,
+        refused: 0,
+        rejected: 0,
+        failed: 0,
+      }),
     },
-    buckets: buckets.map(({ _lat, ...b }) => ({ ...b, fallbackRate: b.modelCalls ? b.fallbacks / b.modelCalls : null })),
+    buckets: buckets.map(({ _lat, ...b }) => ({
+      ...b,
+      fallbackRate: b.modelCalls ? b.fallbacks / b.modelCalls : null,
+    })),
     byTenant: [...byTenant.entries()].map(([tenant, v]) => ({ tenant, ...v })).sort((a, b) => b.costUsd - a.costUsd),
     paretoIntents: pareto(byIntent),
     paretoIssues: pareto(byIssue),
-    byBackend: [...byBackend.entries()].map(([backend, requests]) => ({ backend, requests, share: requests / (modelCalls || 1) })),
+    byBackend: [...byBackend.entries()].map(([backend, requests]) => ({
+      backend,
+      requests,
+      share: requests / (modelCalls || 1),
+    })),
   };
 }

@@ -23,7 +23,9 @@ import { describe, expect, it } from "vitest";
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "../src");
 
 const walk = (d: string): string[] =>
-  readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : f.endsWith(".ts") ? [join(d, f)] : []));
+  readdirSync(d).flatMap((f) =>
+    statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : f.endsWith(".ts") ? [join(d, f)] : [],
+  );
 
 const layerOf = (file: string) => relative(SRC, file).split("/")[0];
 
@@ -69,14 +71,22 @@ describe("architecture: dependencies point inward", () => {
     const banned = /^(node:(fs|sqlite|http|net|child_process)|express|zod)$/;
     const violations = files
       .filter((f) => ["entities", "use-cases"].includes(layerOf(f)))
-      .flatMap((f) => importsOf(f).filter((i) => i.layer === "external" && banned.test(i.spec)).map((i) => `${relative(SRC, f)} → ${i.spec}`));
+      .flatMap((f) =>
+        importsOf(f)
+          .filter((i) => i.layer === "external" && banned.test(i.spec))
+          .map((i) => `${relative(SRC, f)} → ${i.spec}`),
+      );
     expect(violations).toEqual([]);
   });
 
   it("interface adapters use Express and SQLite types only; frameworks/ runs them", () => {
     const violations = files
       .filter((f) => layerOf(f) === "interface-adapters")
-      .flatMap((f) => importsOf(f).filter((i) => /^(express|node:sqlite)$/.test(i.spec) && !i.typeOnly).map((i) => `${relative(SRC, f)} → ${i.spec}`));
+      .flatMap((f) =>
+        importsOf(f)
+          .filter((i) => /^(express|node:sqlite)$/.test(i.spec) && !i.typeOnly)
+          .map((i) => `${relative(SRC, f)} → ${i.spec}`),
+      );
     expect(violations).toEqual([]);
   });
 });

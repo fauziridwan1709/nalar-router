@@ -7,7 +7,19 @@ import { Sparkline, useCountUp } from "./charts";
 import type { Range } from "../../../entities/models";
 import type { Page } from "../../../entities/access";
 
-export function PageHeader({ title, sub, actions, serif, tour }: { title: ReactNode; sub?: ReactNode; actions?: ReactNode; serif?: boolean; tour?: string }) {
+export function PageHeader({
+  title,
+  sub,
+  actions,
+  serif,
+  tour,
+}: {
+  title: ReactNode;
+  sub?: ReactNode;
+  actions?: ReactNode;
+  serif?: boolean;
+  tour?: string;
+}) {
   return (
     <div className="page-head" data-tour={tour}>
       <div>
@@ -26,7 +38,19 @@ export interface ChipOption {
 }
 
 /** a filter chip: "Tenant All ▾", opens an Astryx menu with the choices, the current one checked */
-export function FilterChip({ label, value, options, onChange, tour }: { label: string; value: string; options: ChipOption[]; onChange: (v: string) => void; tour?: string }) {
+export function FilterChip({
+  label,
+  value,
+  options,
+  onChange,
+  tour,
+}: {
+  label: string;
+  value: string;
+  options: ChipOption[];
+  onChange: (v: string) => void;
+  tour?: string;
+}) {
   const current = options.find((o) => o.value === value) ?? options[0];
   return (
     <DropdownMenu
@@ -49,7 +73,15 @@ export function FilterChip({ label, value, options, onChange, tour }: { label: s
   );
 }
 
-export function StatCard({ k, value, fmt, sub, info, trend, extra }: {
+export function StatCard({
+  k,
+  value,
+  fmt,
+  sub,
+  info,
+  trend,
+  extra,
+}: {
   k: string;
   value: number | null;
   fmt: (v: number) => string;
@@ -65,7 +97,9 @@ export function StatCard({ k, value, fmt, sub, info, trend, extra }: {
         {k}
         {info && (
           <Tooltip content={info}>
-            <span tabIndex={0} aria-label={info} style={{ display: "inline-flex" }}><Info size={14} /></span>
+            <span tabIndex={0} aria-label={info} style={{ display: "inline-flex" }}>
+              <Info size={14} />
+            </span>
           </Tooltip>
         )}
         {extra && <span style={{ marginLeft: "auto" }}>{extra}</span>}
@@ -90,4 +124,10 @@ export const RANGES: ChipOption[] = [
 ];
 
 export const asOf = () =>
-  new Date().toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+  new Date().toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });

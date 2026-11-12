@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useApi } from "./api";
 import type { Range, Metrics } from "../../../entities/models";
 
-
 export function useMetrics(range: Range, tenant: string, backend: string) {
   const api = useApi();
   const [m, setM] = useState<Metrics | null>(null);
@@ -27,6 +26,3 @@ export function useMetrics(range: Range, tenant: string, backend: string) {
   }, [load, range]);
   return { m, loading, err, reload: load };
 }
-
-
-

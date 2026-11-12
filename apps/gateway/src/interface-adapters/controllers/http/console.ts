@@ -29,7 +29,14 @@ import type { GatewayDeps } from "../../../use-cases/deps.js";
 import { listDemoAccounts, resolveSession, signIn, signOut } from "../../../use-cases/identity.js";
 import { auditTrail, dashboardMetrics, requestDetailFor, requestLog } from "../../../use-cases/observability.js";
 import { backendStatusFor, clearFaultInjection, evalRuns, setFaultInjection } from "../../../use-cases/operations.js";
-import { governanceReport, listMembers, quotaOverview, resetTenantQuota, testPiiPolicy, updatePiiPolicy } from "../../../use-cases/tenants.js";
+import {
+  governanceReport,
+  listMembers,
+  quotaOverview,
+  resetTenantQuota,
+  testPiiPolicy,
+  updatePiiPolicy,
+} from "../../../use-cases/tenants.js";
 import { actorOf, askedTenant } from "./request.js";
 import { clearSessionCookie, readCookie, safeEq, sameOrigin, sessionCookieName, setSessionCookie } from "./security.js";
 import type { HttpSettings } from "./settings.js";
@@ -56,12 +63,20 @@ const KeyBody = z
       .min(1, "pick at least one scope")
       .max(KEY_SCOPES.length)
       .refine((s) => new Set(s).size === s.length, "scopes must be unique"),
-    expiresInDays: z.union([z.literal(EXPIRY_DAYS[0]), z.literal(EXPIRY_DAYS[1]), z.literal(EXPIRY_DAYS[2]), z.literal(EXPIRY_DAYS[3]), z.null()]),
+    expiresInDays: z.union([
+      z.literal(EXPIRY_DAYS[0]),
+      z.literal(EXPIRY_DAYS[1]),
+      z.literal(EXPIRY_DAYS[2]),
+      z.literal(EXPIRY_DAYS[3]),
+      z.null(),
+    ]),
   })
   .strict();
 
 const PlaygroundBody = z.object({ tenant: z.string().max(64).optional() }).passthrough();
-const PiiPolicyBody = z.object({ mode: z.enum(PII_MODES), types: z.array(z.enum(PII_TYPES)).max(PII_TYPES.length) }).strict();
+const PiiPolicyBody = z
+  .object({ mode: z.enum(PII_MODES), types: z.array(z.enum(PII_TYPES)).max(PII_TYPES.length) })
+  .strict();
 const PiiTestBody = z.object({ text: z.string().max(2000, "text is at most 2000 characters") }).strict();
 
 /** the signed-in user as the console sees it */
@@ -86,7 +101,9 @@ export function mountConsole(app: Express, deps: GatewayDeps, cfg: HttpSettings,
   const csrf = (req: Request, _res: Response, next: NextFunction) => {
     const sent = req.header("x-csrf-token") ?? "";
     if (!sameOrigin(req) || !req.csrf || !safeEq(sent, req.csrf)) {
-      return next(new GatewayError(403, "csrf_failed", "Your session could not be verified. Reload the page and try again."));
+      return next(
+        new GatewayError(403, "csrf_failed", "Your session could not be verified. Reload the page and try again."),
+      );
     }
     next();
   };
@@ -102,7 +119,11 @@ export function mountConsole(app: Express, deps: GatewayDeps, cfg: HttpSettings,
     const parsed = LoginBody.safeParse(req.body ?? {});
     // one message for every bad input: don't coach a guesser on the format
     if (!parsed.success) throw new GatewayError(400, "invalid_request", "Enter your email address and password.");
-    const signedIn = await signIn(deps, { ...parsed.data, ip: req.ip ?? "unknown", userAgent: req.header("user-agent") });
+    const signedIn = await signIn(deps, {
+      ...parsed.data,
+      ip: req.ip ?? "unknown",
+      userAgent: req.header("user-agent"),
+    });
     setSessionCookie(req, res, cfg, signedIn.token, SESSION_MAX_MS);
     res.json({ user: publicUser(signedIn.user, signedIn.tenant), csrfToken: signedIn.csrf });
   });
@@ -126,9 +147,20 @@ export function mountConsole(app: Express, deps: GatewayDeps, cfg: HttpSettings,
   app.get("/api/console/config", session, (req, res) => {
     const tenants = isOperator(req.user!) ? deps.tenants.list() : [deps.tenants.get(req.user!.tenantId)!];
     res.json({
-      tenants: tenants.map((t) => ({ id: t.id, name: t.name, plan: t.plan, allowedTiers: t.allowedTiers, profile: t.profile, piiMode: t.piiPolicy.mode })),
+      tenants: tenants.map((t) => ({
+        id: t.id,
+        name: t.name,
+        plan: t.plan,
+        allowedTiers: t.allowedTiers,
+        profile: t.profile,
+        piiMode: t.piiPolicy.mode,
+      })),
       backends: deps.backends.map((b) => ({
-        id: b.config.id, tier: b.config.tier, model: b.config.model, location: b.config.location, enabled: b.config.enabled,
+        id: b.config.id,
+        tier: b.config.tier,
+        model: b.config.model,
+        location: b.config.location,
+        enabled: b.config.enabled,
         contextWindow: b.config.contextWindow ?? null,
       })),
       // what the playground explains: how many KB entries the model sees, and how confidence is weighed
@@ -227,12 +259,25 @@ export function mountConsole(app: Express, deps: GatewayDeps, cfg: HttpSettings,
   });
 
   // ---------- playground: the same two endpoints an API key calls, as the signed-in user's tenant ----------
-  const playground = (endpoint: "support.answer" | "chat.completions", spec: typeof supportSpec) =>
+  const playground =
+    (endpoint: "support.answer" | "chat.completions", spec: typeof supportSpec) =>
     async (req: Request, res: Response) => {
       const { tenant: asked, ...rest } = parseBody(PlaygroundBody, req.body);
       const tenant = playgroundTenant(deps, req.user!, asked);
       await runCapability(req, res, endpoint, { tenant, credential: `user:${req.user!.id}` }, spec(deps, res, rest));
     };
-  app.post("/api/console/playground/support", session, csrf, need("playground:run"), playground("support.answer", supportSpec));
-  app.post("/api/console/playground/chat", session, csrf, need("playground:run"), playground("chat.completions", chatSpec));
+  app.post(
+    "/api/console/playground/support",
+    session,
+    csrf,
+    need("playground:run"),
+    playground("support.answer", supportSpec),
+  );
+  app.post(
+    "/api/console/playground/chat",
+    session,
+    csrf,
+    need("playground:run"),
+    playground("chat.completions", chatSpec),
+  );
 }
