@@ -123,7 +123,7 @@ export function Playground() {
     { value: "auto-smart", label: "Auto · smart", description: "A small model judges complexity first (~0.5 s)" },
     {
       value: "auto-cascade", label: "Auto · cascade",
-      description: endpoint === "support" ? "Fast first; strong only if fast is unsure" : "Support only; chat uses the heuristic",
+      description: endpoint === "support" ? "Fast first; strong only if the fast model doubts itself" : "Support only; chat uses the heuristic",
     },
     ...[...new Set(cfg.backends.map((b) => b.tier))].map((t) => ({ value: t, label: `Tier: ${t}`, description: "Pin a tier, fall back inside it" })),
     ...cfg.backends.map((b) => {
