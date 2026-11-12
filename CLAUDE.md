@@ -90,7 +90,7 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 
 ## Agent skills (`.agents/skills`, linked in `.claude/skills`)
 
-- **Console UI work:** read `frontend-design` and `web-design-guidelines`; for React specifics, `vercel-react-best-practices`. Use Astryx components (`@astryxdesign/core/*`, pinned 0.7.13) for controls before hand-rolling one, and Lucide for icons. Every chart follows the dataviz rules already in `apps/console/src/charts.tsx`: validated palette, one axis, a tooltip, and a table view.
+- **Console UI work:** read `frontend-design` and `web-design-guidelines`; for React specifics, `vercel-react-best-practices`. Use Astryx components (`@astryxdesign/core/*`, pinned 0.7.13) for controls before hand-rolling one, and Lucide for icons. Every chart follows the dataviz rules already in `apps/console/src/frameworks/ui/components/charts.tsx`: validated palette, one axis, a tooltip, and a table view.
 - **Gateway and API work:** `nodejs-backend-patterns` and `api-and-interface-design`. Keep the error shape and the invariants above.
 - **Always:** `karpathy-guidelines` (surgical changes, verifiable success criteria).
 - **Verifying the running console:** `webapp-testing`. To record the demo video: `product-demo`.
