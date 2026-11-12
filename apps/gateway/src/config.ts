@@ -137,7 +137,7 @@ export const config = {
     {
       // Local model behind any OpenAI-compatible server. Default: Qwen3.5-4B on Apple MLX
       // (`mlx_lm.server`); point LOCAL_LLM_BASE_URL at Ollama (http://localhost:11434/v1) to use that instead.
-      id: "local-qwen",
+      id: "local-qwen3.5-4b",
       kind: "openai-compatible",
       location: "local",
       tier: "local",
