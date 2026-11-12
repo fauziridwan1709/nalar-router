@@ -35,19 +35,36 @@ function requestBody(form: RequestForm, tenantField: { tenant?: string }): Playg
   if (form.endpoint === "chat") {
     const system = form.system.trim();
     return {
-      messages: [...(system ? [{ role: "system" as const, content: system }] : []), { role: "user" as const, content: message }],
-      model: form.model, include_reasoning: form.reasoning, ...tenantField,
+      messages: [
+        ...(system ? [{ role: "system" as const, content: system }] : []),
+        { role: "user" as const, content: message },
+      ],
+      model: form.model,
+      include_reasoning: form.reasoning,
+      ...tenantField,
     };
   }
-  return { message, model: form.model, prompt_version: form.promptVersion, include_reasoning: form.reasoning, ...tenantField };
+  return {
+    message,
+    model: form.model,
+    prompt_version: form.promptVersion,
+    include_reasoning: form.reasoning,
+    ...tenantField,
+  };
 }
 
 export function Playground() {
   const { cfg, can, scope, user, go } = useApp();
   const isOperator = can("tenants:all");
   const [form, setForm] = useState<RequestForm>(() => ({
-    endpoint: "support", tenantId: initialTenant(cfg, user, scope, isOperator), model: "auto", promptVersion: "v3",
-    reasoning: true, stream: true, system: DEFAULT_SYSTEM_PROMPT, message: "",
+    endpoint: "support",
+    tenantId: initialTenant(cfg, user, scope, isOperator),
+    model: "auto",
+    promptVersion: "v3",
+    reasoning: true,
+    stream: true,
+    system: DEFAULT_SYSTEM_PROMPT,
+    message: "",
   }));
   const update = (change: Partial<RequestForm>) => setForm((previous) => ({ ...previous, ...change }));
   const [codeOpen, setCodeOpen] = useState(false);
@@ -61,7 +78,13 @@ export function Playground() {
   const tenant = cfg.tenants.find((t) => t.id === form.tenantId) ?? cfg.tenants[0];
   // the same limits the API enforces: characters per field, and the selected model's context window
   const check = checkPlayground(
-    { endpoint: form.endpoint, message: form.message, system: form.system, model: form.model, includeReasoning: form.reasoning },
+    {
+      endpoint: form.endpoint,
+      message: form.message,
+      system: form.system,
+      model: form.model,
+      includeReasoning: form.reasoning,
+    },
     cfg,
     tenant.allowedTiers,
   );
@@ -89,10 +112,18 @@ export function Playground() {
       const system = form.system.trim();
       return chatSnippet(lang, location.origin, {
         messages: [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: message }],
-        model: form.model, include_reasoning: form.reasoning, stream: form.stream,
+        model: form.model,
+        include_reasoning: form.reasoning,
+        stream: form.stream,
       });
     }
-    return supportSnippet(lang, location.origin, { message, model: form.model, prompt_version: form.promptVersion, include_reasoning: form.reasoning, stream: form.stream });
+    return supportSnippet(lang, location.origin, {
+      message,
+      model: form.model,
+      prompt_version: form.promptVersion,
+      include_reasoning: form.reasoning,
+      stream: form.stream,
+    });
   };
 
   function openKeys() {
@@ -105,30 +136,56 @@ export function Playground() {
       <div className="pg-head">
         <div>
           <h1>Playground</h1>
-          <p>Call the support assistant or raw chat completions, streamed or not, see how the gateway served it, and copy the code to ship.</p>
+          <p>
+            Call the support assistant or raw chat completions, streamed or not, see how the gateway served it, and copy
+            the code to ship.
+          </p>
         </div>
         <div className="actions">
-          <button className="btn ghost" onClick={() => setCodeOpen(true)}><Share2 size={15} /> Get code</button>
+          <button className="btn ghost" onClick={() => setCodeOpen(true)}>
+            <Share2 size={15} /> Get code
+          </button>
           <RunHistory turns={runs.turns} onSelect={runs.select} />
-          <button className="btn" onClick={runs.reset} disabled={runs.busy && !runs.turns.length}><Plus size={15} /> New</button>
+          <button className="btn" onClick={runs.reset} disabled={runs.busy && !runs.turns.length}>
+            <Plus size={15} /> New
+          </button>
         </div>
       </div>
 
       <div className="pg">
         <Composer
-          form={form} update={update} tenant={tenant} check={check} busy={runs.busy}
-          onRun={run} onStop={runs.stop} code={code} scopeName={scopeName}
+          form={form}
+          update={update}
+          tenant={tenant}
+          check={check}
+          busy={runs.busy}
+          onRun={run}
+          onStop={runs.stop}
+          code={code}
+          scopeName={scopeName}
         />
         <section className="pg-right" aria-label="Response" data-tour="pg-inspector">
           {runs.current ? (
             <RunView turn={runs.current} />
           ) : (
-            <TemplatePicker templates={templates} endpointPath={ENDPOINT_PATH[form.endpoint]} stream={form.stream} onPick={(message) => update({ message })} />
+            <TemplatePicker
+              templates={templates}
+              endpointPath={ENDPOINT_PATH[form.endpoint]}
+              stream={form.stream}
+              onPick={(message) => update({ message })}
+            />
           )}
         </section>
       </div>
 
-      <GetCode open={codeOpen} onClose={() => setCodeOpen(false)} code={code} scopeName={scopeName} canManageKeys={can("keys:read")} openKeys={openKeys} />
+      <GetCode
+        open={codeOpen}
+        onClose={() => setCodeOpen(false)}
+        code={code}
+        scopeName={scopeName}
+        canManageKeys={can("keys:read")}
+        openKeys={openKeys}
+      />
     </>
   );
 }
@@ -142,8 +199,18 @@ function RunHistory({ turns, onSelect }: { turns: Turn[]; onSelect: (id: number)
     <DropdownMenu
       alignment="end"
       menuWidth={340}
-      button={{ label: `History${turns.length ? ` (${turns.length})` : ""}`, variant: "ghost", icon: <History size={15} /> }}
-      header={turns.length ? undefined : <div className="menu-head"><span className="tiny muted">Runs from this session appear here.</span></div>}
+      button={{
+        label: `History${turns.length ? ` (${turns.length})` : ""}`,
+        variant: "ghost",
+        icon: <History size={15} />,
+      }}
+      header={
+        turns.length ? undefined : (
+          <div className="menu-head">
+            <span className="tiny muted">Runs from this session appear here.</span>
+          </div>
+        )
+      }
       items={[...turns].reverse().map((turn) => ({
         label: turn.question.length > 46 ? `${turn.question.slice(0, 45)}…` : turn.question,
         description: status(turn),
@@ -163,12 +230,18 @@ function RunView({ turn }: { turn: Turn }) {
             <h2>Response</h2>
             <p className="mono">
               POST {ENDPOINT_PATH[turn.endpoint]} · {turn.stream ? "stream" : "JSON"}
-              {turn.meta?.requestId ? ` · ${turn.meta.requestId}` : " · waiting for the gateway…"}
+              {turn.meta?.requestId
+                ? ` · ${turn.meta.requestId}`
+                : turn.streaming
+                  ? " · waiting for the gateway…"
+                  : " · rejected before a model was called"}
             </p>
           </div>
           <div className="tools">{turn.done && <Outcome outcome={turn.done.outcome} />}</div>
         </header>
-        <div className="body"><Answer turn={turn} /></div>
+        <div className="body">
+          <Answer turn={turn} />
+        </div>
       </div>
       <div className="panel">
         <Inspector turn={turn} />
@@ -177,12 +250,22 @@ function RunView({ turn }: { turn: Turn }) {
   );
 }
 
-function TemplatePicker(props: { templates: Template[]; endpointPath: string; stream: boolean; onPick: (message: string) => void }) {
+function TemplatePicker(props: {
+  templates: Template[];
+  endpointPath: string;
+  stream: boolean;
+  onPick: (message: string) => void;
+}) {
   return (
     <div className="templates">
-      <div className="mascot"><Logo size={44} /></div>
+      <div className="mascot">
+        <Logo size={44} />
+      </div>
       <h3>Start with a template</h3>
-      <p>Build your request and press Run. It goes to <span className="mono">POST {props.endpointPath}</span>{props.stream ? ", streamed" : " as one JSON response"}.</p>
+      <p>
+        Build your request and press Run. It goes to <span className="mono">POST {props.endpointPath}</span>
+        {props.stream ? ", streamed" : " as one JSON response"}.
+      </p>
       <div className="tpl-grid">
         {props.templates.map((template) => (
           <button key={template.title} className="tpl" onClick={() => props.onPick(template.text)}>
@@ -190,7 +273,10 @@ function TemplatePicker(props: { templates: Template[]; endpointPath: string; st
             <p>{template.body}</p>
             <div className="tags">
               {template.tags.map((tag) => (
-                <span key={tag} className={`tag ${tag === "PII guardrail" ? "pii" : ""}`}>{tag === "PII guardrail" && <Fingerprint size={12} />}{tag}</span>
+                <span key={tag} className={`tag ${tag === "PII guardrail" ? "pii" : ""}`}>
+                  {tag === "PII guardrail" && <Fingerprint size={12} />}
+                  {tag}
+                </span>
               ))}
             </div>
           </button>

@@ -53,15 +53,27 @@ function OverviewTab({ turn }: { turn: Turn }) {
   return (
     <>
       <div className="metrics">
-        <Metric label="Served by" value={done?.backend ?? (turn.streaming ? "…" : "none")} note={done?.model ?? undefined} />
-        <Metric label="Fallback" value={done ? (done.fallbackUsed ? "Yes" : "No") : "…"} />
+        <Metric
+          label="Served by"
+          value={done?.backend ?? (turn.streaming ? "…" : "none")}
+          note={done?.model ?? undefined}
+        />
+        <Metric label="Fallback" value={done ? (done.fallbackUsed ? "Yes" : "No") : turn.streaming ? "…" : "–"} />
         <Metric
           label="Tokens"
           value={done?.usage ? `${fmtN(done.usage.promptTokens)} in, ${fmtN(done.usage.completionTokens)} out` : "–"}
           note={done?.usage?.source && `from ${done.usage.source}`}
         />
-        <Metric label="Latency" value={fmtMs(done?.latencyMs)} note={done?.ttftMs != null ? `first token ${fmtMs(done.ttftMs)}` : undefined} />
-        <Metric label="Estimated cost" value={fmtUsd(done?.costUsd)} note={done?.quota && `${fmtN(done.quota.tokensRemaining)} tokens left this month`} />
+        <Metric
+          label="Latency"
+          value={fmtMs(done?.latencyMs)}
+          note={done?.ttftMs != null ? `first token ${fmtMs(done.ttftMs)}` : undefined}
+        />
+        <Metric
+          label="Estimated cost"
+          value={fmtUsd(done?.costUsd)}
+          note={done?.quota && `${fmtN(done.quota.tokensRemaining)} tokens left this month`}
+        />
         <Metric label="Outcome" value={outcome} />
       </div>
       {piiGuard && (
@@ -71,12 +83,18 @@ function OverviewTab({ turn }: { turn: Turn }) {
             <>
               <div className="tags">
                 {piiGuard.masked.map((m) => (
-                  <span key={m.placeholder} className="tag pii"><Fingerprint size={12} /> {m.label} → <span className="mono">{m.placeholder}</span></span>
+                  <span key={m.placeholder} className="tag pii">
+                    <Fingerprint size={12} /> {m.label} → <span className="mono">{m.placeholder}</span>
+                  </span>
                 ))}
               </div>
-              <div className="tiny muted" style={{ marginTop: 6 }}>The provider received the placeholders. The values were restored only in the answer you see.</div>
+              <div className="tiny muted" style={{ marginTop: 6 }}>
+                The provider received the placeholders. The values were restored only in the answer you see.
+              </div>
             </>
-          ) : <div className="small muted">{piiGuard.detail}.</div>}
+          ) : (
+            <div className="small muted">{piiGuard.detail}.</div>
+          )}
         </div>
       )}
       {(turn.intent || turn.refusal?.intent) && <IntentSection turn={turn} />}
@@ -88,8 +106,18 @@ function OverviewTab({ turn }: { turn: Turn }) {
               {placeholders.slots.map((slot) => (
                 <tr key={slot.name}>
                   <td className="mono">{`{{${slot.name}}}`}</td>
-                  <td>{slot.source === "pii" ? <span className="muted">shown only in the answer</span> : slot.value || <span className="muted">removed</span>}</td>
-                  <td><span className={`tag ${slotTone(slot.source)}`}>{slot.source === "pii" ? "restored PII" : humanize(slot.source)}</span></td>
+                  <td>
+                    {slot.source === "pii" ? (
+                      <span className="muted">shown only in the answer</span>
+                    ) : (
+                      slot.value || <span className="muted">removed</span>
+                    )}
+                  </td>
+                  <td>
+                    <span className={`tag ${slotTone(slot.source)}`}>
+                      {slot.source === "pii" ? "restored PII" : humanize(slot.source)}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -114,18 +142,26 @@ function IntentSection({ turn }: { turn: Turn }) {
             <b>{intent.intent}</b> <span className="tag">{intent.label}</span>{" "}
             {!intent.agreesWithRetrieval && <span className="tag warn">disagrees with retrieval</span>}
           </div>
-          <div className="bar" role="meter" aria-valuenow={intent.confidence} aria-valuemin={0} aria-valuemax={1} aria-label="confidence">
+          <div
+            className="bar"
+            role="meter"
+            aria-valuenow={intent.confidence}
+            aria-valuemin={0}
+            aria-valuemax={1}
+            aria-label="confidence"
+          >
             <div style={{ width: `${Math.round(intent.confidence * 100)}%` }} />
           </div>
           <div className="small muted num">
-            {intent.confidence.toFixed(2)} = {weights.vote.toFixed(2)} × retrieval vote {intent.components.retrievalVote}
-            {" "}+ {weights.coverage.toFixed(2)} × coverage {intent.components.coverage}
-            {" "}+ {weights.model.toFixed(2)} × model {intent.components.model}
+            {intent.confidence.toFixed(2)} = {weights.vote.toFixed(2)} × retrieval vote{" "}
+            {intent.components.retrievalVote} + {weights.coverage.toFixed(2)} × coverage {intent.components.coverage} +{" "}
+            {weights.model.toFixed(2)} × model {intent.components.model}
           </div>
         </>
       ) : (
         <div className="small">
-          The model said <b>{turn.refusal!.intent}</b> with confidence {turn.refusal!.confidence}, so the assistant refused ({turn.refusal!.detail}).
+          The model said <b>{turn.refusal!.intent}</b> with confidence {turn.refusal!.confidence}, so the assistant
+          refused ({turn.refusal!.detail}).
         </div>
       )}
     </div>
@@ -151,13 +187,22 @@ function RetrievalTab({ turn }: { turn: Turn }) {
   if (!retrieval) return <div className="muted small">No retrieval for this run.</div>;
   return (
     <>
-      <div className="small ink2" style={{ marginBottom: 6 }}>Coverage {retrieval.coverage}. Retrieved knowledge base entries, raw text:</div>
+      <div className="small ink2" style={{ marginBottom: 6 }}>
+        Coverage {retrieval.coverage}. Retrieved knowledge base entries, raw text:
+      </div>
       <div className="filters small">
-        {retrieval.votes.map((vote) => <span key={vote.intent} className="tag">{vote.intent} {Math.round(vote.share * 100)}%</span>)}
+        {retrieval.votes.map((vote) => (
+          <span key={vote.intent} className="tag">
+            {vote.intent} {Math.round(vote.share * 100)}%
+          </span>
+        ))}
       </div>
       {retrieval.entries.map((entry) => (
         <details key={entry.id} className="kb">
-          <summary><span className="num muted">{entry.score}</span> <span className="tag">{entry.intent}</span> {entry.question}</summary>
+          <summary>
+            <span className="num muted">{entry.score}</span> <span className="tag">{entry.intent}</span>{" "}
+            {entry.question}
+          </summary>
           <div className="small pre ink2">{entry.answer}</div>
         </details>
       ))}
@@ -167,14 +212,24 @@ function RetrievalTab({ turn }: { turn: Turn }) {
 
 /** what an API client receives, verbatim */
 function RawTab({ turn }: { turn: Turn }) {
-  if (!turn.raw) return <div className="muted small">{turn.streaming ? "Waiting for the response…" : "No response body."}</div>;
+  if (!turn.raw)
+    return <div className="muted small">{turn.streaming ? "Waiting for the response…" : "No response body."}</div>;
   let note = "The single JSON body an API client receives with stream: false.";
-  if (turn.stream && turn.endpoint === "chat") note = "OpenAI chat.completion.chunk events; the gateway's route and attempt events ride along as SSE comments.";
+  if (turn.stream && turn.endpoint === "chat")
+    note = "OpenAI chat.completion.chunk events; the gateway's route and attempt events ride along as SSE comments.";
   else if (turn.stream) note = "Server-Sent Events, as an API client receives them.";
   return (
     <>
-      <div className="small ink2" style={{ marginBottom: 6 }}>{note}</div>
-      <CodeBlock code={turn.raw} language={turn.stream ? "plaintext" : "json"} hasCopyButton maxHeight={420} size="sm" />
+      <div className="small ink2" style={{ marginBottom: 6 }}>
+        {note}
+      </div>
+      <CodeBlock
+        code={turn.raw}
+        language={turn.stream ? "plaintext" : "json"}
+        hasCopyButton
+        maxHeight={420}
+        size="sm"
+      />
     </>
   );
 }
