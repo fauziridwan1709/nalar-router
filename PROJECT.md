@@ -1,6 +1,6 @@
 # PROJECT.md: state of the work, and how to pick it up
 
-This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-11 (PR #3 merged; PR #4 open: OpenAI SDK compatibility, Quotas redesign, orange theme).
+This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-11 (PR #4 merged; PR #5 open: clean-architecture refactor, complexity-based routing, error catalog).
 
 ## What this is
 
@@ -31,8 +31,10 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - [ ] **Rotate the Groq API key.** It was printed in a session transcript on 2026-11-10. Update `.env` and the Render env var.
 - [x] **Merge PR #2** (PII guardrail, Claude-Console redesign). Merged 2026-11-11.
 - [x] **Merge PR #3** (chat completions + `stream` toggle in the playground, logo reverted).
-- [ ] **Merge PR #4** (OpenAI SDK compatibility, Quotas redesign, orange theme). Merging redeploys Render and wipes the SQLite data (accepted for now); keep `DEMO_MODE=true`.
+- [x] **Merge PR #4** (OpenAI SDK compatibility, Quotas redesign, orange theme).
+- [ ] **Merge PR #5** (clean architecture, complexity-based routing, error catalog + docs/ERRORS.md). Merging redeploys Render and wipes the SQLite data (accepted); keep `DEMO_MODE=true`.
 - [ ] Refresh the README screenshots other than Quotas: they still show the old blue accent.
+- [ ] Optional: per-signal routing eval with real models (does escalating complex queries actually raise judged quality?).
 - [ ] Before recording or submitting, sign in on the live console as `ops@nalar.example` and click **Run sample traffic** on the Reliability page. The Render disk is ephemeral, so metering is empty after every redeploy.
 - [ ] Add a short "Beyond the brief" section to `docs/REPORT.md`: sign-in/RBAC, API key management, PII guardrail, console redesign. Say why each was added and what it cost, so it reads as judgement rather than scope creep.
 - [ ] Submit: repo link, live URL, video link
@@ -77,7 +79,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - **Code:**
   - npm-workspaces monorepo: `apps/gateway` (Express 5, TypeScript, `node:sqlite`), `apps/console` (React 19, Vite 8, Astryx 0.7.13, hand-rolled SVG charts), `tools/eval`
   - **72 gateway tests** pass (incl. sign-in, sessions, CSRF, RBAC, tenant isolation, API keys, PII guardrail and error hygiene); CI (GitHub Actions) runs typecheck, tests, build and the retrieval eval
-- **Branches:** `main` has PR #1 (auth, RBAC, keys, first redesign). PR #2 (PII guardrail, governance pages, Claude-Console layout) is merged. PR #3 (chat playground, `stream` toggle) is merged. PR #4 (`feat/quotas-orange-openai-compat`) is open.
+- **Branches:** `main` has PR #1 (auth, RBAC, keys, first redesign). PR #2 (PII guardrail, governance pages, Claude-Console layout) is merged. PR #3 (chat playground, `stream` toggle) is merged. PR #4 (OpenAI compat, Quotas, orange theme) is merged. PR #5 (`refactor/clean-architecture-router`) is open.
 - **Default prompt is v3:** it tells the model which placeholders the gateway can fill. v1 and v2 are kept for reproducible comparisons.
 - **Tenants:**
   - `acme` (pro), `globex` (free), `initech` (trial: 4k tokens / 5 requests, to demo exhausting the quota) and `eval` (shown as "Nalar internal", the operator's home tenant)
@@ -149,6 +151,9 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 | Astryx for controls, our own CSS for layout | the user asked for Astryx; versions are pinned (beta). `layers.css` sets cascade order so our resets lose to Astryx and our classes win. |
 | Claude-Console look | the user supplied Claude Console screenshots as the reference: dark default, chips, stat cards, workbench playground. |
 | Original logo, not the spark mark | the spark mark from PR #2 looked too close to the Claude Console's. The layout stays; only the mark went back to the gradient fan-out. |
+| Clean architecture, enforced by a test | the gateway grew to about 4.7k lines with use cases reaching into SQLite and Express. Layers (domain / application / infrastructure / interfaces) with ports make the rules unit-testable and Postgres a new adapter, not a rewrite. `tests/architecture.test.ts` fails the build on an outward import. |
+| Complexity-based auto routing, as a heuristic | weighted signals (length, ambiguity, several questions, reasoning cues, steps, constraints, code, math) instead of a classifier: free, no added latency, replayable, every decision explains itself. Weights keep the two original rules escalating on their own; `npm run routing-eval` showed no route change on the 43 eval messages. |
+| Error catalog | `GatewayError` only accepts a code from `ERROR_CATALOG`, a test ties it to docs/ERRORS.md, and process-level failures (port in use, uncaught errors, SIGTERM) drain and exit cleanly. |
 | OpenAI compatibility is tested with the real SDK | `stream` used to default to `true`, so `client.chat.completions.create()` without `stream` got SSE and broke. Now it follows OpenAI: JSON by default, `stream_options`, `max_completion_tokens`, text parts, `developer`, sampling params, `/v1/models`, OpenAI error `type`. `tests/openai-sdk.test.ts` runs the `openai` package against the gateway. Tools, `response_format` and images are rejected by name. |
 | Ephemeral SQLite on Render is accepted for now | the user decided a redeploy wiping usage is fine for the demo; Litestream → R2 or a paid disk are the options when it isn't. |
 | Playground covers both endpoints and `stream` | the completions endpoint had no place in the console; the playground now calls either one, streamed or as JSON, and the Raw tab shows the exact wire body. Still session-authed: the console twin of each `/v1` route uses the same spec. |
@@ -161,6 +166,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - **Hand-offs:** multi-intent, vague and Indonesian messages are refused with a hand-off instead of answered. This is deliberate and documented.
 - **Judge score:** v3 scores about 0.1 lower than v2-raw. The judge compares against template references; this is documented and not hidden.
 - **Token estimate:** chars/4 runs 6–17% high vs the provider. That's the safe direction for quota; such rows are labelled `estimated`.
+- **groq-strong empty answers:** gpt-oss-120b sometimes ends a support turn (prompt v3) with no content after about 240 tokens. The gateway rejects it (`unusable_output`) and falls back to fast, so escalated requests may still be served by fast. The rate is unmeasured (rate-limited); see REPORT §3.
 - **Chat endpoint:** `/v1/chat/completions` is OpenAI's Chat Completions format (tested with the `openai` SDK), not Anthropic's Messages format; no tools, `response_format` or images. It has no placeholder rendering. That's intentional: the raw path stays raw. It masks PII but does not restore it.
 - **PII:** personal names aren't detected. A short message whose only content words sit next to PII can still be refused by the scope gate (lead-ins like "email me at" are already stripped for retrieval).
 - **Auth:** the sign-in failure limiter is in memory (fine for one instance). Users are seeded; there is no user management or password change UI.
@@ -169,7 +175,8 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 
 ## Next steps (in priority order)
 
-- [ ] Merge PR #4, check the live sign-in, Quotas, and the OpenAI SDK against the live URL (`baseURL: https://nalar-router.onrender.com/v1`).
+- [ ] Merge PR #5; on Render check sign-in, a playground run of "A complex request" (Routing tab shows the complexity score), and the OpenAI SDK against `https://nalar-router.onrender.com/v1`.
+- [ ] Measure how often `groq-strong` returns an empty answer under prompt v3 (seen 3/3 on the comparison example), then try `reasoning_effort: medium` for the strong tier.
 - [ ] REPORT.md "Beyond the brief" section (see the checklist above).
 - [ ] Record the video demo (user). Optionally script it with `.agents/skills/product-demo` (writes to `out/product-demo/`).
 - [ ] Invite the assessors; rotate the Groq key.

@@ -7,29 +7,8 @@ import { fileURLToPath } from "node:url";
  * Prices are USD per 1M tokens. They are list prices at build time and are only
  * used for *estimated* cost; change them here, not in code.
  */
-export type Tier = "fast" | "strong" | "local" | "degraded";
-
-export interface BackendConfig {
-  id: string;
-  /** where the model runs: shown in the console next to the online/offline label */
-  location: "cloud" | "local" | "built-in";
-  kind: "openai-compatible" | "mock";
-  tier: Tier;
-  model: string;
-  baseUrl?: string;
-  apiKey?: string;
-  /** provider-specific body fields (e.g. reasoning_effort) */
-  extraBody?: Record<string, unknown>;
-  /** body fields that switch reasoning output on / off for this provider */
-  reasoningBody?: { on: Record<string, unknown>; off: Record<string, unknown> };
-  priceInPerM: number;
-  priceOutPerM: number;
-  /** abort and fall back if no first token by then */
-  firstTokenTimeoutMs: number;
-  /** abort the whole call after this */
-  totalTimeoutMs: number;
-  enabled: boolean;
-}
+export type { BackendConfig, Tier } from "./domain/types.js";
+import type { BackendConfig } from "./domain/types.js";
 
 // apps/gateway/{src,dist}/config.* → repo root is three levels up
 const here = dirname(fileURLToPath(import.meta.url));
@@ -71,6 +50,8 @@ export const config = {
     longQueryTokens: num(env.ROUTE_LONG_QUERY_TOKENS, 60),
     /** retrieval vote share below this = ambiguous → strong tier */
     ambiguousVoteShare: num(env.ROUTE_AMBIGUOUS_VOTE_SHARE, 0.6),
+    /** complexity score (domain/routing/complexity.ts) at or above which auto routing starts at the strong tier */
+    complexityThreshold: num(env.ROUTE_COMPLEXITY_THRESHOLD, 0.5),
   },
 
   health: {

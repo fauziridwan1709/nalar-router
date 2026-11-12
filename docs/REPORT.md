@@ -52,9 +52,26 @@ All prices are in `config.ts` and are list prices at build time. The local model
 
 1. **Plan entitlement.** Only backends whose tier is in the tenant's plan are candidates.
 2. **Explicit hint.** The caller can pin a tier or backend. The rest of the default order stays as fallback.
-3. **Auto.** Default to the fast tier. Escalate to the strong tier only when there is evidence the small model may struggle:
-   - the message is long (more than 60 estimated tokens), or
-   - retrieval is ambiguous: the top intent holds less than 60% of the score-weighted vote among the top 8 hits.
+3. **Auto.** Default to the fast tier. Escalate to the strong tier when the query is complex: `assessComplexity` (`domain/routing/complexity.ts`) adds up weighted signals, and the router escalates at a score of 0.5 (`ROUTE_COMPLEXITY_THRESHOLD`).
+
+   | signal | fires when | weight |
+   |---|---|---|
+   | `long_query` | the newest user turn is over 60 estimated tokens | 0.5 |
+   | `medium_query` | over 30 | 0.15 |
+   | `ambiguous_intent` | support: the top intent holds under 60% of the score-weighted vote among the top 8 hits | 0.5 |
+   | `multi_question` | 2+ question marks, or 2+ different wh-questions | 0.25 |
+   | `reasoning` | compare, explain, trade-offs, step by step, recommend… | 0.2 / 0.35 / 0.5 for 1 / 2 / 3+ cues |
+   | `multi_step` | a numbered or bulleted list, or "first … then …" | 0.2 |
+   | `constraints` | 2+ output constraints ("at most", "as JSON"…) | 0.15 |
+   | `code` | a code block or code-like syntax | 0.4 |
+   | `math` | arithmetic or "how much in total" | 0.15 |
+   | `long_conversation` | chat: 6+ messages | 0.1 |
+
+   The two original rules (long message, ambiguous retrieval) still escalate on their own. The softer signals escalate only in combination: "why was I charged twice?" scores 0.2 and stays fast, while "Compare the standard and express shipping options, explain the trade-offs and recommend one" scores 0.5 and starts on the strong tier. It's a deterministic heuristic, not a classifier model: it costs nothing, adds no latency, and a stored decision can be replayed exactly. The score and every signal that fired are stored with the route and shown in the playground's Routing tab.
+
+   **Measured** (`npm run routing-eval`, no model calls): on the 43 eval, hard-case and out-of-domain messages the route is unchanged from the old two-rule router (5 of 43 start on strong under both). Those sets are short templated support questions, so the eval numbers in §5 still hold. The analyzer only changes routing for phrasing those sets don't contain: comparisons, multi-part requests, code and calculations.
+
+   **Seen live (2026-11-11):** the comparison example above escalated correctly, but `groq-strong` (gpt-oss-120b) returned an empty answer under prompt v3 in 3 of 3 direct tries. It spent about 240 tokens and sent no content, so the header check rejected it as `unusable_output` and the request fell back to `groq-fast`. Simple support questions pinned to `strong` were answered normally. Groq's rate limit stopped a larger measurement, so the rate is unknown. The fallback did its job, but on this prompt escalation costs about 1 s and the strong model's tokens for nothing. Next: measure it with `--delay`, then try `reasoning_effort: medium` for the strong tier.
 
    The rule names are `auto_default_fast`, `auto_escalate_strong`, `auto_escalate_denied_by_plan` and `auto_escalate_unavailable`.
 4. **Fallback order:** remaining real tiers, then local, then degraded (extractive).

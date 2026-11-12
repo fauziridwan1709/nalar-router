@@ -62,7 +62,7 @@
 ### Routing and fallback
 
 - **Four backends:** Groq `gpt-oss-20b` (fast), Groq `gpt-oss-120b` (strong), Qwen3.5-4B running locally on Apple MLX, and an extractive fallback that always works.
-- **Rules you can defend:** the router respects the tenant's plan, defaults to the cheap model, and escalates to the strong one only for long messages or when retrieval is ambiguous. Each decision is stored as `{rule, reason, chain, signals}`.
+- **Rules you can defend:** the router respects the tenant's plan, defaults to the cheap model, and escalates to the strong one when a query-complexity score reaches 0.5. The score adds up weighted signals: length, ambiguous retrieval, several questions, reasoning cues, multi-step structure, constraints, code, math. Each decision is stored as `{rule, reason, chain, signals}` with the score and the signals that fired.
 - **Fallback:** triggered by an error, no first token within the timeout, the total timeout, or unusable model output. Every attempt is recorded, and a per-backend circuit breaker skips backends that keep failing.
 - **One commit point:** fallback can happen only before the first byte reaches the client. Two models' outputs are never spliced into one answer.
 - **Fault injection** per backend (`error`, `hang`, `garbage`, extra latency), so fallback can be demonstrated on demand.
@@ -379,7 +379,7 @@ curl -N http://localhost:3000/v1/support/answer \
 | `GET /api/console/members` | session + `members:read` | Who can sign in to the tenant |
 | `GET /healthz` | — | Liveness check |
 
-Error codes: `400 invalid_request`, `401 invalid_api_key`, `403 insufficient_scope`, `403 model_not_allowed`, `422 pii_detected`, `429 quota_exceeded`, `502 all_backends_failed`, `503 quota_unavailable`. Payload schemas and the full event reference are in **[docs/API.md](docs/API.md)**.
+Common error codes: `400 invalid_request`, `401 invalid_api_key`, `403 insufficient_scope`, `403 model_not_allowed`, `422 pii_detected`, `429 quota_exceeded`, `502 all_backends_failed`, `503 quota_unavailable`. Every code, with its status, retry rule and when it happens, is in **[docs/ERRORS.md](docs/ERRORS.md)**. Payload schemas and the full event reference are in **[docs/API.md](docs/API.md)**.
 
 ## Evaluation
 
@@ -434,24 +434,23 @@ The live instance runs on **Render** as a single Node web service that serves bo
 nalar-router/
 ├── apps/
 │   ├── gateway/                 Express API (TypeScript)
-│   │   ├── src/
-│   │   │   ├── config.ts        every tunable: backends, prices, timeouts, thresholds
-│   │   │   ├── http/            routes, auth, SSE sink, OpenAI wire format
-│   │   │   ├── router/          policy (route plan) · executor (fallback) · circuit breaker
-│   │   │   ├── backends/        OpenAI-compatible client · extractive mock · fault injection
-│   │   │   ├── support/         BM25 retrieval · prompts · header parser · assistant
-│   │   │   ├── quota.ts         fail-closed admission with token reservations
-│   │   │   ├── metering.ts      request and attempt records
-│   │   │   └── db.ts            node:sqlite schema and demo tenants
-│   │   └── tests/               vitest, no network
+│   │   ├── src/                 clean architecture, dependencies point inward (enforced by a test)
+│   │   │   ├── domain/          pure rules: routing policy + complexity, breaker, quota rule,
+│   │   │   │                    metering math, PII, BM25, header parser, placeholders, error catalog
+│   │   │   ├── application/     use cases (capability path, support, chat, fallback executor) + ports
+│   │   │   ├── infrastructure/  SQLite stores, model backends, fault injection, health probes, auth stores
+│   │   │   ├── interfaces/http/ routes, request schemas, SSE + OpenAI wire formats, error handler
+│   │   │   └── config.ts · gateway.ts · index.ts   composition root
+│   │   └── tests/               vitest, no network; architecture, error-catalog and OpenAI SDK contract tests
 │   └── console/                 React 19 + Vite console
-├── tools/eval/                  prepare-data · retrieval-eval · eval · probe · results/
+├── tools/eval/                  prepare-data · retrieval-eval · routing-eval · eval · probe · results/
 ├── data/                        KB slice + held-out / OOD / hard eval sets (from Bitext)
 ├── docs/
 │   ├── REPORT.md                technical report: design, results, trade-offs
 │   ├── EVALUATION.md            every eval run, with headline numbers and raw output
 │   ├── ARCHITECTURE.md          diagrams
 │   ├── API.md                   API reference
+│   ├── ERRORS.md                every error code: status, retry rule, when it happens
 │   └── assets/                  banner and screenshots
 ├── .agents/skills/              project agent skills (pinned in skills-lock.json, linked in .claude/skills)
 ├── .github/workflows/ci.yml

@@ -1,7 +1,7 @@
 /** PII guardrail: detectors, masking on the way to the model, read-back, block mode, metering, governance API. */
 import { afterEach, describe, expect, it } from "vitest";
 import { FakeBackend, cfg, reply, signIn, sse, startServer } from "./helpers.js";
-import { retrievalText, scanPii } from "../src/guardrails/pii.js";
+import { retrievalText, scanPii } from "../src/domain/guardrails/pii.js";
 
 describe("PII detectors", () => {
   it("masks contact details, cards, IBANs, national ids and IPs", () => {
