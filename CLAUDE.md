@@ -16,12 +16,14 @@ apps/gateway/     Node ≥22.13 + Express 5 API (TypeScript → dist/). Serves t
                        routing/ (policy.ts planRoute, complexity.ts assessComplexity, classifier.ts auto-smart prompt/parser,
                        cascade.ts auto-cascade rule, context.ts context windows, breaker.ts), guardrails/pii.ts,
                        auth/ (rbac.ts, apiKey.ts scopes/limits, user.ts session lifetimes, failureLimiter.ts),
-                       support/ (retrieval.ts BM25, prompt.ts v1–v3, parser.ts header validation, placeholders.ts)
+                       support/ (retrieval.ts BM25, prompt.ts v1–v3, parser.ts header validation, placeholders.ts,
+                       confidence.ts the 0.45/0.35/0.20 confidence signal)
   src/use-cases/       Application Business Rules: capability.ts (prepare → admit → run → meter → respond), support.ts,
                        chat.ts, executor.ts (fallback/timeouts/attempts), router.ts (auto-smart classify + re-plan),
                        access.ts (API key auth, tenant scoping, redaction), identity.ts (sign-in/out, sessions),
                        apiKeys.ts, tenants.ts (quota, PII policy, members), observability.ts (metrics, logs, audit),
                        operations.ts (backend status, models, fault injection, evals), deps.ts (AppDeps, GatewayDeps),
+                       events.ts (attempt/route event shapes, failure mapping shared by support and chat),
                        ports/ (backend, sink, stores, tenants, identity, apiKeys, reporting, operations)
   src/interface-adapters/
     controllers/http/  api.ts (/healthz, /v1), console.ts (session API), admin.ts (admin token), specs.ts (zod schemas,

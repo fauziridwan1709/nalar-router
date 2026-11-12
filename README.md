@@ -48,6 +48,7 @@
 - [Deployment](#deployment)
 - [Project structure](#project-structure)
 - [Design decisions and trade-offs](#design-decisions-and-trade-offs)
+- [Next development: improving retrieval](#next-development-improving-retrieval)
 - [Dataset and credits](#dataset-and-credits)
 
 ## Features
@@ -65,6 +66,7 @@
 - **Reasoning effort is `low` for both Groq models, for now.** The fast and strong tiers differ in model size, not in how hard they think. The playground's Reasoning switch (and `include_reasoning`) only controls whether the reasoning text is returned; gpt-oss reasons, and is billed for it, either way. Raising strong to `medium` is a next step, to be measured first (REPORT §3).
 - **Rules you can defend:** the router respects the tenant's plan, defaults to the cheap model, and escalates to the strong one when a query-complexity score reaches 0.5. The score adds up weighted signals: length, ambiguous retrieval, several questions, reasoning cues, multi-step structure, constraints, code, math. Each decision is stored as `{rule, reason, chain, signals}` with the score and the signals that fired.
 - **Three router modes:** `auto` is that heuristic (free, instant). `auto-smart` has the fast model classify the message first (one metered call, about 0.5 s), which catches hard questions in plain words and keeps long simple ones on fast. `auto-cascade` starts every support request on fast and moves to strong before anything is streamed, but only on doubt a stronger model could remove. Measured side by side in [REPORT §3](docs/REPORT.md#3-routing).
+- **What `mock` is:** the fourth backend, `mock` (model `extractive-kb-v1`), is not a language model and not a test double. It is the gateway's degraded mode: it streams the best-matching knowledge-base answer word for word, with the intent retrieval voted for, in the same header-then-answer format a model writes. It costs nothing, needs no network or key, and can't be rate-limited, so it is the last link of every route chain: when every real model fails, the customer still gets a grounded answer instead of an error. Its token counts are estimates (labelled `estimated`), its speed is set by `MOCK_TOKEN_DELAY_MS`, and fault injection works on it like on any backend. Without a Groq key it serves every request, which is why the app runs with zero setup. On chat completions it has no KB answer to give, so it echoes the request and says no model was used.
 - **Fallback:** triggered by an error, no first token within the timeout, the total timeout, or unusable model output. Every attempt is recorded, and a per-backend circuit breaker skips backends that keep failing.
 - **One commit point:** fallback can happen only before the first byte reaches the client. Two models' outputs are never spliced into one answer.
 - **Fault injection** per backend (`error`, `hang`, `garbage`, extra latency), so fallback can be demonstrated on demand.
@@ -544,6 +546,19 @@ The short version is below. The long version is in [docs/REPORT.md](docs/REPORT.
 - **Fallback only before the first byte.** An honest `partial` error is better than splicing two models' text together.
 - **SQLite.** Real transactions keep quota correct and simple. The price is that it's ephemeral on the free host.
 - **Cut on purpose:** multi-turn memory, embeddings, per-second API rate limits, tenant and user management, SSO/MFA, and a production database.
+
+## Next development: improving retrieval
+
+BM25 is the right call for this dataset today: Bitext questions are short and templated, BM25 reaches 99.6% recall@8 on held-out rows, and it adds no second model to the request path. Its measured gaps are elsewhere: Indonesian messages, paraphrases far from the templates, and messages that ask several things at once are refused with a hand-off (REPORT §5). Recent work points at four upgrades, in the order I would try them. Each should be measured on the hard and out-of-domain sets before it ships, since the in-domain set is already saturated.
+
+| upgrade | what it fixes here | recent work |
+|---|---|---|
+| **Hybrid retrieval: BM25 + a multilingual dense embedding, fused with reciprocal rank fusion** | Indonesian and paraphrased messages, which share few words with the English templates | Qwen3 Embedding ([arXiv 2506.05176](https://arxiv.org/html/2506.05176v3)); SEA-BED, an embedding benchmark for Southeast Asian languages, which shows quality varies a lot by language, so Indonesian must be measured, not assumed ([arXiv 2508.12243](https://arxiv.org/pdf/2508.12243)); SEA-LION-Embedding, open embeddings for Southeast Asia (2026, [arXiv 2606.03027](https://arxiv.org/pdf/2606.03027)) |
+| **A cross-encoder reranker over the fused top-k** | picks the right entry when several intents score alike, which today lowers the confidence signal and causes refusals | an April 2026 benchmark of retrieval strategies finds hybrid search followed by neural reranking clearly beats every single-stage method ([arXiv 2604.01733](https://arxiv.org/abs/2604.01733)); the Qwen3 Embedding paper ships matching rerankers |
+| **Uncertainty-aware fusion** | the confidence signal is 80% retrieval; scoring how sure each retriever is per query would make refusals better calibrated | UMG-RAG, a training-free method that estimates each retriever's per-query reliability from the entropy of its score distribution and fuses accordingly (June 2026, [arXiv 2606.13550](https://arxiv.org/abs/2606.13550)) |
+| **Multi-intent decomposition before retrieval** | "charged twice … payment methods … refund?" is refused today; split it, retrieve per part, answer each | Omni-RAG decomposes multi-intent queries into sub-queries and retrieves per intent ([arXiv 2506.21384](https://arxiv.org/html/2506.21384v1)); ReDI, decomposition plus interpretation with fused results ([arXiv 2509.06544](https://arxiv.org/pdf/2509.06544)); a 2025 customer-support case study where intent recognition (splitting complex questions), RAG-Fusion and reranking together beat baseline RAG ([arXiv 2508.05664](https://arxiv.org/abs/2508.05664)) |
+
+The ports make these drop-in: a dense index or a reranker is a new gateway behind the same retrieval call, and `npm run retrieval-eval` plus the hard-case probe measure the change.
 
 ## Dataset and credits
 

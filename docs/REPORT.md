@@ -254,3 +254,4 @@ Multi-intent ("charged twice … payment methods … refund?"), vague ("it doesn
 - A judged quality eval across the three router modes (`npm run eval -- --configs auto:v3,auto-smart:v3,auto-cascade:v3 --judge groq-strong`). The live run in §3 measured routing, cost and outcome, not answer quality.
 - Language detection, with a translated query for retrieval (so Indonesian messages are answered, not refused).
 - A harder, paraphrased eval set, so prompt and model differences show up in accuracy and not only in cost.
+- Retrieval upgrades for the measured gaps (Indonesian, paraphrases, multi-intent): hybrid BM25 + multilingual dense retrieval with a reranker, uncertainty-aware fusion, and multi-intent decomposition. The recent papers behind each are in the README, "Next development: improving retrieval".
