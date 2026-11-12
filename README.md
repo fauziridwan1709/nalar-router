@@ -27,7 +27,7 @@
 <p align="center">
   <a href="docs/assets/demo.mp4"><img src="docs/assets/demo.png" alt="Demo: a support question with an email and a card number; the gateway masks both before the model, streams the answer with them restored, and the trace shows time to first token and total response time" width="100%"></a>
   <br>
-  <sub><b>Demo (19 s, click to play):</b> a customer message with an email and a card number. The gateway masks both before the model, streams the answer with them restored, and the trace shows every step, including time to first token.</sub>
+  <sub><b>Demo (26 s, click to play):</b> a customer message with an email and a card number. The gateway masks both before the model, streams the answer with them restored, and the trace shows every step, including time to first token.</sub>
 </p>
 
 ---
