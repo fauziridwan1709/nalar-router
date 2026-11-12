@@ -36,11 +36,15 @@ export function useCountUp(target: number, ms = 700) {
   const from = useRef(v);
   useEffect(() => {
     if (reducedMotion()) return setV(target);
-    const start = performance.now();
+    // time from the first frame's own timestamp: a rAF timestamp can be earlier than a
+    // performance.now() read in this effect, which made the progress negative (and the
+    // cubic ease turned that into a large negative number on screen)
+    let start: number | null = null;
     const a = from.current;
     let raf = 0;
     const tick = (now: number) => {
-      const p = Math.min(1, (now - start) / ms);
+      start ??= now;
+      const p = Math.min(1, Math.max(0, (now - start) / ms));
       const e = 1 - (1 - p) ** 3;
       const x = a + (target - a) * e;
       setV(x);
