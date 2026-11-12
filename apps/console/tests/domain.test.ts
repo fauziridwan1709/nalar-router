@@ -1,13 +1,14 @@
 /** The console's rules, tested as plain functions (no React, no network). */
 import { describe, expect, it } from "vitest";
-import { fmtMs, fmtN, fmtUsd, pct } from "../src/domain/format";
-import { levelOf, sharePct } from "../src/domain/quota";
-import { backendState } from "../src/domain/backends";
-import { hasPermission } from "../src/domain/access";
-import { groupOf } from "../src/domain/outcomes";
-import { applyEvent, TRACE_LABEL, type Turn } from "../src/domain/playground";
-import { chatSnippet, supportSnippet } from "../src/domain/snippets";
-import type { BackendStatus, TenantUsage } from "../src/domain/models";
+import { fmtMs, fmtN, fmtUsd, pct } from "../src/entities/format";
+import { levelOf, sharePct } from "../src/entities/quota";
+import { backendState } from "../src/entities/backends";
+import { hasPermission } from "../src/entities/access";
+import { groupOf } from "../src/entities/outcomes";
+import { applyEvent, TRACE_LABEL, type Turn } from "../src/entities/playground";
+import { chatSnippet, supportSnippet } from "../src/entities/snippets";
+import type { BackendStatus, TenantUsage } from "../src/entities/models";
+import { checkPlayground, contextWindowFor, estimateMessagesTokens } from "../src/entities/limits";
 
 describe("format", () => {
   it("formats money, durations, counts and shares", () => {
@@ -100,5 +101,50 @@ describe("code snippets", () => {
   });
   it("never embed a key", () => {
     expect(chatSnippet("node", "https://x")).toContain("process.env.NALAR_API_KEY");
+  });
+});
+
+describe("request limits", () => {
+  const limits = {
+    supportMessageChars: 2_000, chatMessageChars: 16_000, chatTotalChars: 32_000, chatMaxMessages: 50,
+    maxCompletionTokens: 4_096, chatDefaultCompletionTokens: 1_024, supportAnswerTokens: 800, supportReasoningExtraTokens: 1_200,
+  };
+  const b = (id: string, tier: string, contextWindow: number | null, enabled = true) => ({ id, tier, model: id, location: "cloud", enabled, contextWindow });
+  const backends = [b("fast", "fast", 131_072), b("local", "local", 8_192), b("mock", "degraded", null), b("off", "strong", 1_000, false)];
+  const cfg = { backends, limits };
+  const input = { endpoint: "chat" as const, message: "hi", system: "", model: "local", includeReasoning: false };
+
+  it("estimates tokens the way the gateway does", () => {
+    expect(estimateMessagesTokens([{ content: "abcd" }, { content: "abcde" }])).toBe(2 + 4 + 1 + 4 + 2);
+  });
+
+  it("a pinned model is checked against its own window; auto against the largest the plan allows", () => {
+    expect(contextWindowFor("local", backends, ["fast", "local"]).window).toBe(8_192);
+    expect(contextWindowFor("auto", backends, ["fast", "local"])).toEqual({ window: 131_072, label: "fast" });
+    expect(contextWindowFor("auto", backends, ["fast", "degraded"]).window).toBeNull(); // the mock has no limit
+    expect(contextWindowFor("strong", backends, ["strong"]).window).toBeNull(); // nothing enabled: the gateway decides
+  });
+
+  it("blocks a chat request that doesn't fit the pinned model, and says by how much", () => {
+    const long = "x".repeat(30_000); // 7,500 tokens + 1,024 for the answer > 8,192
+    const c = checkPlayground({ ...input, message: long.slice(0, 16_000), system: long.slice(0, 14_000) }, cfg, ["fast", "local"]);
+    expect(c.problems).toHaveLength(1);
+    expect(c.problems[0]).toContain('"local" accepts up to 8,192 tokens');
+    expect(checkPlayground({ ...input, message: long.slice(0, 16_000), system: long.slice(0, 14_000), model: "auto" }, cfg, ["fast", "local"]).problems).toEqual([]);
+  });
+
+  it("enforces the API's character limits per field and in total", () => {
+    expect(checkPlayground({ ...input, endpoint: "support", message: "x".repeat(2_001), model: "auto" }, cfg, ["fast"]).problems[0]).toContain("2,000 characters");
+    const c = checkPlayground({ ...input, model: "fast", message: "x".repeat(16_001), system: "y".repeat(16_000) }, cfg, ["fast"]);
+    expect(c.problems).toEqual([
+      "The user message is limited to 16,000 characters.",
+      "System prompt and message together are limited to 32,000 characters (now 32,001).",
+    ]);
+  });
+
+  it("support reserves the answer budget, more with reasoning on", () => {
+    const s = (includeReasoning: boolean) => checkPlayground({ ...input, endpoint: "support", message: "hi", includeReasoning }, cfg, ["local"]);
+    expect(s(false).completionTokens).toBe(800);
+    expect(s(true).completionTokens).toBe(2_000);
   });
 });
