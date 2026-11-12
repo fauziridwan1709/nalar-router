@@ -38,7 +38,7 @@ flowchart LR
     subgraph Backends
         B1["groq-fast<br/>gpt-oss-20b"]
         B2["groq-strong<br/>gpt-oss-120b"]
-        B3["local-qwen<br/>Qwen3.5-4B · MLX"]
+        B3["local-qwen3.5-4b<br/>Qwen3.5-4B · MLX"]
         B4["mock<br/>extractive KB answer"]
     end
 

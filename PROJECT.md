@@ -49,7 +49,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - [x] Metering per request (model, tokens, latency, estimated cost, outcome) in a database: SQLite `requests` plus per-attempt `attempts`, with `usage_source` as provider, estimated, mixed or none
 
 ### Routing
-- [x] Two or more backends with rules you can defend: groq-fast (gpt-oss-20b), groq-strong (gpt-oss-120b), local-qwen (Qwen3.5-4B on MLX), and mock (extractive). Default is fast; escalate to strong on a complexity score (length, ambiguous retrieval, reasoning cues…); tenant plan entitlement; explicit pins (`apps/gateway/src/domain/routing/policy.ts`). Three auto modes: `auto` (heuristic), `auto-smart` (classifier call), `auto-cascade` (fast first, escalate before commit on the fast model's own doubt).
+- [x] Two or more backends with rules you can defend: groq-fast (gpt-oss-20b), groq-strong (gpt-oss-120b), local-qwen3.5-4b (Qwen3.5-4B on MLX; `local-qwen` before 2026-11-12), and mock (extractive). Default is fast; escalate to strong on a complexity score (length, ambiguous retrieval, reasoning cues…); tenant plan entitlement; explicit pins (`apps/gateway/src/domain/routing/policy.ts`). Three auto modes: `auto` (heuristic), `auto-smart` (classifier call), `auto-cascade` (fast first, escalate before commit on the fast model's own doubt).
 - [x] Fallback on failure or slowness, recorded and inspectable: first-token and total timeouts, circuit breaker, fault injection, `attempts` table, route strip and drawer in the console
 
 ### Support assistant

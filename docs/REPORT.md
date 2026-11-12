@@ -43,7 +43,7 @@ The `requests` table is the single source of truth for both metering and quota. 
 |---|---|---|---|---|
 | `groq-fast` | fast | `openai/gpt-oss-20b` (Groq free tier) | $0.075 / $0.30 | Cheap, about 0.6 s to first token. Groq moved its Llama models to enterprise-only, so gpt-oss is the self-serve option. |
 | `groq-strong` | strong | `openai/gpt-oss-120b` (Groq) | $0.15 / $0.60 | Larger model, twice the price |
-| `local-qwen` | local | Qwen3.5-4B, 4-bit, on Apple MLX (`mlx_lm.server`) | $0 marginal | Private and offline. Only available when running locally. |
+| `local-qwen3.5-4b` | local | Qwen3.5-4B, 4-bit, on Apple MLX (`mlx_lm.server`) | $0 marginal | Private and offline. Only available when running locally. Called `local-qwen` in the eval runs before 2026-11-12. |
 | `mock` | degraded | extractive: streams the top KB answer verbatim | $0 | Always available and grounded. Configurable latency and failure. |
 
 All prices are in `config.ts` and are list prices at build time. The local model's cost is recorded as $0 marginal; electricity and hardware are not modelled.

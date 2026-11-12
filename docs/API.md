@@ -69,7 +69,7 @@ curl http://localhost:3000/v1/models -H 'authorization: Bearer sk-acme-demo-7f3a
 This lists every backend, including ones not configured on this host. For each it returns the online/offline label, where the model runs, and whether the caller's plan may use it.
 
 ```json
-[{ "id": "local-qwen", "tier": "local", "location": "local", "allowedForTenant": true,
+[{ "id": "local-qwen3.5-4b", "tier": "local", "location": "local", "allowedForTenant": true,
    "health": { "label": "offline", "availability": "disabled",
                "reason": "runs on a local machine; not configured on this deployment" },
    "breaker": "closed" }]

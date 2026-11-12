@@ -159,7 +159,7 @@ flowchart LR
     subgraph Backends
         B1["groq-fast · gpt-oss-20b"]
         B2["groq-strong · gpt-oss-120b"]
-        B3["local-qwen · MLX"]
+        B3["local-qwen3.5-4b · MLX"]
         B4["mock · extractive"]
     end
     DB[("SQLite<br/>tenants · requests<br/>attempts · reservations")]
@@ -282,7 +282,7 @@ All settings are environment variables, read from `.env` at the repo root (or fr
 | `GROQ_API_KEY` | — | Enables `groq-fast` and `groq-strong` |
 | `GROQ_FAST_MODEL` / `GROQ_STRONG_MODEL` | `openai/gpt-oss-20b` / `openai/gpt-oss-120b` | Model ids |
 | `GROQ_TTFT_TIMEOUT_MS` | `6000` (fast), `8000` (strong) | Fall back if there's no first token by then |
-| `LOCAL_LLM_ENABLED` | `false` | Enables `local-qwen` |
+| `LOCAL_LLM_ENABLED` | `false` | Enables `local-qwen3.5-4b` |
 | `LOCAL_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | Any OpenAI-compatible server (MLX, Ollama, vLLM…) |
 | `LOCAL_LLM_MODEL` | `mlx-community/Qwen3.5-4B-MLX-4bit` | |
 | `LOCAL_LLM_EXTRA_BODY` | `{"chat_template_kwargs":{"enable_thinking":false}}` | Provider-specific request fields |
