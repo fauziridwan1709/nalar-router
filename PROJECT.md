@@ -1,6 +1,6 @@
 # PROJECT.md: state of the work, and how to pick it up
 
-This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-12 (PRs #5 and #6 merged, but #6 merged into #5's branch after #5 had landed, so it was re-opened against `main` as PR #8; the router-modes PR #7, branch `feat/auto-routing-modes`, is stacked on it).
+This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-12, afternoon: PRs #1–#8 are merged; `refactor/uncle-bob-clean-architecture` (Uncle Bob folder names, console routes moved into use cases, docs fixed to match the code) is not yet merged. **Submission deadline: 12 November 2026, 23:59 WIB** (confirmed by HR).
 
 ## What this is
 
@@ -34,8 +34,10 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - [x] **Merge PR #4** (OpenAI SDK compatibility, Quotas redesign, orange theme).
 - [x] **Merge PR #5** (clean architecture, complexity-based routing, error catalog + docs/ERRORS.md). Merged 2026-11-11.
 - [x] **PR #6** (console clean architecture) merged 2026-11-11, but into PR #5's branch, not `main`.
-- [ ] **Merge PR #8** (PR #6 re-opened against `main`, same commits).
-- [ ] **Then merge PR #7** (`feat/auto-routing-modes`: `auto-smart`, `auto-cascade`, `local-qwen3.5-4b`). Redeploys Render and wipes SQLite (accepted).
+- [x] **PR #8** (PR #6 re-opened against `main`) merged 2026-11-12.
+- [x] **PR #7** (`feat/auto-routing-modes`: `auto-smart`, `auto-cascade`, `local-qwen3.5-4b`) merged 2026-11-12.
+- [ ] **Tag the one-day version.** The brief was fully met by `d05955e` (2026-11-10, 17:19). Tag it (e.g. `one-day-submission`) and link it from the README and REPORT, so assessors can review the timeboxed version on its own.
+- [ ] **Merge the Uncle Bob refactor** (`refactor/uncle-bob-clean-architecture`: folders renamed to Martin's circles, console/admin logic moved into use cases, docs fixed to match the code). Redeploys Render and wipes SQLite (accepted).
 - [ ] Refresh the README screenshots other than Quotas: they still show the old blue accent.
 - [ ] Optional: judged quality eval across the router modes: `npm run eval -- --configs auto:v3,auto-smart:v3,auto-cascade:v3 --judge groq-strong --delay 17000` (~30 min on the free tier). The live router-modes run measured cost and outcome only.
 - [ ] Before recording or submitting, sign in on the live console as `ops@nalar.example` and click **Run sample traffic** on the Reliability page. The Render disk is ephemeral, so metering is empty after every redeploy.
@@ -46,11 +48,11 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 
 ### Gateway
 - [x] Chat endpoint with streaming, authenticated by a per-tenant API key: `POST /v1/chat/completions` (OpenAI-compatible: JSON by default, SSE with `stream: true`) and `POST /v1/support/answer` (SSE)
-- [x] Per-tenant quota that fails closed with a clear error: monthly tokens and requests, atomic reservation, 429 `quota_exceeded` with `Retry-After`, 503 `quota_unavailable` on any DB error (`apps/gateway/src/quota.ts`)
+- [x] Per-tenant quota that fails closed with a clear error: monthly tokens and requests, atomic reservation, 429 `quota_exceeded` with `Retry-After`, 503 `quota_unavailable` on any DB error (rule in `apps/gateway/src/entities/quota.ts`, transaction in `interface-adapters/gateways/sqlite/quota.ts`)
 - [x] Metering per request (model, tokens, latency, estimated cost, outcome) in a database: SQLite `requests` plus per-attempt `attempts`, with `usage_source` as provider, estimated, mixed or none
 
 ### Routing
-- [x] Two or more backends with rules you can defend: groq-fast (gpt-oss-20b), groq-strong (gpt-oss-120b), local-qwen3.5-4b (Qwen3.5-4B on MLX; `local-qwen` before 2026-11-12), and mock (extractive). Default is fast; escalate to strong on a complexity score (length, ambiguous retrieval, reasoning cues…); tenant plan entitlement; explicit pins (`apps/gateway/src/domain/routing/policy.ts`). Three auto modes: `auto` (heuristic), `auto-smart` (classifier call), `auto-cascade` (fast first, escalate before commit on the fast model's own doubt).
+- [x] Two or more backends with rules you can defend: groq-fast (gpt-oss-20b), groq-strong (gpt-oss-120b), local-qwen3.5-4b (Qwen3.5-4B on MLX; `local-qwen` before 2026-11-12), and mock (extractive). Default is fast; escalate to strong on a complexity score (length, ambiguous retrieval, reasoning cues…); tenant plan entitlement; explicit pins (`apps/gateway/src/entities/routing/policy.ts`). Three auto modes: `auto` (heuristic), `auto-smart` (classifier call), `auto-cascade` (fast first, escalate before commit on the fast model's own doubt).
 - [x] Fallback on failure or slowness, recorded and inspectable: first-token and total timeouts, circuit breaker, fault injection, `attempts` table, route strip and drawer in the console
 
 ### Support assistant
@@ -62,11 +64,19 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - [x] Playground with a streamed answer and: served-by model, whether fallback fired, retrieved entries, intent, tokens, latency, cost. Also model reasoning, a step trace, filled placeholders and the PII guardrail. It runs the **support assistant** (the brief's "what was retrieved, the intent" only exist there), through the signed-in session, metered like an API call.
 - [x] Usage view with requests and cost per tenant plus remaining quota: the Monitor pages (Usage, Cost, Reliability, Logs) and Quotas (meters per tenant)
 
-### Beyond the brief (added 2026-11-11; call out in the report)
-- Console sign-in, four roles (operator, owner, developer, viewer), sessions + CSRF, tenant isolation, audit log
+### Timeline: one day for the brief, then extras
+
+Every requirement above was met on day 1 (2026-11-10), by commit `d05955e`: both streaming endpoints, quota, metering, 4 backends with fallback, the support assistant, a console with playground and usage views, the 4-config eval, the Render deploy, REPORT.md and 43 tests. Days 2–3 were additions, not catch-up. Say so in the report, with time spent.
+
+### Beyond the brief (2026-11-11 and 2026-11-12; call out in the report)
+- Console sign-in, four roles (operator, owner, developer, viewer), sessions + CSRF, tenant isolation, audit log. This also removed a day-1 weakness: `/api/demo-config` handed every key and the admin token to the browser.
 - API key management: scoped, expiring keys shown once, quickstart for both endpoints
 - PII guardrail: mask / block / off per tenant on every model-calling path
 - Console redesign after the Claude Console, a feature tour, a Pareto chart
+- OpenAI SDK compatibility for `/v1/chat/completions` and `/v1/models`, tested with the real `openai` package
+- Error catalog (`docs/ERRORS.md`), tied to the code by a test
+- Complexity-based auto routing, plus two more modes: `auto-smart` (classifier) and `auto-cascade`. Measured honestly: neither beat `auto` on the support task.
+- Clean Architecture by name (Uncle Bob's circles) in both apps, enforced by architecture tests
 
 ### Evaluation
 - [x] About 30 held-out cases, with a script reporting intent accuracy, answer quality (ROUGE-L + LLM judge), latency and cost (`tools/eval/eval.ts`)
@@ -81,8 +91,8 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 
 - **Code:**
   - npm-workspaces monorepo: `apps/gateway` (Express 5, TypeScript, `node:sqlite`), `apps/console` (React 19, Vite 8, Astryx 0.7.13, hand-rolled SVG charts), `tools/eval`
-  - **72 gateway tests** pass (incl. sign-in, sessions, CSRF, RBAC, tenant isolation, API keys, PII guardrail and error hygiene); CI (GitHub Actions) runs typecheck, tests, build and the retrieval eval
-- **Branches:** `main` has PR #1 (auth, RBAC, keys, first redesign). PR #2 (PII guardrail, governance pages, Claude-Console layout) is merged. PR #3 (chat playground, `stream` toggle) is merged. PR #4 (OpenAI compat, Quotas, orange theme) is merged. PR #5 (`refactor/clean-architecture-router`) is open.
+  - **152 tests** pass: 131 gateway (incl. sign-in, sessions, CSRF, RBAC, tenant isolation, API keys, PII guardrail, error hygiene, router modes, context windows, OpenAI SDK, architecture) and 21 console; CI (GitHub Actions) runs typecheck, tests, build and the retrieval eval
+- **Branches:** PRs #1–#8 are merged into `main`. `refactor/uncle-bob-clean-architecture` (Uncle Bob folder names, use cases for the console routes, doc fixes) is not yet merged.
 - **Default prompt is v3:** it tells the model which placeholders the gateway can fill. v1 and v2 are kept for reproducible comparisons.
 - **Tenants:**
   - `acme` (pro), `globex` (free), `initech` (trial: 4k tokens / 5 requests, to demo exhausting the quota) and `eval` (shown as "Nalar internal", the operator's home tenant)
@@ -114,8 +124,8 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 | thing | where / how |
 |---|---|
 | Secrets | repo-root `.env` (gitignored): `GROQ_API_KEY`, `LOCAL_LLM_ENABLED=true`. On Render: dashboard env vars (`NODE_VERSION=24`, `GROQ_API_KEY`, `DEMO_MODE=true`, `ADMIN_TOKEN`). |
-| Local model | `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-MLX-4bit --port 8080` (model cached in `~/.cache/huggingface`, 2.9 GB). Ollama also has `qwen3.5:4b` if needed. |
-| Run locally | `npm install && npm run build && npm start`, then http://localhost:3000 |
+| Local model | `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-MLX-4bit --port 8080` (model cached in `~/.cache/huggingface`, 2.9 GB). Ollama also has `qwen3.5:4b` if needed. To serve it to the deployed gateway, see README "Local model on the deployed URL" (ngrok tunnel with a bearer check, plus `LOCAL_LLM_*` env vars on Render). |
+| Run locally | `npm install && cp .env.example .env && npm run build && npm start`, then http://localhost:3000. Works with no keys at all: the mock backend serves, and the four demo accounts are listed on the sign-in page. Checked on a clean copy on 2026-11-12 (install, build, tests, `npm start`, `npm run dev`). |
 | Dev | `npm run dev` (gateway) and `npm run dev:console` (Vite on :5173) |
 | GitHub CLI | `gh` logged in as `fauziridwan1709` (keyring) |
 | Render | the account has a card on file (needed even for the free tier). The service `nalar-router` was created by hand (Web Service, not Blueprint): build `npm ci && npm run build`, start `npm start`, health `/healthz`. |
@@ -139,7 +149,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 | decision | why |
 |---|---|
 | Groq gpt-oss-20b/120b as the hosted models | free tier, OpenAI-compatible; Groq's Llama models became enterprise-only. gpt-oss reasoning tokens are billed either way, so `include_reasoning` only controls whether we receive them. |
-| Qwen3.5-4B via MLX for local | the user asked for MLX. On the cloud deployment it is listed as offline ("runs on a local machine"). |
+| Qwen3.5-4B via MLX for local | the user asked for MLX. On the cloud deployment it is listed as offline ("runs on a local machine") unless the laptop serves it through a tunnel; then it shows online, and it goes offline again (with fallback) when the laptop sleeps. |
 | BM25, not embeddings | templated Bitext questions; 99.6% recall@8; deterministic; no second provider in the request path |
 | Default to the fast tier | the eval showed strong gives no accuracy gain at 2× the cost |
 | Coverage check only for messages of 6 terms or fewer | the hard-case probe found long, chatty in-domain messages wrongly refused (6/8 → 8/8 after the fix) |
@@ -156,6 +166,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 | Original logo, not the spark mark | the spark mark from PR #2 looked too close to the Claude Console's. The layout stays; only the mark went back to the gradient fan-out. |
 | Console in the same layers | pages called `fetch` through a shared `api()` with URLs spread across 15 files, and rules (quota level, backend status, the playground reducer) lived inside components. Now they sit behind one `ConsoleApi` port and in pure domain functions with tests. The bell and the Quotas page share one quota rule. |
 | Clean architecture, enforced by a test | the gateway grew to about 4.7k lines with use cases reaching into SQLite and Express. Layers (domain / application / infrastructure / interfaces) with ports make the rules unit-testable and Postgres a new adapter, not a rewrite. `tests/architecture.test.ts` fails the build on an outward import. |
+| Uncle Bob's Clean Architecture, by name | the earlier layers (domain / application / infrastructure / interfaces) matched no single textbook model, and the console routes still read SQLite directly. The folders now carry the names of Martin's four circles (entities, use-cases, interface-adapters, frameworks, plus main), so a reviewer can check the structure against the reference. Console, admin and key-management logic moved out of the controllers into use cases behind ports. The architecture test now also checks that Express and SQLite are started only in `frameworks/`. |
 | Complexity-based auto routing, as a heuristic | weighted signals (length, ambiguity, several questions, reasoning cues, steps, constraints, code, math) instead of a classifier: free, no added latency, replayable, every decision explains itself. Weights keep the two original rules escalating on their own; `npm run routing-eval` showed no route change on the 43 eval messages. |
 | Two more auto modes, measured honestly | the user asked for a smarter auto. `auto-smart` (fast-model classifier, metered, falls back to the heuristic) and `auto-cascade` (escalate at the header, before commit). The first live run exposed a flaw in each (cascade escalated on a retrieval-dominated score; classifier v1 escalated FAQ questions); both fixed and re-measured. Result: on this support task neither changes outcomes beyond noise and both cost ~40% more, so `auto` stays the default. Refusals are bounded by retrieval, not by the model (EVALUATION runs 7–8). |
 | Error catalog | `GatewayError` only accepts a code from `ERROR_CATALOG`, a test ties it to docs/ERRORS.md, and process-level failures (port in use, uncaught errors, SIGTERM) drain and exit cleanly. |
@@ -182,12 +193,19 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 
 ## Next steps (in priority order)
 
-- [ ] Merge the router-modes PR; on Render check sign-in, the "Plain words, hard problem" template as Auto vs Auto · smart (Routing tab shows the classifier verdict), and the OpenAI SDK against `https://nalar-router.onrender.com/v1` (`/v1/models` lists the three modes).
-- [ ] Measure how often `groq-strong` returns an empty answer under prompt v3 (seen 3/3 on the comparison example), then try `reasoning_effort: medium` for the strong tier.
-- [ ] REPORT.md "Beyond the brief" section (see the checklist above).
-- [ ] Record the video demo (user). Optionally script it with `.agents/skills/product-demo` (writes to `out/product-demo/`).
-- [ ] Invite the assessors; rotate the Groq key.
-- [ ] Re-run a clean v2-raw vs v3 eval when Groq isn't rate-limited (it would replace the contaminated `08-35-26` run as the second clean data point).
+Before the deadline (12 Nov, 23:59 WIB):
+- [ ] Commit the refactor branch, open the PR, merge it (Render redeploys and wipes SQLite).
+- [ ] Tag `d05955e` as the one-day version; write REPORT.md "Beyond the brief" (time spent, why each extra) and a half-page summary at the top.
+- [ ] Rotate the Groq key (`.env` and Render).
+- [ ] Optional: tunnel the local Qwen to Render for the demo (README "Local model on the deployed URL").
+- [ ] Refresh the README screenshots (the old blue accent).
+- [ ] On the live console: sign in as `ops@nalar.example`, **Run sample traffic** on Reliability, then record the video (user).
+- [ ] Invite the assessors or make the repo public; submit repo link, live URL, video link.
+
+After submission:
+- [ ] Measure how often `groq-strong` returns an empty answer under prompt v3, then try `reasoning_effort: medium` for the strong tier.
+- [ ] Judged quality eval across the router modes (`--configs auto:v3,auto-smart:v3,auto-cascade:v3 --judge groq-strong --delay 17000`).
+- [ ] Re-run a clean v2-raw vs v3 eval when Groq isn't rate-limited.
 - [ ] Provider-level circuit breaker (both Groq backends fail together; that cost 14 s in one eval case).
 - [ ] Postgres metering, so the live dashboard survives redeploys.
 - [ ] Multi-intent splitting; language detection plus translated retrieval for Indonesian.
@@ -224,5 +242,16 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 | PII guardrail (mask / block / off), governance API, Guardrails / Access / Audit log pages, cross-tenant read audit, CSV export. Two leaks caught by tests and fixed (PII in a trace event; lead-in words causing scope refusals). |
 | Claude-Console redesign (top bar, ⌘K, sectioned sidebar, Dashboard, Usage / Cost / Reliability / Logs / Quotas, workbench playground), sign-in focus-ring fix, SparkTrail on sign-in, refreshed README screenshots. PR #2, merged. |
 | Playground calls either public endpoint: an Endpoint picker (support answer / chat completions), the `POST` path beside the title, a `stream: true\|false` toggle, an editable system prompt for chat, a Raw tab with the exact SSE or JSON body, and stream-aware Get code. Console route `/api/console/playground/chat`; chat SSE trace comments now carry `t`. Logo reverted to the original gradient fan-out mark (the spark mark looked too much like the Claude Console). PR #3. |
+
+| OpenAI SDK compatibility (`stream` defaults to false, `stream_options`, OpenAI error types), Quotas redesign, orange theme. PR #4. |
+| Clean architecture with ports, complexity-based routing, error catalog + docs/ERRORS.md, graceful shutdown. PR #5; console behind a `ConsoleApi` port, PR #6 (re-opened onto `main` as #8). |
+
+### 2026-11-12
+
+| what |
+|---|
+| `auto-smart` (classifier) and `auto-cascade` router modes, two live router-modes runs, classifier prompt comparison; local backend renamed `local-qwen3.5-4b`. PRs #7 and #8, merged. |
+| Folders renamed to Uncle Bob's Clean Architecture circles in both apps; console, admin and key-management logic moved out of controllers into use cases behind ports; architecture tests check Express and SQLite run only in `frameworks/`. Docs fixed where they contradicted the code (REPORT §5–§7 test count, demo-mode note, cut list; README test count). Fresh-clone run verified. Branch `refactor/uncle-bob-clean-architecture`. |
+| Context windows per backend (Groq 131,072; local 8,192 as a laptop budget; mock unlimited): auto skips a model too small for prompt + answer budget, a pinned one returns 400 `context_length_exceeded` before admission. The playground shows a token gauge against the selected model and blocks Run with the reason; field limits come from the API (`/api/console/config` `limits`). Local Qwen can be tunnelled to Render (`tools/tunnel/local-qwen.sh`, ngrok with a bearer check). |
 
 The full commit history is in `git log`. Every commit since 14:19 on 2026-11-10 is scoped.

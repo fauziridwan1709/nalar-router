@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/fauziridwan1709/nalar-router/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/fauziridwan1709/nalar-router/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-43%20passing-3fb984">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-152%20passing-3fb984">
   <img alt="Intent accuracy" src="https://img.shields.io/badge/intent%20accuracy-100%25%20(30%20held--out)-3fb984">
   <img alt="Hard-case probe" src="https://img.shields.io/badge/hard--case%20probe-8%2F8-3fb984">
   <img alt="Out-of-domain refusals" src="https://img.shields.io/badge/out--of--domain%20refused-5%2F5-3fb984">
@@ -196,6 +196,20 @@ sequenceDiagram
     G-->>C: SSE done (backend, fallback, tokens, latency, cost, quota left)
 ```
 
+### Code structure: Clean Architecture
+
+Both apps follow Robert C. Martin's **[Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)**, with folders named after its four circles. Source code dependencies point inward only (the Dependency Rule), and a `tests/architecture.test.ts` in each app fails the build when an import breaks it.
+
+| circle | gateway (`apps/gateway/src`) | console (`apps/console/src`) |
+|---|---|---|
+| Enterprise Business Rules | `entities/`: routing policy, complexity, breaker, quota rule, metering math, PII, BM25, RBAC, error catalog | `entities/`: API types, formatting, access, quota standing, playground reducer |
+| Application Business Rules | `use-cases/`: capability path, support, chat, fallback executor, console and key management, plus `ports/` | `use-cases/`: the `ConsoleApi` port |
+| Interface Adapters | `interface-adapters/`: `controllers/http`, `presenters` (SSE, OpenAI wire format, errors), `gateways` (SQLite, LLM providers) | `interface-adapters/gateways/http`: fetch, CSRF, SSE parsing |
+| Frameworks & Drivers | `frameworks/`: the Express app, the SQLite driver | `frameworks/ui`: React pages, components, hooks |
+| Main | `main/`: config, composition root, process | `main.tsx` |
+
+The circles, the request flow through ports, and the two places where the code is pragmatic rather than textbook are in [docs/ARCHITECTURE.md §5](docs/ARCHITECTURE.md#5-code-layers).
+
 More diagrams (the routing decision tree and the data model) are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ## Screenshots
@@ -221,7 +235,7 @@ More diagrams (the routing decision tree and the data model) are in **[docs/ARCH
 ### Prerequisites
 
 - **Node.js ≥ 22.13** (the gateway uses the built-in `node:sqlite`; Node 24 is recommended)
-- **A Groq API key** (free at [console.groq.com/keys](https://console.groq.com/keys)). Optional: without one, only the local and mock backends run.
+- **A Groq API key** (free at [console.groq.com/keys](https://console.groq.com/keys)). Optional: with no key, the built-in mock backend (extractive answers from the KB) serves every request, so the whole app runs with zero setup.
 - **Optional:** Apple Silicon with Python 3.10+, for the local MLX model
 
 ### 1. Install
@@ -230,7 +244,7 @@ More diagrams (the routing decision tree and the data model) are in **[docs/ARCH
 git clone https://github.com/fauziridwan1709/nalar-router.git
 cd nalar-router
 npm install            # installs every workspace
-cp .env.example .env   # then set GROQ_API_KEY
+cp .env.example .env   # optional: set GROQ_API_KEY for real models
 ```
 
 ### 2. Run
@@ -239,6 +253,8 @@ cp .env.example .env   # then set GROQ_API_KEY
 npm run build          # gateway (tsc) + console (vite)
 npm start              # http://localhost:3000 serves the API and the console
 ```
+
+Open http://localhost:3000 and sign in with one of the demo accounts listed on the sign-in page (for example `ops@nalar.example`), or see [Demo accounts](#demo-accounts).
 
 For development, run these in two terminals:
 
@@ -285,6 +301,9 @@ All settings are environment variables, read from `.env` at the repo root (or fr
 | `LOCAL_LLM_ENABLED` | `false` | Enables `local-qwen3.5-4b` |
 | `LOCAL_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | Any OpenAI-compatible server (MLX, Ollama, vLLM…) |
 | `LOCAL_LLM_MODEL` | `mlx-community/Qwen3.5-4B-MLX-4bit` | |
+| `GROQ_CONTEXT_WINDOW` | `131072` | Tokens in + out per call for both Groq models |
+| `LOCAL_LLM_CONTEXT_WINDOW` | `8192` | Tokens in + out per call for the local model: a laptop budget, below Qwen's native window |
+| `LOCAL_LLM_API_KEY` | unset | Bearer token for a tunnelled local server ([Local model on the deployed URL](#local-model-on-the-deployed-url)) |
 | `LOCAL_LLM_EXTRA_BODY` | `{"chat_template_kwargs":{"enable_thinking":false}}` | Provider-specific request fields |
 | `LOCAL_LLM_TTFT_TIMEOUT_MS` | `20000` | |
 | `ROUTE_LONG_QUERY_TOKENS` | `60` | Messages longer than this escalate to the strong tier |
@@ -409,7 +428,7 @@ Results are written to `tools/eval/results/<timestamp>.{md,json}`. The eval goes
 ## Testing
 
 ```bash
-npm test          # 43 vitest tests, no network (scripted fake backends)
+npm test          # 152 vitest tests (131 gateway, 21 console), no network: scripted fake backends
 npm run typecheck
 ```
 
@@ -421,6 +440,13 @@ The tests cover:
 - **Support assistant:** header parsing (code fences, `<think>` blocks, percentage confidence), refusals, and routing rules.
 - **Placeholders:** extraction from the message, priority between sources, placeholders split across chunks, shortened names, and no raw braces.
 - **Reasoning and status:** reasoning is streamed separately from the answer and only when asked for, and offline backends are labelled.
+- **Router modes:** auto-smart and auto-cascade, as pure rules and over HTTP.
+- **Context windows:** a model too small for the request is skipped by auto and refused with `context_length_exceeded` when pinned, before admission; `max_tokens` counts toward the window; the playground checks the same limits.
+- **OpenAI compatibility:** `/v1/chat/completions` and `/v1/models` through the real `openai` SDK.
+- **Console security:** sign-in, sessions, CSRF, role permissions, tenant isolation, API key management, and error hygiene.
+- **PII guardrail:** the detectors, masking on the request path, and the governance API.
+- **Error catalog:** every code thrown in the source is in the catalog and in docs/ERRORS.md.
+- **Architecture:** the clean-architecture dependency rule, in both apps.
 
 CI runs typecheck, tests, build and the retrieval eval on every push.
 
@@ -435,7 +461,22 @@ The live instance runs on **Render** as a single Node web service that serves bo
 | Health check | `/healthz` |
 | Environment | `NODE_VERSION=24`, `GROQ_API_KEY`, `DEMO_MODE=true`, `ADMIN_TOKEN` |
 
-`render.yaml` describes the same service as a Render Blueprint. Two caveats on the free plan: the service sleeps after 15 minutes idle, and the disk is ephemeral, so SQLite metering resets when the service redeploys or spins down. For production, the SQL ports straight to Postgres. The local MLX model can't be reached from the cloud, so the deployed instance uses the Groq backends and the extractive fallback.
+`render.yaml` describes the same service as a Render Blueprint. Two caveats on the free plan: the service sleeps after 15 minutes idle, and the disk is ephemeral, so SQLite metering resets when the service redeploys or spins down. For production, the SQL ports straight to Postgres. By default the deployed instance uses the Groq backends and the extractive fallback, and lists the local model as offline.
+
+### Local model on the deployed URL
+
+The deployed gateway can also use the Qwen model on your laptop, through a tunnel:
+
+```bash
+# 1. on the laptop: the model, then the tunnel (free static domain from dashboard.ngrok.com/domains)
+~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-MLX-4bit --port 8080
+export LOCAL_LLM_API_KEY=$(openssl rand -hex 24)
+NGROK_DOMAIN=<your-domain>.ngrok-free.app tools/tunnel/local-qwen.sh
+```
+
+2. On Render, set `LOCAL_LLM_ENABLED=true`, `LOCAL_LLM_BASE_URL=https://<your-domain>.ngrok-free.app/v1` and the same `LOCAL_LLM_API_KEY`. Saving env vars redeploys, which resets the SQLite metering.
+
+The tunnel answers 401 at ngrok's edge unless the request carries `Authorization: Bearer $LOCAL_LLM_API_KEY`, so it isn't an open LLM endpoint. The console's Backends page shows `local-qwen3.5-4b` online while the laptop serves it. When the laptop sleeps, the health probe marks it offline, and requests that would use it fall back to the next backend. Expect about 5 s per answer instead of 1 s from Groq.
 
 ## Project structure
 
@@ -443,20 +484,24 @@ The live instance runs on **Render** as a single Node web service that serves bo
 nalar-router/
 ├── apps/
 │   ├── gateway/                 Express API (TypeScript)
-│   │   ├── src/                 clean architecture, dependencies point inward (enforced by a test)
-│   │   │   ├── domain/          pure rules: routing policy + complexity, breaker, quota rule,
-│   │   │   │                    metering math, PII, BM25, header parser, placeholders, error catalog
-│   │   │   ├── application/     use cases (capability path, support, chat, fallback executor) + ports
-│   │   │   ├── infrastructure/  SQLite stores, model backends, fault injection, health probes, auth stores
-│   │   │   ├── interfaces/http/ routes, request schemas, SSE + OpenAI wire formats, error handler
-│   │   │   └── config.ts · gateway.ts · index.ts   composition root
+│   │   ├── src/                 Clean Architecture (Uncle Bob); dependencies point inward, enforced by a test
+│   │   │   ├── entities/        enterprise rules: routing policy + complexity, breaker, quota rule, metering
+│   │   │   │                    math, PII, BM25, header parser, placeholders, RBAC, error catalog
+│   │   │   ├── use-cases/       application rules: capability path, support, chat, fallback executor,
+│   │   │   │                    console + key management; ports/ (the interfaces the use cases call)
+│   │   │   ├── interface-adapters/
+│   │   │   │   ├── controllers/http/  /v1, console and admin routes, request schemas, auth middleware
+│   │   │   │   ├── presenters/        support SSE, OpenAI wire format, error presenter
+│   │   │   │   └── gateways/          SQLite repositories, LLM backends, fault injection, health probes
+│   │   │   ├── frameworks/      Express app (web/), SQLite driver: schema, migrations, seed (sqlite/)
+│   │   │   └── main/            config.ts · container.ts (composition root) · index.ts (process)
 │   │   └── tests/               vitest, no network; architecture, error-catalog and OpenAI SDK contract tests
-│   └── console/                 React 19 + Vite console, same layering:
-│       ├── src/domain/          types and pure rules (format, access, quota, playground reducer, snippets)
-│       ├── src/application/     the ConsoleApi port, useApi(), data hooks
-│       ├── src/infrastructure/  the HTTP adapter (fetch, CSRF, SSE parsing)
-│       ├── src/ui/              app shell, pages, components, styles
-│       └── tests/               architecture and domain tests
+│   └── console/                 React 19 + Vite console, same circles:
+│       ├── src/entities/        types and pure rules (format, access, quota, playground reducer, snippets)
+│       ├── src/use-cases/       the ConsoleApi port
+│       ├── src/interface-adapters/gateways/http/   the HTTP gateway (fetch, CSRF, SSE parsing)
+│       ├── src/frameworks/ui/   React: app shell, pages, components, hooks, styles
+│       └── tests/               architecture and domain-rule tests (entities)
 ├── tools/eval/                  prepare-data · retrieval-eval · routing-eval · router-modes · eval · probe · results/
 ├── data/                        KB slice + held-out / OOD / hard eval sets (from Bitext)
 ├── docs/
@@ -497,7 +542,7 @@ The short version is below. The long version is in [docs/REPORT.md](docs/REPORT.
 - **Refusal over guessing.** Messages that ask several things at once, vague messages and non-English messages are handed to a human instead of answered. It's a deliberate choice, and multi-intent splitting is listed as the next feature.
 - **Fallback only before the first byte.** An honest `partial` error is better than splicing two models' text together.
 - **SQLite.** Real transactions keep quota correct and simple. The price is that it's ephemeral on the free host.
-- **Cut on purpose:** multi-turn memory, embeddings, per-second rate limits, key rotation, and a production database.
+- **Cut on purpose:** multi-turn memory, embeddings, per-second API rate limits, tenant and user management, SSO/MFA, and a production database.
 
 ## Dataset and credits
 
