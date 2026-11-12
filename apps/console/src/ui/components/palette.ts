@@ -3,7 +3,7 @@
 export const BACKEND_COLOR: Record<string, { color: string; ink: string }> = {
   "groq-fast": { color: "var(--s1)", ink: "#ffffff" },
   "groq-strong": { color: "var(--s2)", ink: "#ffffff" },
-  "local-qwen": { color: "var(--s3)", ink: "#ffffff" },
+  "local-qwen3.5-4b": { color: "var(--s3)", ink: "#ffffff" },
   mock: { color: "var(--s4)", ink: "#0b0b0b" },
   "no model call": { color: "var(--axis)", ink: "#ffffff" },
 };
