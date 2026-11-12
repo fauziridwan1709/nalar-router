@@ -60,7 +60,7 @@ export function Tour({ steps, onClose, go, page }: { steps: TourStep[]; onClose:
     setRect(null);
     raf = requestAnimationFrame(find);
     return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // runs once per step: the step's anchor is looked up again only when the step changes
   }, [i]);
 
   // follow the anchor on resize and scroll

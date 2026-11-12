@@ -8,7 +8,13 @@ import { MonitorChips, RangeChip } from "./Usage";
 import type { Range, Bucket } from "../../../entities/models";
 import { fmtUsd, fmtN, timeLabel } from "../../../entities/format";
 
-const money = (v: number) => (v >= 1 ? `$${v.toFixed(2)}` : v >= 0.01 ? `$${v.toFixed(3)}` : v === 0 ? "$0" : `$${+v.toPrecision(2)}`);
+/** a chart axis amount: fewer decimals for bigger sums, two significant digits for fractions of a cent */
+function money(usd: number) {
+  if (usd === 0) return "$0";
+  if (usd >= 1) return `$${usd.toFixed(2)}`;
+  if (usd >= 0.01) return `$${usd.toFixed(3)}`;
+  return `$${+usd.toPrecision(2)}`;
+}
 
 export function Cost() {
   const { cfg, scope, tenantName, can } = useApp();

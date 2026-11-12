@@ -1,21 +1,28 @@
+/** Logs: every metered request, newest first, with its route; a drawer shows the full record. */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Fingerprint, ListTree, RefreshCcw, X } from "lucide-react";
 import { Empty, GROUP, Outcome, RouteStrip } from "../components/ui";
 import { useApp } from "../hooks/appContext";
 import { FilterChip, PageHeader } from "../components/kit";
-import type { Group } from "../../../entities/models";
-import { fmtUsd, fmtMs, fmtN } from "../../../entities/format";
+import type { Group, RequestDetail, RequestRow } from "../../../entities/models";
+import { fmtUsd, fmtMs, fmtN, humanize, shortName } from "../../../entities/format";
 import { groupOf } from "../../../entities/outcomes";
 import { useApi } from "../hooks/api";
 
-export function Requests() {
+/** an attempt's outcome tag */
+const ATTEMPT_OUTCOME_TONE: Record<string, string> = { ok: "good", refused: "warn" };
+
+/** "email:1,card:2" → "email, card" */
+const piiTypes = (summary: string) => summary.split(",").map((part) => humanize(part.split(":")[0])).join(", ");
+
+export function Logs() {
   const api = useApi();
   const { scope: tenant, can, cfg, setScope } = useApp();
   const [pii, setPii] = useState("");
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<RequestRow[]>([]);
   const [group, setGroup] = useState<"" | Group>("");
   const [onlyFallback, setOnlyFallback] = useState(false);
-  const [detail, setDetail] = useState<any | null>(null);
+  const [detail, setDetail] = useState<RequestDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -29,8 +36,8 @@ export function Requests() {
   const open = (id: string) => api.request(id).then(setDetail).catch((e) => setErr((e as Error).message));
   useEffect(() => {
     load();
-    const t = setInterval(load, 6000);
-    return () => clearInterval(t);
+    const timer = setInterval(load, 6000);
+    return () => clearInterval(timer);
   }, [load]);
 
   const shown = useMemo(
@@ -45,7 +52,7 @@ export function Requests() {
       <div className="chips">
         {can("tenants:all") && (
           <FilterChip label="Tenant" value={tenant || "*"} onChange={(v) => setScope(v === "*" ? "" : v)}
-            options={[{ value: "*", label: "All" }, ...cfg.tenants.map((t) => ({ value: t.id, label: t.name.split(" (")[0] }))]} />
+            options={[{ value: "*", label: "All" }, ...cfg.tenants.map((t) => ({ value: t.id, label: shortName(t.name) }))]} />
         )}
         <FilterChip label="Outcome" value={group || "*"} onChange={(v) => setGroup(v === "*" ? "" : (v as Group))}
           options={[{ value: "*", label: "All" }, ...(Object.keys(GROUP) as Group[]).map((g) => ({ value: g, label: GROUP[g].label }))]} />
@@ -70,9 +77,9 @@ export function Requests() {
               <tr key={r.id} onClick={() => open(r.id)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && open(r.id)}>
                 <td className="num">{new Date(r.created_at).toLocaleTimeString()}</td>
                 {can("tenants:all") && <td>{r.tenant_id}</td>}
-                <td className="small">{r.credential?.startsWith("user:") ? <span className="tag">console</span> : r.credential_name ? <span title={r.credential}>{r.credential_name}</span> : <span className="muted">–</span>}</td>
+                <td className="small"><Credential row={r} /></td>
                 <td><Outcome outcome={r.outcome} /></td>
-                <td>{r.pii ? <span className="tag pii" title={`Masked before the model: ${r.pii}`}><Fingerprint size={12} /> {r.pii.split(",").map((x: string) => x.split(":")[0].replace("_", " ")).join(", ")}</span> : <span className="muted">–</span>}</td>
+                <td>{r.pii ? <span className="tag pii" title={`Masked before the model: ${r.pii}`}><Fingerprint size={12} /> {piiTypes(r.pii)}</span> : <span className="muted">–</span>}</td>
                 <td><RouteStrip trail={r.attempt_trail} /></td>
                 <td className="small">{r.intent ?? <span className="muted">–</span>}</td>
                 <td className="r">
@@ -96,13 +103,22 @@ export function Requests() {
   );
 }
 
-export function RequestDrawer({ detail, onClose }: { detail: any; onClose: () => void }) {
+/** who made the call: the console playground, or an API key by name */
+function Credential({ row }: { row: RequestRow }) {
+  if (row.credential?.startsWith("user:")) return <span className="tag">console</span>;
+  if (row.credential_name) return <span title={row.credential ?? undefined}>{row.credential_name}</span>;
+  return <span className="muted">–</span>;
+}
+
+function RequestDrawer({ detail, onClose }: { detail: RequestDetail; onClose: () => void }) {
   useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
+    const closeOnEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose]);
-  const trail = detail.attempts.map((a: any) => `${a.backend}:${a.outcome}`).join(",");
+  const trail = detail.attempts.map((a) => `${a.backend}:${a.outcome}`).join(",");
   return (
     <div className="drawer" onClick={onClose}>
       <div className="drawer-body" role="dialog" aria-label={`Request ${detail.id}`} onClick={(e) => e.stopPropagation()}>
@@ -137,12 +153,12 @@ export function RequestDrawer({ detail, onClose }: { detail: any; onClose: () =>
           <table className="tbl">
             <thead><tr><th>#</th><th>Backend</th><th>Outcome</th><th className="r">Latency</th><th className="r">First token</th><th className="r">Tokens in / out</th><th>Usage</th><th className="r">Cost</th></tr></thead>
             <tbody>
-              {detail.attempts.map((a: any) => (
+              {detail.attempts.map((a) => (
                 <tr key={a.id}>
                   <td>{a.seq}</td>
                   <td className="mono">{a.backend}</td>
                   <td>
-                    <span className={`tag ${a.outcome === "ok" ? "good" : a.outcome === "refused" ? "warn" : "bad"}`}>{a.outcome.replace(/_/g, " ")}</span>
+                    <span className={`tag ${ATTEMPT_OUTCOME_TONE[a.outcome] ?? "bad"}`}>{humanize(a.outcome)}</span>
                     {a.error && <div className="muted small">{a.error}</div>}
                   </td>
                   <td className="r">{fmtMs(a.latency_ms)}</td>

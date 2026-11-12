@@ -1,13 +1,7 @@
 /**
- * Hand-rolled SVG charts following the dataviz method:
- * thin marks (2px lines, ≤24px columns with 4px rounded data-ends), a 2px surface gap
- * between stacked segments, hairline solid grid, one y-axis, a crosshair/tooltip layer on
- * every chart, a legend for ≥2 series, and a table view next to every chart.
- * Text always uses ink tokens; only marks carry series color.
- *
- * Motion: lines draw in, areas fade up, columns and bars grow from the baseline, numbers count
- * up. It plays once, on mount (refreshes update in place), and is off under
- * prefers-reduced-motion (see styles.css).
+ * SVG charts for the console: one y-axis, a tooltip on every chart, a legend for two or more
+ * series, and a table view next to each chart. Entry animations run once and respect
+ * prefers-reduced-motion.
  */
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Table2, BarChart3 } from "lucide-react";
@@ -81,7 +75,13 @@ function monotonePath(pts: [number, number][]) {
   if (n === 1) return `M${pts[0][0]},${pts[0][1]}`;
   const dx = pts.slice(1).map((p, i) => p[0] - pts[i][0]);
   const m = pts.slice(1).map((p, i) => (p[1] - pts[i][1]) / (dx[i] || 1));
-  const t = pts.map((_, i) => (i === 0 ? m[0] : i === n - 1 ? m[n - 2] : m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2));
+  // tangent at each point: the end slopes at the ends, flat at a peak or trough, else the average slope
+  const t = pts.map((_, i) => {
+    if (i === 0) return m[0];
+    if (i === n - 1) return m[n - 2];
+    if (m[i - 1] * m[i] <= 0) return 0;
+    return (m[i - 1] + m[i]) / 2;
+  });
   for (let i = 0; i < n - 1; i++) {
     if (m[i] === 0) {
       t[i] = 0;

@@ -41,7 +41,10 @@ export function ApiKeys() {
   const load = useCallback(
     () =>
       api.keys(scope)
-        .then((keys) => (setKeys(keys), setErr(null)))
+        .then((keys) => {
+          setKeys(keys);
+          setErr(null);
+        })
         .catch((e) => setErr((e as Error).message)),
     [scope],
   );
@@ -117,7 +120,10 @@ export function ApiKeys() {
         <BestPractices />
       </div>
 
-      {creating && <CreateKey tenantId={tenantId} onClose={() => (setCreating(false), load())} />}
+      {creating && <CreateKey tenantId={tenantId} onClose={() => {
+        setCreating(false);
+        load();
+      }} />}
       <AlertDialog
         isOpen={!!revoking}
         onOpenChange={(o) => !o && setRevoking(null)}
@@ -137,6 +143,14 @@ function ExpiresIn({ at }: { at: number }) {
   return <span className={days <= 7 ? "danger" : ""}>{days <= 1 ? "in 1 day" : `in ${days} days`}</span>;
 }
 
+/** what's wrong with a key name, or null; the same rules the API enforces */
+function keyNameProblem(name: string): string | null {
+  if (!name) return "Give the key a name, such as the service that will use it.";
+  if (name.length > 64) return "Use 64 characters or fewer.";
+  if (!NAME_RE.test(name)) return "Use letters, numbers, spaces and . _ ( ) - only.";
+  return null;
+}
+
 function CreateKey({ tenantId, onClose }: { tenantId: string; onClose: () => void }) {
   const api = useApi();
   const { cfg, scope, tenantName } = useApp();
@@ -150,7 +164,7 @@ function CreateKey({ tenantId, onClose }: { tenantId: string; onClose: () => voi
   const [stored, setStored] = useState(false);
 
   const trimmed = name.trim();
-  const nameErr = !trimmed ? "Give the key a name, such as the service that will use it." : trimmed.length > 64 ? "Use 64 characters or fewer." : !NAME_RE.test(trimmed) ? "Use letters, numbers, spaces and . _ ( ) - only." : null;
+  const nameErr = keyNameProblem(trimmed);
   const scopeErr = scopes.length === 0 ? "Pick at least one scope." : null;
 
   async function submit() {
@@ -193,7 +207,10 @@ function CreateKey({ tenantId, onClose }: { tenantId: string; onClose: () => voi
   return (
     <Dialog isOpen onOpenChange={(o) => !o && onClose()} width={560} purpose="form">
       <DialogHeader title="Create API key" subtitle={`For ${tenantName(tenantId)}. Calls with this key spend the tenant's quota.`} onOpenChange={(o) => !o && onClose()} />
-      <form className="dialog-body" onSubmit={(e) => (e.preventDefault(), submit())} noValidate>
+      <form className="dialog-body" onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }} noValidate>
         <TextInput
           label="Name"
           value={name}

@@ -1,14 +1,11 @@
-/**
- * Home, in the Claude Console pattern: a greeting with the two most useful actions, a few
- * headline cards with a trend, the backends as cards, and shortcuts to the main resources.
- */
+/** Home: a greeting with the two most useful actions, headline cards with a trend, the backends, and shortcuts. */
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, BookOpenText, Brain, Cpu, FlaskConical, KeyRound, MessageSquareText, ShieldCheck, Zap } from "lucide-react";
 import { useApp } from "../hooks/appContext";
 import { Sparkline, useCountUp } from "../components/charts";
 import { statusOf } from "../components/StatusBadge";
 import { LOCATION_LABEL } from "../components/StatusBadge";
-import type { BackendStatus } from "../../../entities/models";
+import type { BackendStatus, Bucket, Metrics } from "../../../entities/models";
 import { fmtN } from "../../../entities/format";
 import { useApi } from "../hooks/api";
 
@@ -19,28 +16,31 @@ const ART: Record<string, { bg: string; Icon: typeof Zap; tags: string[] }> = {
   mock: { bg: "#b9d1c4", Icon: BookOpenText, tags: ["Last resort", "Extractive", "Free"] },
 };
 
-const greeting = () => {
-  const h = new Date().getHours();
-  return h < 5 ? "Good evening" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-};
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return "Good morning";
+  if (hour >= 12 && hour < 18) return "Good afternoon";
+  return "Good evening";
+}
 
 export function Dashboard({ alerts }: { alerts: number }) {
   const api = useApi();
   const { user, can, go, scope } = useApp();
-  const [m, setM] = useState<any | null>(null);
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [backends, setBackends] = useState<BackendStatus[]>([]);
 
   useEffect(() => {
-    api.metrics({ range: "7d", tenant: scope }).then(setM).catch(() => {});
+    api.metrics({ range: "7d", tenant: scope }).then(setMetrics).catch(() => {});
     api.backends().then(setBackends).catch(() => {});
   }, [scope]);
 
-  const b: any[] = m?.buckets ?? [];
-  const last = b.slice(-4).reduce((s, x) => s + x.requests, 0);
-  const prev = b.slice(-8, -4).reduce((s, x) => s + x.requests, 0);
-  const delta = prev ? (last - prev) / prev : null;
-  // 6-hour buckets folded into days for the token bars
-  const days = Array.from({ length: 7 }, (_, i) => b.slice(i * 4, i * 4 + 4).reduce((s, x) => s + x.tokens, 0));
+  // 7 days in 6-hour buckets: the last 24 hours against the 24 before, and the tokens per day
+  const buckets: Bucket[] = metrics?.buckets ?? [];
+  const sum = (slice: Bucket[], field: "requests" | "tokens") => slice.reduce((total, bucket) => total + bucket[field], 0);
+  const lastDay = sum(buckets.slice(-4), "requests");
+  const dayBefore = sum(buckets.slice(-8, -4), "requests");
+  const delta = dayBefore ? (lastDay - dayBefore) / dayBefore : null;
+  const tokensPerDay = Array.from({ length: 7 }, (_, day) => sum(buckets.slice(day * 4, day * 4 + 4), "tokens"));
   const first = user.name.split(" ")[0];
 
   return (
@@ -58,10 +58,10 @@ export function Dashboard({ alerts }: { alerts: number }) {
 
       <div style={{ maxWidth: 960, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
         <div className="grid c3" data-tour="stats">
-          <Kpi k="Requests" sub="last 24 hours" value={last} trend={b.slice(-16).map((x) => x.requests)}
+          <Kpi k="Requests" sub="last 24 hours" value={lastDay} trend={buckets.slice(-16).map((bucket) => bucket.requests)}
             badge={delta == null ? null : <span className={`delta ${delta >= 0 ? "up" : "down"}`}>{delta >= 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />}{Math.abs(Math.round(delta * 100))}%</span>} />
-          <Kpi k="Token volume" sub="last 7 days" value={m?.totals.tokens ?? 0} bars={days} />
-          <Kpi k="PII masked" sub="requests, last 7 days" value={m?.totals.piiRequests ?? 0}
+          <Kpi k="Token volume" sub="last 7 days" value={metrics?.totals.tokens ?? 0} bars={tokensPerDay} />
+          <Kpi k="PII masked" sub="requests, last 7 days" value={metrics?.totals.piiRequests ?? 0}
             badge={<span className="tag pii"><ShieldCheck size={12} /> guardrail on</span>} onClick={can("governance:read") ? () => go("guardrails") : undefined} />
         </div>
 

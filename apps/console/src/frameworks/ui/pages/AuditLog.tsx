@@ -32,6 +32,15 @@ function toCsv(rows: AuditEntry[]) {
   return [head.join(","), ...lines].join("\n");
 }
 
+/** a tag colour for an audit action: failed sign-ins and revocations stand out */
+function actionTone(action: string) {
+  if (action === "auth.login_failed") return "warn";
+  if (action === "key.revoke") return "bad";
+  if (action.startsWith("governance")) return "pii";
+  if (action.startsWith("data.")) return "accent";
+  return "";
+}
+
 export function AuditLog() {
   const api = useApi();
   const { scope, can } = useApp();
@@ -76,7 +85,7 @@ export function AuditLog() {
                 {shown.map((r) => (
                   <tr key={r.id}>
                     <td className="num small">{new Date(r.at).toLocaleString()}</td>
-                    <td><span className={`tag ${r.action === "auth.login_failed" ? "warn" : r.action === "key.revoke" ? "bad" : r.action.startsWith("governance") ? "pii" : r.action.startsWith("data.") ? "accent" : ""}`}>{LABEL[r.action] ?? r.action}</span></td>
+                    <td><span className={`tag ${actionTone(r.action)}`}>{LABEL[r.action] ?? r.action}</span></td>
                     <td className="small">{r.actorEmail ?? <span className="muted">unknown</span>}</td>
                     <td className="mono small">{r.target ?? "–"}</td>
                     {can("tenants:all") && <td className="small">{r.tenantId ?? "platform"}</td>}

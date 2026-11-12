@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { Group } from "../../../entities/models";
 import { groupOf } from "../../../entities/outcomes";
+import { humanize } from "../../../entities/format";
 
 
 
@@ -45,7 +46,7 @@ export function Outcome({ outcome }: { outcome: string }) {
   return (
     <span className="state" title={g.label}>
       <g.Icon size={14} color={g.color} aria-hidden />
-      {outcome.replace(/_/g, " ")}
+      {humanize(outcome)}
     </span>
   );
 }
@@ -71,7 +72,7 @@ export function RouteStrip({ trail }: { trail: string | null | undefined }) {
           {i > 0 && <span className="arrow">›</span>}
           <span
             className={`hop ${HOP_CLASS[h.outcome] ?? "fail"}`}
-            title={`${h.backend}: ${h.outcome.replace(/_/g, " ")}`}
+            title={`${h.backend}: ${humanize(h.outcome)}`}
           >
             {h.backend}
           </span>

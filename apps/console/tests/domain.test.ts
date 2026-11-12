@@ -1,16 +1,22 @@
 /** The console's rules, tested as plain functions (no React, no network). */
 import { describe, expect, it } from "vitest";
-import { fmtMs, fmtN, fmtUsd, pct } from "../src/entities/format";
+import { fmtMs, fmtN, fmtUsd, humanize, pct, shortName } from "../src/entities/format";
 import { levelOf, sharePct } from "../src/entities/quota";
 import { backendState } from "../src/entities/backends";
 import { hasPermission } from "../src/entities/access";
 import { groupOf } from "../src/entities/outcomes";
-import { applyEvent, TRACE_LABEL, type Turn } from "../src/entities/playground";
+import { applyEvent, attemptTone, describeStep, describeTraceEntry, traceTone, type Turn } from "../src/entities/playground";
+import { gatewayEvent } from "../src/entities/events";
 import { chatSnippet, supportSnippet } from "../src/entities/snippets";
 import type { BackendStatus, TenantUsage } from "../src/entities/models";
 import { checkPlayground, contextWindowFor, estimateMessagesTokens } from "../src/entities/limits";
 
 describe("format", () => {
+  it("reads gateway codes and tenant names", () => {
+    expect(humanize("refused_low_confidence")).toBe("refused low confidence");
+    expect(shortName("Acme Corp (pro demo)")).toBe("Acme Corp");
+    expect(shortName("Globex")).toBe("Globex");
+  });
   it("formats money, durations, counts and shares", () => {
     expect(fmtUsd(0)).toBe("$0");
     expect(fmtUsd(0.000153)).toBe("$0.000153");
@@ -67,7 +73,7 @@ describe("playground events", () => {
     id: 1, endpoint: "support", stream: true, raw: "", question: "q", tenant: "acme", answer: "", attempts: [], reasoning: [], trace: [], streaming: true,
     settings: { model: "auto", prompt_version: "v3", include_reasoning: false },
   });
-  const run = (events: [string, any][]) => events.reduce((t, [ev, d]) => applyEvent(t, ev, d), turn());
+  const run = (events: [string, object][]) => events.reduce((t, [name, data]) => applyEvent(t, gatewayEvent(name, data)), turn());
 
   it("builds the answer, keeps the latest status per attempt, and closes on done", () => {
     const t = run([
@@ -95,15 +101,32 @@ describe("playground events", () => {
       ["done", { outcome: "success", backend: "groq-fast", ttftMs: 420, latencyMs: 1500, usage: { totalTokens: 900 }, costUsd: 0.0001, t: 1500 }],
     ]);
     expect(t.trace.map((x) => [x.event, x.t])).toEqual([["meta", 0], ["intent", 400], ["first_token", 420], ["done", 1500]]);
-    expect(TRACE_LABEL.first_token(t.trace[2].data)).toBe("first token from groq-fast: time to first token 420 ms");
-    expect(TRACE_LABEL.done(t.trace[3].data)).toMatch(/^response complete in 1\.50 s \(first token at 420 ms\); metered: success/);
+    expect(describeTraceEntry(t.trace[2])).toBe("first token from groq-fast: time to first token 420 ms");
+    expect(describeTraceEntry(t.trace[3])).toMatch(/^response complete in 1\.50 s \(first token at 420 ms\); metered: success/);
   });
   it("adds no first-token line when no token was sent (a refusal)", () => {
     const t = run([["refusal", { reason: "low_confidence", t: 300 }], ["done", { outcome: "refused_low_confidence", ttftMs: null, latencyMs: 310, t: 310 }]]);
     expect(t.trace.map((x) => x.event)).toEqual(["refusal", "done"]);
   });
-  it("describes trace events in words", () => {
-    expect(TRACE_LABEL.route({ rule: "auto_escalate_strong", chain: ["groq-strong", "groq-fast"] })).toBe("routed by auto_escalate_strong: groq-strong › groq-fast");
+  it("describes trace events and pipeline steps in words", () => {
+    const t = run([["route", { rule: "auto_escalate_strong", reason: "", chain: ["groq-strong", "groq-fast"], t: 1 }]]);
+    expect(describeTraceEntry(t.trace[0])).toBe("routed by auto_escalate_strong: groq-strong › groq-fast");
+    expect(describeStep({ name: "scope_gate", passed: false, detail: "coverage 0.1 < 0.3" })).toBe("scope check: refuse: coverage 0.1 < 0.3");
+    expect(describeStep({ name: "pii_guard", mode: "mask", detail: "masked 1 value", masked: [{ type: "email", label: "Email", placeholder: "{{Customer Email}}" }] }))
+      .toBe("PII guardrail (mask): masked 1 value · email");
+    expect(describeStep({ name: "placeholders_rendered", detail: "", slots: [{ name: "A", value: "x", source: "profile" }, { name: "B", value: "y", source: "profile" }] }))
+      .toBe("filled 2 placeholders (profile)");
+  });
+  it("colours the trace: failures red, milestones green, refusals amber, masked data purple", () => {
+    const tones = run([
+      ["attempt", { seq: 1, backend: "f", status: "timeout", t: 1 }],
+      ["attempt", { seq: 0, backend: "f", status: "classified", t: 2 }],
+      ["intent", { intent: "x", confidence: 1, label: "high", t: 3 }],
+      ["refusal", { reason: "out_of_scope", message: "", t: 4 }],
+      ["step", { name: "pii_guard", mode: "mask", detail: "", masked: [{ type: "email", label: "Email", placeholder: "{{E}}" }], t: 5 }],
+    ]).trace.map(traceTone);
+    expect(tones).toEqual(["bad", "", "ok", "warn", "pii"]);
+    expect([attemptTone("ok"), attemptTone("escalated"), attemptTone("timeout"), attemptTone("started")]).toEqual(["good", "warn", "bad", ""]);
   });
 });
 

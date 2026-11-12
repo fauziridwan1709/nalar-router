@@ -11,7 +11,7 @@ import { AlertOctagon, Ban, FileWarning, Fingerprint, Gauge, KeyRound, Lock, Sca
 import { useApp } from "../hooks/appContext";
 import { PageHeader, StatCard } from "../components/kit";
 import type { Governance } from "../../../entities/models";
-import { fmtN } from "../../../entities/format";
+import { fmtN, humanize, shortName } from "../../../entities/format";
 import { useApi } from "../hooks/api";
 
 
@@ -36,11 +36,15 @@ export function Guardrails() {
 
   const load = () =>
     api.governance(scope)
-      .then((r) => (setG(r), setDraft(r.piiPolicy), setErr(null)))
+      .then((governance) => {
+        setG(governance);
+        setDraft(governance.piiPolicy);
+        setErr(null);
+      })
       .catch((e) => setErr((e as Error).message));
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // reload when the tenant in scope changes; `load` itself is rebuilt every render
   }, [scope]);
 
   // the tester re-runs as you type (debounced); it never stores or forwards the text
@@ -59,7 +63,7 @@ export function Guardrails() {
     setSaving(true);
     try {
       await api.setPiiPolicy(scope, draft);
-      toast({ body: `PII policy for ${g!.tenant.name.split(" (")[0]} is now “${draft.mode}”. Recorded in the audit log.`, type: "info" });
+      toast({ body: `PII policy for ${shortName(g!.tenant.name)} is now “${draft.mode}”. Recorded in the audit log.`, type: "info" });
       await load();
     } catch (e) {
       toast({ body: (e as Error).message, type: "error" });
@@ -70,7 +74,7 @@ export function Guardrails() {
 
   return (
     <>
-      <PageHeader title="Guardrails" sub={<>Governance and security controls built into the gateway{g ? <> for <b>{g.tenant.name.split(" (")[0]}</b></> : null}.</>}
+      <PageHeader title="Guardrails" sub={<>Governance and security controls built into the gateway{g ? <> for <b>{shortName(g.tenant.name)}</b></> : null}.</>}
         actions={can("audit:read") ? <button className="btn" onClick={() => go("audit")}><ScrollText size={15} /> Audit log</button> : undefined} />
       {err && <div className="banner error">{err}</div>}
 
@@ -79,7 +83,7 @@ export function Guardrails() {
           <div className="grid c3">
             <StatCard k="Requests scanned" value={g.stats.requests} fmt={(v) => fmtN(Math.round(v))} sub={`last ${g.stats.windowDays} days`} />
             <StatCard k="Requests with personal data" value={g.stats.requestsWithPii} fmt={(v) => fmtN(Math.round(v))}
-              sub={Object.keys(g.stats.byType).length ? Object.entries(g.stats.byType).map(([t, n]) => `${n} ${t.replace("_", " ")}`).join(" · ") : "none found"} />
+              sub={Object.keys(g.stats.byType).length ? Object.entries(g.stats.byType).map(([t, n]) => `${n} ${humanize(t)}`).join(" · ") : "none found"} />
             <StatCard k="Blocked by policy" value={g.stats.blocked} fmt={(v) => fmtN(Math.round(v))} sub="rejected before a model call" />
           </div>
 

@@ -1,6 +1,6 @@
 /** The ConsoleApi port over HTTP: every console endpoint, in one place. */
 import type { ConsoleApi } from "../../../use-cases/ports";
-import type { DemoAccount, SessionUser } from "../../../entities/models";
+import type { ApiKey, DemoAccount, SessionUser } from "../../../entities/models";
 import { call, qs, request, setCsrf, setSignedOutHandler, toError } from "./client";
 import { runPlaygroundRequest } from "./playgroundStream";
 
@@ -41,7 +41,7 @@ export function createHttpConsoleApi(): ConsoleApi {
     clearChaos: async () => void (await call("/api/console/chaos", { method: "DELETE" })),
     requests: ({ limit, tenant }) => call(`/api/console/requests${qs({ limit, tenant })}`),
     request: (id) => call(`/api/console/requests/${enc(id)}`),
-    keys: async (tenant) => (await call<{ keys: any[] }>(`/api/console/keys${qs({ tenant })}`)).keys,
+    keys: async (tenant) => (await call<{ keys: ApiKey[] }>(`/api/console/keys${qs({ tenant })}`)).keys,
     createKey: (tenant, body) => call(`/api/console/keys${qs({ tenant })}`, { method: "POST", json: body }),
     revokeKey: async (id, tenant) => void (await call(`/api/console/keys/${enc(id)}${qs({ tenant })}`, { method: "DELETE" })),
     audit: (tenant) => call(`/api/console/audit${qs({ tenant })}`),

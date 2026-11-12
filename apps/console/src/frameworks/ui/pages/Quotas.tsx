@@ -10,7 +10,7 @@ import { GROUP } from "../components/ui";
 import { useApp } from "../hooks/appContext";
 import { PageHeader, StatCard } from "../components/kit";
 import type { Group, TenantUsage } from "../../../entities/models";
-import { fmtUsd, fmtN } from "../../../entities/format";
+import { fmtUsd, fmtN, shortName } from "../../../entities/format";
 import { groupOf } from "../../../entities/outcomes";
 import { useApi } from "../hooks/api";
 import { levelOf, share, sharePct, tokenShare, type Level } from "../../../entities/quota";
@@ -22,7 +22,6 @@ const LEVEL: Record<Level, { label: string; Icon: LucideIcon; color: string }> =
   out: { label: "Rejecting requests", Icon: CircleX, color: "var(--critical)" },
 };
 
-const shortName = (n: string) => n.split(" (")[0];
 
 function Bar({ used, total, label }: { used: number; total: number; label: string }) {
   const p = share(used, total);
@@ -49,7 +48,7 @@ function Status({ u }: { u: TenantUsage }) {
   );
 }
 
-export function Tenants() {
+export function Quotas() {
   const api = useApi();
   const { scope, can } = useApp();
   const toast = useToast();
@@ -57,7 +56,10 @@ export function Tenants() {
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const load = useCallback(
-    () => api.usage(scope).then((u) => (setUsage(u), setErr(null))).catch((e) => setErr((e as Error).message)),
+    () => api.usage(scope).then((usage) => {
+      setUsage(usage);
+      setErr(null);
+    }).catch((e) => setErr((e as Error).message)),
     [scope],
   );
   useEffect(() => {
@@ -82,7 +84,10 @@ export function Tenants() {
 
   const reset = (u: TenantUsage) =>
     api.resetQuota(u.tenant)
-      .then(() => (toast({ body: `Quota reset for ${shortName(u.name)}`, type: "info" }), load()))
+      .then(() => {
+        toast({ body: `Quota reset for ${shortName(u.name)}`, type: "info" });
+        load();
+      })
       .catch((e) => toast({ body: (e as Error).message, type: "error" }));
 
   return (
@@ -153,7 +158,10 @@ export function Tenants() {
                     {can("quota:reset") && (
                       <td className="r">
                         <button className="btn sm ghost" title="Reset this month's usage (demo helper, audited)"
-                          onClick={(e) => (e.stopPropagation(), reset(u))}>
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            reset(u);
+                          }}>
                           <RotateCcw size={13} /> Reset
                         </button>
                       </td>

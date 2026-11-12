@@ -1,7 +1,4 @@
-/**
- * Page building blocks in the Claude Console pattern: a page header (title, one line of
- * context, actions on the right), filter chips that read "Label Value ▾", and stat cards.
- */
+/** Page building blocks: a page header (title, context, actions), "Label Value ▾" filter chips, and stat cards. */
 import type { ReactNode } from "react";
 import { DropdownMenu } from "@astryxdesign/core/DropdownMenu";
 import { Check, ChevronDown, Info } from "lucide-react";

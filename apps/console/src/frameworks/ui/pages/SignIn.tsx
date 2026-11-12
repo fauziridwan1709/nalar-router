@@ -6,6 +6,7 @@ import type { Role, SessionUser, DemoAccount } from "../../../entities/models";
 import { ApiError } from "../../../entities/errors";
 import { ROLE_LABEL } from "../../../entities/access";
 import { useApi } from "../hooks/api";
+import { shortName } from "../../../entities/format";
 
 const ROLE_HINT: Record<string, string> = {
   operator: "Every tenant, backends, faults",
@@ -111,7 +112,7 @@ export function SignIn({ onSignedIn, notice }: { onSignedIn: (u: SessionUser) =>
                     if (d.password) setPassword(d.password);
                     setErr(null);
                   }}>
-                  <span className="who"><span className={`role-dot ${d.role}`} aria-hidden /> {ROLE_LABEL[d.role]} · {d.tenant.split(" (")[0]}</span>
+                  <span className="who"><span className={`role-dot ${d.role}`} aria-hidden /> {ROLE_LABEL[d.role]} · {shortName(d.tenant)}</span>
                   <span className="mono">{d.email}</span>
                   <span className="tiny muted">{ROLE_HINT[d.role]}</span>
                 </button>

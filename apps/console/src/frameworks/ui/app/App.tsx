@@ -12,9 +12,9 @@ import { Dashboard } from "../pages/Dashboard";
 import { Usage } from "../pages/Usage";
 import { Cost } from "../pages/Cost";
 import { Reliability } from "../pages/Reliability";
-import { Playground } from "../pages/Playground";
-import { Requests } from "../pages/Logs";
-import { Tenants } from "../pages/Quotas";
+import { Playground } from "../pages/playground/Playground";
+import { Logs } from "../pages/Logs";
+import { Quotas } from "../pages/Quotas";
 import { Backends } from "../pages/Backends";
 import { Evaluations } from "../pages/Evaluations";
 import { ApiKeys } from "../pages/ApiKeys";
@@ -28,13 +28,14 @@ import type { Permission, SessionUser, ConsoleConfig } from "../../../entities/m
 import { ROLE_LABEL, PAGES, type Page } from "../../../entities/access";
 import { useApi } from "../hooks/api";
 import { levelOf, share, tokenShare } from "../../../entities/quota";
+import { shortName } from "../../../entities/format";
 
 const DOCS_URL = "https://github.com/fauziridwan1709/nalar-router/blob/main/docs/API.md";
 
 function useTheme() {
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     const saved = localStorage.getItem("theme");
-    return saved === "light" ? "light" : "dark"; // dark by default, like the Claude Console
+    return saved === "light" ? "light" : "dark"; // dark by default
   });
   useEffect(() => localStorage.setItem("theme", theme), [theme]);
   return [theme, setTheme] as const;
@@ -60,9 +61,15 @@ export function App() {
       {user === undefined ? (
         <div className="boot"><Logo size={36} /></div>
       ) : user === null ? (
-        <SignIn notice={notice} onSignedIn={(u) => (setNotice(null), setUser(u))} />
+        <SignIn notice={notice} onSignedIn={(signedIn) => {
+          setNotice(null);
+          setUser(signedIn);
+        }} />
       ) : (
-        <Shell user={user} theme={theme} setTheme={setTheme} onSignOut={async () => (await api.auth.signOut(), setUser(null))} />
+        <Shell user={user} theme={theme} setTheme={setTheme} onSignOut={async () => {
+          await api.auth.signOut();
+          setUser(null);
+        }} />
       )}
     </Theme>
   );
@@ -91,7 +98,7 @@ function useAlerts(can: (p: Permission) => boolean) {
           const p = Math.max(tokenShare(u), share(u.requestsUsed, u.requestQuota));
           out.push({
             id: `q-${u.tenant}`,
-            title: level === "out" ? `${u.name.split(" (")[0]} is rejecting requests` : `${u.name.split(" (")[0]} at ${Math.round(p * 100)}% of quota`,
+            title: level === "out" ? `${shortName(u.name)} is rejecting requests` : `${shortName(u.name)} at ${Math.round(p * 100)}% of quota`,
             detail: level === "out" ? "New requests get 429 until the period resets or the quota is reset." : "Requests will be rejected once it reaches 100%.",
             page: "quotas",
           });
@@ -167,7 +174,10 @@ function Shell({ user, theme, setTheme, onSignOut }: { user: SessionUser; theme:
     user, cfg, can, go: (p) => allowed.includes(p) && setPage(p),
     scope: can("tenants:all") ? scope : user.tenant?.id ?? "",
     setScope,
-    tenantName: (id) => cfg.tenants.find((t) => t.id === id)?.name.split(" (")[0] ?? id,
+    tenantName: (id) => {
+      const tenant = cfg.tenants.find((t) => t.id === id);
+      return tenant ? shortName(tenant.name) : id;
+    },
   };
   const sections = [...new Set(allowed.map((p) => PAGES[p].section))];
   const endTour = () => {
@@ -187,7 +197,7 @@ function Shell({ user, theme, setTheme, onSignOut }: { user: SessionUser; theme:
     ],
     [allowed, can, theme],
   );
-  const source = useMemo(() => createStaticSource(commands, { keywords: (c) => [String((c.auxiliaryData as any)?.hint ?? "")] }), [commands]);
+  const source = useMemo(() => createStaticSource(commands, { keywords: (c) => [String((c.auxiliaryData as { hint?: string } | undefined)?.hint ?? "")] }), [commands]);
   const runCommand = (id: string) => {
     setPaletteOpen(false);
     if (id.startsWith("go:")) setPage(id.slice(3) as Page);
@@ -202,7 +212,10 @@ function Shell({ user, theme, setTheme, onSignOut }: { user: SessionUser; theme:
   return (
     <div className="app">
       <header className="topbar">
-        <a className="logo" href="#dashboard" onClick={(e) => (e.preventDefault(), allowed.includes("dashboard") && setPage("dashboard"))} aria-label="nalar console home">
+        <a className="logo" href="#dashboard" onClick={(e) => {
+          e.preventDefault();
+          if (allowed.includes("dashboard")) setPage("dashboard");
+        }} aria-label="nalar console home">
           <Logo />
           <b>nalar <span>console</span></b>
         </a>
@@ -262,7 +275,7 @@ function Shell({ user, theme, setTheme, onSignOut }: { user: SessionUser; theme:
                   <span className="org"><Building2 size={16} /></span>
                   <span>
                     <b>{user.name}</b>
-                    <span>{user.tenant?.name.split(" (")[0]} · {ROLE_LABEL[user.role]}</span>
+                    <span>{user.tenant ? shortName(user.tenant.name) : ""} · {ROLE_LABEL[user.role]}</span>
                   </span>
                   <ChevronsUpDown size={15} className="muted" />
                 </button>
@@ -295,8 +308,8 @@ function Shell({ user, theme, setTheme, onSignOut }: { user: SessionUser; theme:
                 {page === "cost" && <Cost />}
                 {page === "reliability" && <Reliability />}
                 {page === "playground" && <Playground />}
-                {page === "logs" && <Requests />}
-                {page === "quotas" && <Tenants />}
+                {page === "logs" && <Logs />}
+                {page === "quotas" && <Quotas />}
                 {page === "keys" && <ApiKeys />}
                 {page === "backends" && <Backends />}
                 {page === "evaluations" && <Evaluations />}

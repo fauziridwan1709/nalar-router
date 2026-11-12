@@ -22,7 +22,10 @@ export function Backends() {
   const [list, setList] = useState<BackendStatus[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const refresh = useCallback(
-    () => api.backends().then((l) => (setList(l), setErr(null))).catch((e) => setErr((e as Error).message)),
+    () => api.backends().then((backends) => {
+      setList(backends);
+      setErr(null);
+    }).catch((e) => setErr((e as Error).message)),
     [],
   );
   useEffect(() => {

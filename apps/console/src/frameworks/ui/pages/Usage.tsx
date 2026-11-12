@@ -6,7 +6,7 @@ import { useMetrics } from "../hooks/useMetrics";
 import { BACKEND_COLOR, tenantColor } from "../components/palette";
 import { GROUP } from "../components/ui";
 import type { Group, Range, Bucket } from "../../../entities/models";
-import { fmtN, timeLabel } from "../../../entities/format";
+import { fmtN, shortName, timeLabel } from "../../../entities/format";
 
 /** the tenant / backend chips every Monitor page shares */
 export function MonitorChips({ backend, setBackend, groupBy, setGroupBy, groupOptions }: {
@@ -21,7 +21,7 @@ export function MonitorChips({ backend, setBackend, groupBy, setGroupBy, groupOp
     <div className="chips" role="group" aria-label="Filters for every chart on this page">
       {can("tenants:all") && (
         <FilterChip label="Tenant" value={scope || "*"} onChange={(v) => setScope(v === "*" ? "" : v)} tour="scope"
-          options={[{ value: "*", label: "All" }, ...cfg.tenants.map((t) => ({ value: t.id, label: t.name.split(" (")[0], description: `${t.plan} plan` }))]} />
+          options={[{ value: "*", label: "All" }, ...cfg.tenants.map((t) => ({ value: t.id, label: shortName(t.name), description: `${t.plan} plan` }))]} />
       )}
       <FilterChip label="Backend" value={backend || "*"} onChange={(v) => setBackend(v === "*" ? "" : v)}
         options={[{ value: "*", label: "All" }, ...cfg.backends.map((b) => ({ value: b.id, label: b.id, description: `${b.tier} tier` }))]} />
