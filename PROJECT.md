@@ -1,6 +1,6 @@
 # PROJECT.md: state of the work, and how to pick it up
 
-This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-12 (PRs #5 and #6 merged, but #6 merged into #5's branch after #5 had landed, so the console refactor reaches `main` only through the router-modes PR, branch `feat/auto-routing-modes`, which is stacked on it).
+This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-12 (PRs #5 and #6 merged, but #6 merged into #5's branch after #5 had landed, so it was re-opened against `main` as PR #8; the router-modes PR #7, branch `feat/auto-routing-modes`, is stacked on it).
 
 ## What this is
 
@@ -34,7 +34,8 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - [x] **Merge PR #4** (OpenAI SDK compatibility, Quotas redesign, orange theme).
 - [x] **Merge PR #5** (clean architecture, complexity-based routing, error catalog + docs/ERRORS.md). Merged 2026-11-11.
 - [x] **PR #6** (console clean architecture) merged 2026-11-11, but into PR #5's branch, not `main`.
-- [ ] **Merge the router-modes PR** (`feat/auto-routing-modes`: `auto-smart` and `auto-cascade`, plus PR #6's commits). Redeploys Render and wipes SQLite (accepted).
+- [ ] **Merge PR #8** (PR #6 re-opened against `main`, same commits).
+- [ ] **Then merge PR #7** (`feat/auto-routing-modes`: `auto-smart`, `auto-cascade`, `local-qwen3.5-4b`). Redeploys Render and wipes SQLite (accepted).
 - [ ] Refresh the README screenshots other than Quotas: they still show the old blue accent.
 - [ ] Optional: judged quality eval across the router modes: `npm run eval -- --configs auto:v3,auto-smart:v3,auto-cascade:v3 --judge groq-strong --delay 17000` (~30 min on the free tier). The live router-modes run measured cost and outcome only.
 - [ ] Before recording or submitting, sign in on the live console as `ops@nalar.example` and click **Run sample traffic** on the Reliability page. The Render disk is ephemeral, so metering is empty after every redeploy.
