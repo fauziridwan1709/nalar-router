@@ -55,7 +55,7 @@ describe("OpenAI SDK compatibility", () => {
   it("lists models", async () => {
     const c = await client();
     const ids = (await c.models.list()).data.map((m) => m.id);
-    expect(ids).toEqual(["auto", "fast", "f"]);
+    expect(ids).toEqual(["auto", "auto-smart", "auto-cascade", "fast", "f"]);
   });
 
   it("raises the SDK's typed errors", async () => {
