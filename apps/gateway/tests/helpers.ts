@@ -76,6 +76,10 @@ export const think = (thought: string, text: string): Script =>
     yield* reply(text)(req);
   };
 
+/** a fast backend that also serves auto-smart's classifier call: `verdict` for that, `then` for the rest */
+export const withClassifier = (verdict: Script, then: Script): Script => (req) =>
+  (req.messages[1]?.content.startsWith("Message to classify:") ? verdict : then)(req);
+
 export const fail = (msg = "boom"): Script =>
   async function* () {
     throw Object.assign(new Error(msg));
@@ -85,8 +89,19 @@ export const hang: Script = async function* (req) {
   await abortableSleep(60_000, req.signal);
 };
 
-export async function startServer(backends: Backend[], over: { demoMode?: boolean; auth?: Partial<typeof baseConfig.auth> } = {}) {
-  const config = { ...baseConfig, demoMode: over.demoMode ?? true, adminToken: "adm", auth: { ...baseConfig.auth, ...over.auth } };
+export async function startServer(
+  backends: Backend[],
+  over: {
+    demoMode?: boolean;
+    auth?: Partial<typeof baseConfig.auth>;
+    routing?: Partial<typeof baseConfig.routing>;
+    classifier?: Partial<typeof baseConfig.classifier>;
+  } = {},
+) {
+  const config = {
+    ...baseConfig, demoMode: over.demoMode ?? true, adminToken: "adm", auth: { ...baseConfig.auth, ...over.auth },
+    routing: { ...baseConfig.routing, ...over.routing }, classifier: { ...baseConfig.classifier, ...over.classifier },
+  };
   const gw: Gateway = createGateway(config, { db: openDb(":memory:", TENANTS, USERS), backends, kbEntries: KB });
   const app = createApp(gw);
   const server: Server = await new Promise((r) => {

@@ -22,7 +22,7 @@ These are returned as the HTTP status, before any model is called. Requests refu
 |---|---|---|---|
 | `invalid_json` | 400 | no | The body is not valid JSON. |
 | `invalid_request` | 400 | no | The body fails validation; the message names each field. |
-| `unknown_model` | 400 | no | `model` is not `auto`, a tier or a backend id; `details.available` lists them. |
+| `unknown_model` | 400 | no | `model` is not a router mode (`auto`, `auto-smart`, `auto-cascade`), a tier or a backend id; `details.available` lists them. |
 | `missing_api_key` | 401 | no | No `Authorization: Bearer` key (or `x-api-key`) on a /v1 route. |
 | `invalid_api_key` | 401 | no | The key is unknown, revoked or expired (deliberately indistinguishable). |
 | `invalid_admin_token` | 401 | no | An /admin route without the right `x-admin-token`. |

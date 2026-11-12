@@ -15,7 +15,7 @@ import { useApi } from "../../application/api";
 const ART: Record<string, { bg: string; Icon: typeof Zap; tags: string[] }> = {
   "groq-fast": { bg: "#8fb3ec", Icon: Zap, tags: ["Default route", "Fastest", "Low cost"] },
   "groq-strong": { bg: "#e5a084", Icon: Brain, tags: ["Escalation", "Ambiguous or long asks"] },
-  "local-qwen": { bg: "#ece8dd", Icon: Cpu, tags: ["On-device", "No data leaves"] },
+  "local-qwen3.5-4b": { bg: "#ece8dd", Icon: Cpu, tags: ["On-device", "No data leaves"] },
   mock: { bg: "#b9d1c4", Icon: BookOpenText, tags: ["Last resort", "Extractive", "Free"] },
 };
 

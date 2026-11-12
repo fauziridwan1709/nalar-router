@@ -270,7 +270,7 @@ describe("chat completions endpoint", () => {
     close = s.close;
     const free = await (await fetch(`${s.base}/v1/models`, { headers: { authorization: "Bearer k-free" } })).json();
     expect(free.object).toBe("list");
-    expect(free.data.map((m: any) => m.id)).toEqual(["auto", "fast", "f"]);
+    expect(free.data.map((m: any) => m.id)).toEqual(["auto", "auto-smart", "auto-cascade", "fast", "f"]);
     expect(free.data[0]).toMatchObject({ object: "model", owned_by: "nalar-router" });
     const bad = await fetch(`${s.base}/v1/models`, { headers: { authorization: "Bearer nope" } });
     expect((await bad.json()).error.type).toBe("authentication_error");

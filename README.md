@@ -63,6 +63,7 @@
 
 - **Four backends:** Groq `gpt-oss-20b` (fast), Groq `gpt-oss-120b` (strong), Qwen3.5-4B running locally on Apple MLX, and an extractive fallback that always works.
 - **Rules you can defend:** the router respects the tenant's plan, defaults to the cheap model, and escalates to the strong one when a query-complexity score reaches 0.5. The score adds up weighted signals: length, ambiguous retrieval, several questions, reasoning cues, multi-step structure, constraints, code, math. Each decision is stored as `{rule, reason, chain, signals}` with the score and the signals that fired.
+- **Three router modes:** `auto` is that heuristic (free, instant). `auto-smart` has the fast model classify the message first (one metered call, about 0.5 s), which catches hard questions in plain words and keeps long simple ones on fast. `auto-cascade` starts every support request on fast and moves to strong before anything is streamed, but only on doubt a stronger model could remove. Measured side by side in [REPORT §3](docs/REPORT.md#3-routing).
 - **Fallback:** triggered by an error, no first token within the timeout, the total timeout, or unusable model output. Every attempt is recorded, and a per-backend circuit breaker skips backends that keep failing.
 - **One commit point:** fallback can happen only before the first byte reaches the client. Two models' outputs are never spliced into one answer.
 - **Fault injection** per backend (`error`, `hang`, `garbage`, extra latency), so fallback can be demonstrated on demand.
@@ -158,7 +159,7 @@ flowchart LR
     subgraph Backends
         B1["groq-fast · gpt-oss-20b"]
         B2["groq-strong · gpt-oss-120b"]
-        B3["local-qwen · MLX"]
+        B3["local-qwen3.5-4b · MLX"]
         B4["mock · extractive"]
     end
     DB[("SQLite<br/>tenants · requests<br/>attempts · reservations")]
@@ -281,13 +282,18 @@ All settings are environment variables, read from `.env` at the repo root (or fr
 | `GROQ_API_KEY` | — | Enables `groq-fast` and `groq-strong` |
 | `GROQ_FAST_MODEL` / `GROQ_STRONG_MODEL` | `openai/gpt-oss-20b` / `openai/gpt-oss-120b` | Model ids |
 | `GROQ_TTFT_TIMEOUT_MS` | `6000` (fast), `8000` (strong) | Fall back if there's no first token by then |
-| `LOCAL_LLM_ENABLED` | `false` | Enables `local-qwen` |
+| `LOCAL_LLM_ENABLED` | `false` | Enables `local-qwen3.5-4b` |
 | `LOCAL_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | Any OpenAI-compatible server (MLX, Ollama, vLLM…) |
 | `LOCAL_LLM_MODEL` | `mlx-community/Qwen3.5-4B-MLX-4bit` | |
 | `LOCAL_LLM_EXTRA_BODY` | `{"chat_template_kwargs":{"enable_thinking":false}}` | Provider-specific request fields |
 | `LOCAL_LLM_TTFT_TIMEOUT_MS` | `20000` | |
 | `ROUTE_LONG_QUERY_TOKENS` | `60` | Messages longer than this escalate to the strong tier |
 | `ROUTE_AMBIGUOUS_VOTE_SHARE` | `0.6` | A top-intent vote below this escalates to the strong tier |
+| `ROUTE_COMPLEXITY_THRESHOLD` | `0.5` | Complexity score at which `auto` starts on the strong tier |
+| `ROUTE_CLASSIFIER_BACKEND` | `groq-fast` | Backend that classifies for `auto-smart` (falls back to the first enabled fast-tier backend) |
+| `ROUTE_CLASSIFIER_TIMEOUT_MS` / `ROUTE_CLASSIFIER_MAX_TOKENS` | `2500` / `300` | Past the timeout the heuristic decides |
+| `ROUTE_CLASSIFIER_MIN_CONFIDENCE` | `0.6` | A less confident verdict is ignored and the heuristic decides |
+| `ROUTE_CASCADE_MODEL_CONFIDENCE_BELOW` | `0.7` | `auto-cascade` escalates when the fast model rates itself below this |
 | `BREAKER_FAILURES` / `BREAKER_OPEN_MS` | `3` / `30000` | Circuit breaker |
 | `SUPPORT_MIN_COVERAGE` | `0.3` | Lexical coverage below which a short message is refused without a model call |
 | `SUPPORT_GATE_MAX_TERMS` | `6` | The coverage check applies only to messages with this many content terms or fewer |
@@ -362,7 +368,7 @@ curl -N http://localhost:3000/v1/support/answer \
 |---|---|---|
 | `POST /v1/support/answer` | tenant key | The support capability. SSE events: `meta` → `route` → `retrieval` → `attempt`… → `intent` → `token`… → `done` (or `refusal` / `error`). Send `"stream": false` for a single JSON response. |
 | `POST /v1/chat/completions` | tenant key | Raw gateway, OpenAI-compatible (works with the OpenAI SDKs; JSON by default, chunks with `stream: true`) plus an `x_router` block |
-| `GET /v1/models` | tenant key | OpenAI-format model list: `auto`, tiers and backends on the key's plan |
+| `GET /v1/models` | tenant key | OpenAI-format model list: the router modes (`auto`, `auto-smart`, `auto-cascade`), tiers and backends on the key's plan |
 | `GET /v1/backends` | tenant key | Every backend with its online/offline label, where it runs, and whether your plan may use it |
 | `GET /v1/usage` | tenant key | The calling tenant's usage and remaining quota |
 | `GET /v1/requests/:id` | tenant key | One of the tenant's own requests, with its attempts |
@@ -393,6 +399,9 @@ npm run eval -- --base http://localhost:3000 \
 
 npm run probe -w @nalar-router/eval -- --base http://localhost:3000 --model groq-fast
   # 8 adversarial inputs: injection, multi-intent, vague, Indonesian, typos, angry
+
+npm run router-modes-eval -- --base http://localhost:3000
+  # the same 17 support messages as auto, auto-smart and auto-cascade: start tier, attempts, outcome, cost, latency
 ```
 
 Results are written to `tools/eval/results/<timestamp>.{md,json}`. The eval goes through the real HTTP path, so it measures the whole system (auth, quota, routing, streaming, metering), not just the model.
@@ -448,7 +457,7 @@ nalar-router/
 │       ├── src/infrastructure/  the HTTP adapter (fetch, CSRF, SSE parsing)
 │       ├── src/ui/              app shell, pages, components, styles
 │       └── tests/               architecture and domain tests
-├── tools/eval/                  prepare-data · retrieval-eval · routing-eval · eval · probe · results/
+├── tools/eval/                  prepare-data · retrieval-eval · routing-eval · router-modes · eval · probe · results/
 ├── data/                        KB slice + held-out / OOD / hard eval sets (from Bitext)
 ├── docs/
 │   ├── REPORT.md                technical report: design, results, trade-offs

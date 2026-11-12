@@ -50,6 +50,13 @@ export function Outcome({ outcome }: { outcome: string }) {
   );
 }
 
+/** attempt outcome → hop style; anything not listed is a failure (struck through) */
+const HOP_CLASS: Record<string, string> = {
+  ok: "ok", skipped_circuit_open: "skip", refused: "refused",
+  // routing steps, not failures: auto-smart's classifier call and an auto-cascade escalation
+  classified: "router", escalated: "escalated",
+};
+
 /** the attempt trail of one request: failed hops struck through, the serving hop outlined */
 export function RouteStrip({ trail }: { trail: string | null | undefined }) {
   if (!trail) return <span className="muted small">no model call</span>;
@@ -63,7 +70,7 @@ export function RouteStrip({ trail }: { trail: string | null | undefined }) {
         <span key={i} style={{ display: "contents" }}>
           {i > 0 && <span className="arrow">›</span>}
           <span
-            className={`hop ${h.outcome === "ok" ? "ok" : h.outcome === "skipped_circuit_open" ? "skip" : h.outcome === "refused" ? "refused" : "fail"}`}
+            className={`hop ${HOP_CLASS[h.outcome] ?? "fail"}`}
             title={`${h.backend}: ${h.outcome.replace(/_/g, " ")}`}
           >
             {h.backend}

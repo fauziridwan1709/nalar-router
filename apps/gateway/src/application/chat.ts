@@ -3,14 +3,15 @@
  * would call for anything that isn't a packaged capability. Same auth, quota, routing,
  * fallback and metering as the support assistant; output is OpenAI-compatible.
  */
-import type { Backend, ChatMessage, Sampling } from "./ports/backend.js";
+import type { ChatMessage, Sampling } from "./ports/backend.js";
 import { BackendError, publicAttemptError, type ErrorCode } from "../domain/errors.js";
 import type { AppDeps } from "./deps.js";
 import type { RunResult } from "./capability.js";
 import type { Tenant } from "../domain/types.js";
 import type { EventSink } from "./ports/sink.js";
 import { executeWithFallback } from "./executor.js";
-import { planRoute, type RoutePlan } from "../domain/routing/policy.js";
+import { planRoute, type RouteSignals } from "../domain/routing/policy.js";
+import { resolveRoute } from "./router.js";
 import { estimateMessagesTokens } from "../domain/tokens.js";
 import { GatewayError } from "../domain/errors.js";
 import { PII_LABEL, scanPii, summarizeCounts, type PiiType } from "../domain/guardrails/pii.js";
@@ -40,19 +41,17 @@ export function guardChatMessages(tenant: Tenant, messages: ChatMessage[]) {
 export function prepareChat(deps: AppDeps, tenant: Tenant, messages: ChatMessage[], model?: string) {
   const estimatedPromptTokens = estimateMessagesTokens(messages);
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
-  const plan = planRoute(
-    deps.backends,
-    tenant,
-    // route on the size of the newest user turn; a long history alone shouldn't force the big model
-    { queryTokens: Math.ceil(lastUser.length / 4), text: lastUser, turns: messages.length, hint: model },
-    deps.config.routing,
-  );
-  return { plan, estimatedPromptTokens };
+  // route on the size of the newest user turn; a long history alone shouldn't force the big model
+  const routeSignals: RouteSignals = { queryTokens: Math.ceil(lastUser.length / 4), text: lastUser, turns: messages.length, hint: model };
+  const plan = planRoute(deps.backends, tenant, routeSignals, deps.config.routing);
+  return { plan, tenant, routeSignals, estimatedPromptTokens };
 }
+
+export type PreparedChat = ReturnType<typeof prepareChat>;
 
 export async function runChat(
   deps: AppDeps,
-  plan: RoutePlan<Backend>,
+  prepared: Pick<PreparedChat, "plan" | "tenant" | "routeSignals">,
   messages: ChatMessage[],
   ctx: {
     maxCompletionTokens: number;
@@ -64,7 +63,12 @@ export async function runChat(
     startedAt: number;
   },
 ): Promise<RunResult> {
-  const routeReason = { rule: plan.rule, reason: plan.reason, chain: plan.chain.map((b) => b.config.id), signals: plan.signals };
+  // auto-smart classifies first (metered as attempt 0); other modes return the plan as is
+  const { plan, attempts: routeAttempts } = await resolveRoute(deps, prepared.tenant, prepared.routeSignals, prepared.plan, ctx);
+  for (const a of routeAttempts) {
+    ctx.sink.emit("attempt", { ...a, status: a.outcome, error: a.error ? publicAttemptError(a.outcome) : a.error });
+  }
+  const routeReason = { rule: plan.rule, reason: plan.reason, mode: plan.mode, chain: plan.chain.map((b) => b.config.id), signals: plan.signals };
   ctx.sink.emit("route", routeReason);
   let firstTokenAt: number | null = null;
   const result = await executeWithFallback({
@@ -98,7 +102,7 @@ export async function runChat(
   const ttftMs = firstTokenAt ? firstTokenAt - ctx.startedAt : null;
   if (result.status === "ok") {
     return {
-      outcome: "success", httpStatus: 200, attempts: result.attempts, backend: result.backend.config.id,
+      outcome: "success", httpStatus: 200, attempts: [...routeAttempts, ...result.attempts], backend: result.backend.config.id,
       model: result.backend.config.model, routeReason, latencyMs, ttftMs,
     };
   }
@@ -113,7 +117,7 @@ export async function runChat(
   });
   return {
     outcome: aborted ? "client_aborted" : committed ? "partial" : "failed_all_backends",
-    httpStatus: aborted ? 499 : 502, attempts: result.attempts, routeReason, latencyMs, ttftMs,
+    httpStatus: aborted ? 499 : 502, attempts: [...routeAttempts, ...result.attempts], routeReason, latencyMs, ttftMs,
     backend: result.backend?.config.id ?? null, model: result.backend?.config.model ?? null,
     errorCode: code, errorMessage: err.message,
   };

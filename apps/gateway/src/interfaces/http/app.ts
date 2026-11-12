@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { z, ZodError } from "zod";
 import type { Gateway } from "../../gateway.js";
 import { GatewayError } from "../../domain/errors.js";
+import { AUTO_MODELS } from "../../domain/routing/policy.js";
 import { getTenant, listTenants, type Tenant } from "../../infrastructure/db/tenants.js";
 import { getUsage, resetQuota } from "../../infrastructure/db/quota.js";
 import { getRequestDetail, listRequests } from "../../infrastructure/db/metering.js";
@@ -86,7 +87,7 @@ export function createApp(gw: Gateway) {
     const t = req.tenant!;
     const created = Math.floor(gw.startedAt / 1000);
     const usable = gw.backends.filter((b) => b.config.enabled && t.allowedTiers.includes(b.config.tier));
-    const ids = ["auto", ...new Set(usable.map((b) => b.config.tier)), ...usable.map((b) => b.config.id)];
+    const ids = [...Object.keys(AUTO_MODELS), ...new Set(usable.map((b) => b.config.tier)), ...usable.map((b) => b.config.id)];
     res.json({ object: "list", data: ids.map((id) => ({ id, object: "model", created, owned_by: "nalar-router" })) });
   });
 

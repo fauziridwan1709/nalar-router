@@ -38,7 +38,7 @@ flowchart LR
     subgraph Backends
         B1["groq-fast<br/>gpt-oss-20b"]
         B2["groq-strong<br/>gpt-oss-120b"]
-        B3["local-qwen<br/>Qwen3.5-4B · MLX"]
+        B3["local-qwen3.5-4b<br/>Qwen3.5-4B · MLX"]
         B4["mock<br/>extractive KB answer"]
     end
 
@@ -115,13 +115,25 @@ flowchart TD
     ALLOWED -->|no| E403["403 model_not_allowed"]
     ALLOWED -->|yes| PIN["primary = pinned<br/>rest = default order"]
     HINT -->|"auto"| CX["assessComplexity: length, ambiguity,<br/>questions, reasoning, steps, code, math"]
+    HINT -->|"auto-smart"| CLS["after admission: classifier call on the fast model<br/>(metered as attempt 0, outcome classified)"]
+    CLS --> CLSOK{"verdict ok and<br/>confidence ≥ 0.6?"}
+    CLSOK -->|"no: failed, timed out, unsure"| CX
+    CLSOK -->|yes| CLSV{"complex, or<br/>retrieval ambiguous?"}
+    CLSV -->|no| SFAST["rule: smart_default_fast"]
+    CLSV -->|yes| SSTRONG["rule: smart_escalate_strong"]
+    HINT -->|"auto-cascade (support)"| CAS["rule: cascade_start_fast<br/>fast → strong → local → degraded"]
+    CAS --> CEIL{"could any model pass?<br/>best case ≥ refuse threshold"}
+    CEIL -->|no| KEEP["keep the fast model's decision<br/>(answer or refusal)"]
+    CEIL -->|yes| HDR{"fast header: unknown, self-confidence < 0.7,<br/>or disagrees with retrieval and would be refused?"}
+    HDR -->|no| KEEP
+    HDR -->|"yes (before commit)"| ESC["attempt outcome escalated<br/>→ next backend: strong"]
     CX --> SIG{"complexity score ≥ 0.5?"}
     SIG -->|no| FAST["rule: auto_default_fast<br/>fast → strong → local → degraded"]
     SIG -->|yes| HAS{"strong tier in plan<br/>and enabled?"}
     HAS -->|yes| STRONG["rule: auto_escalate_strong<br/>strong → fast → local → degraded"]
     HAS -->|"not in plan"| DEN["rule: auto_escalate_denied_by_plan<br/>fast → local → degraded"]
     HAS -->|"not enabled"| UNA["rule: auto_escalate_unavailable"]
-    PIN & FAST & STRONG & DEN & UNA --> EXEC["executor walks the chain<br/>skip if circuit open · fallback until commit"]
+    PIN & FAST & STRONG & DEN & UNA & SFAST & SSTRONG & KEEP & ESC --> EXEC["executor walks the chain<br/>skip if circuit open · fallback until commit"]
 ```
 
 ## 4. Data model

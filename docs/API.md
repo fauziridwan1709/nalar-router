@@ -12,7 +12,7 @@ curl -N http://localhost:3000/v1/support/answer \
 
 Body:
 - `message`: 1–2000 chars
-- `model`: optional; `auto`, a tier, or a backend id
+- `model`: optional; a router mode (`auto`, `auto-smart`, `auto-cascade`), a tier, or a backend id. `auto` routes on the complexity heuristic; `auto-smart` asks a small model to classify the message first (one extra metered call, ~0.5 s); `auto-cascade` starts on fast and moves to strong before streaming if the fast model's header is unsure. See REPORT §3.
 - `prompt_version`: `v1`, `v2` or `v3` (default `v3`)
 - `placeholders`: `fill` (default) or `raw`. With `fill`, template slots such as `{{Order Number}}` are filled in before streaming, from the customer's message, the tenant's company profile, default UI labels, or a natural phrase. With `raw`, the model's text is streamed untouched.
 - `stream`: defaults to `true`
@@ -48,7 +48,7 @@ curl http://localhost:3000/v1/chat/completions -H 'authorization: Bearer sk-acme
 ```
 
 - **`stream` defaults to `false`**, as in OpenAI: one `chat.completion` object. With `"stream": true` it sends `chat.completion.chunk`s and ends with `data: [DONE]`.
-- **Request fields:** `model` (`auto`, a tier such as `fast`, or a backend id; see `GET /v1/models`), `messages`, `stream`, `stream_options.include_usage`, `max_completion_tokens` (or the older `max_tokens`), `temperature`, `top_p`, `stop`, `seed`, `presence_penalty`, `frequency_penalty`, `n` (only 1) and `user` (accepted, not stored). Message `content` may be a string or an array of `text` parts; `developer` is treated as `system`.
+- **Request fields:** `model` (`auto`, `auto-smart`, or `auto-cascade`, which chat routes like `auto` because it has no header to judge; a tier such as `fast`, or a backend id; see `GET /v1/models`), `messages`, `stream`, `stream_options.include_usage`, `max_completion_tokens` (or the older `max_tokens`), `temperature`, `top_p`, `stop`, `seed`, `presence_penalty`, `frequency_penalty`, `n` (only 1) and `user` (accepted, not stored). Message `content` may be a string or an array of `text` parts; `developer` is treated as `system`.
 - **Not supported, rejected with a 400 that names the field:** tools and function calling, `response_format`, `logprobs`, and image or audio parts.
 - **Extensions:** an `x_router` block on the response (or on the final chunk) with backend, fallback, cost, route and attempts; `include_reasoning` to receive the model's reasoning (`delta.reasoning` while streaming); routing and attempt events as SSE comments (`: route {…}`, `: attempt {…}`, each with `t`, ms since the request started), which OpenAI clients ignore. The final content chunk also carries `usage`; with `stream_options.include_usage` a separate usage-only chunk (`choices: []`) follows, as OpenAI sends it.
 - **Errors** have OpenAI's shape: `{error: {message, type, param, code}}`, with `type` one of `invalid_request_error`, `authentication_error`, `permission_error`, `not_found_error`, `rate_limit_error`, `api_error`.
@@ -58,7 +58,7 @@ This is OpenAI's format, not Anthropic's. Claude's Messages API (`POST /v1/messa
 
 ## `GET /v1/models`
 
-OpenAI's model list for the key's plan: `{object: "list", data: [{id, object: "model", created, owned_by}]}`. The ids are `auto`, then the tiers, then the backends the plan may use. It needs the `chat.completions` scope.
+OpenAI's model list for the key's plan: `{object: "list", data: [{id, object: "model", created, owned_by}]}`. The ids are the router modes `auto`, `auto-smart` and `auto-cascade`, then the tiers, then the backends the plan may use. It needs the `chat.completions` scope.
 
 ```bash
 curl http://localhost:3000/v1/models -H 'authorization: Bearer sk-acme-demo-7f3a9c'
@@ -69,7 +69,7 @@ curl http://localhost:3000/v1/models -H 'authorization: Bearer sk-acme-demo-7f3a
 This lists every backend, including ones not configured on this host. For each it returns the online/offline label, where the model runs, and whether the caller's plan may use it.
 
 ```json
-[{ "id": "local-qwen", "tier": "local", "location": "local", "allowedForTenant": true,
+[{ "id": "local-qwen3.5-4b", "tier": "local", "location": "local", "allowedForTenant": true,
    "health": { "label": "offline", "availability": "disabled",
                "reason": "runs on a local machine; not configured on this deployment" },
    "breaker": "closed" }]

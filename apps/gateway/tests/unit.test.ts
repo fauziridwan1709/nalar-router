@@ -65,7 +65,7 @@ describe("retrieval", () => {
 
 describe("routing policy", () => {
   const backends = [new FakeBackend(cfg("f", "fast"), fail()), new FakeBackend(cfg("s", "strong"), fail()), new FakeBackend(cfg("m", "degraded"), fail())];
-  const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5 };
+  const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5, classifierMinConfidence: 0.6, cascadeModelConfidenceBelow: 0.7 };
   it("defaults to fast with fallback chain", () => {
     const p = planRoute(backends, tenant("pro"), { queryTokens: 10, retrievalTopShare: 0.9 }, opts);
     expect(p.chain.map((b) => b.config.id)).toEqual(["f", "s", "m"]);
@@ -84,7 +84,7 @@ describe("routing policy", () => {
 });
 
 describe("query complexity", () => {
-  const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5 };
+  const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5, classifierMinConfidence: 0.6, cascadeModelConfidenceBelow: 0.7 };
   const assess = (text: string, extra: { retrievalTopShare?: number; turns?: number } = {}) =>
     assessComplexity({ text, queryTokens: Math.ceil(text.length / 4), ...extra }, opts);
   const ids = (text: string, extra = {}) => assess(text, extra).signals.map((s) => s.id);
@@ -125,7 +125,7 @@ describe("query complexity", () => {
 });
 
 describe("complexity-based routing", () => {
-  const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5 };
+  const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5, classifierMinConfidence: 0.6, cascadeModelConfidenceBelow: 0.7 };
   const backends = [new FakeBackend(cfg("f", "fast"), reply("x")), new FakeBackend(cfg("s", "strong"), reply("x")), new FakeBackend(cfg("m", "degraded"), reply("x"))];
   const route = (text: string, t = "pro") => planRoute(backends, tenant(t), { queryTokens: Math.ceil(text.length / 4), text, retrievalTopShare: 1 }, opts);
 

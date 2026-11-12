@@ -69,6 +69,10 @@ export const TRACE_LABEL: Record<string, (d: any) => string> = {
       ? `PII guardrail (${d.mode}): ${d.detail}${d.masked?.length ? ` · ${d.masked.map((m: any) => m.label.toLowerCase()).join(", ")}` : ""}`
       : d.name === "scope_gate"
       ? `${d.passed ? "scope check passed" : "scope check: refuse"}: ${d.detail}`
+      : d.name === "route_classified"
+      ? `classified for routing: ${d.detail}`
+      : d.name === "cascade_escalated"
+      ? `cascade: ${d.backend} was unsure (${d.detail})`
       : d.name === "placeholders_rendered"
         ? `filled ${d.slots.length} placeholder${d.slots.length === 1 ? "" : "s"} (${[...new Set(d.slots.map((x: any) => x.source))].join(", ")})`
         : `header validated: ${d.detail}`,

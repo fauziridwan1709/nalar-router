@@ -11,7 +11,11 @@ export type AttemptOutcome =
   | "unusable_output"
   | "skipped_circuit_open"
   | "aborted"
-  | "refused";
+  | "refused"
+  /** auto-cascade: the fast model's header was unsure, so the request moved up to the strong tier (not a failure) */
+  | "escalated"
+  /** auto-smart: the router's own classification call, made before any answer attempt */
+  | "classified";
 
 export interface AttemptRecord {
   seq: number;
@@ -62,8 +66,9 @@ export function summarize(attempts: AttemptRecord[]): MeterSummary {
     totalTokens: promptTokens + completionTokens,
     usageSource,
     costUsd: attempts.reduce((n, a) => n + a.costUsd, 0),
-    // fallback = anything other than the first planned backend produced/ended the request
-    fallbackUsed: attempts.length > 1,
+    // fallback = anything other than the first planned backend produced/ended the request. The
+    // router's classification call and a planned cascade escalation are routing, not fallback.
+    fallbackUsed: attempts.filter((a) => a.outcome !== "classified" && a.outcome !== "escalated").length > 1,
   };
 }
 

@@ -158,7 +158,8 @@ export function chatSpec(deps: AppDeps, res: Response, rawBody: unknown) {
   return (tenant: Tenant): CapabilitySpec => {
     const body = parseBody(ChatBody, rawBody);
     const guarded = guardChatMessages(tenant, body.messages);
-    const { plan, estimatedPromptTokens } = prepareChat(deps, tenant, guarded.messages, body.model);
+    const prepared = prepareChat(deps, tenant, guarded.messages, body.model);
+    const { estimatedPromptTokens } = prepared;
     return {
       estimatedPromptTokens,
       pii: guarded.pii,
@@ -166,7 +167,7 @@ export function chatSpec(deps: AppDeps, res: Response, rawBody: unknown) {
       stream: body.stream ?? false,
       makeSink: () => new ChatSseSink(res, { includeUsage: !!body.stream_options?.include_usage }),
       run: (ctx) =>
-        runChat(deps, plan, guarded.messages, {
+        runChat(deps, prepared, guarded.messages, {
           ...ctx,
           temperature: body.temperature ?? undefined,
           includeReasoning: body.include_reasoning,

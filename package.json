@@ -15,6 +15,7 @@
     "prepare-data": "npm run prepare-data -w @nalar-router/eval",
     "retrieval-eval": "npm run retrieval-eval -w @nalar-router/eval",
     "routing-eval": "npm run routing-eval -w @nalar-router/eval --",
-    "eval": "npm run eval -w @nalar-router/eval --"
+    "eval": "npm run eval -w @nalar-router/eval --",
+    "router-modes-eval": "npm run router-modes-eval -w @nalar-router/eval --"
   }
 }

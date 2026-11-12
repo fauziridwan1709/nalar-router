@@ -43,7 +43,7 @@ The `requests` table is the single source of truth for both metering and quota. 
 |---|---|---|---|---|
 | `groq-fast` | fast | `openai/gpt-oss-20b` (Groq free tier) | $0.075 / $0.30 | Cheap, about 0.6 s to first token. Groq moved its Llama models to enterprise-only, so gpt-oss is the self-serve option. |
 | `groq-strong` | strong | `openai/gpt-oss-120b` (Groq) | $0.15 / $0.60 | Larger model, twice the price |
-| `local-qwen` | local | Qwen3.5-4B, 4-bit, on Apple MLX (`mlx_lm.server`) | $0 marginal | Private and offline. Only available when running locally. |
+| `local-qwen3.5-4b` | local | Qwen3.5-4B, 4-bit, on Apple MLX (`mlx_lm.server`) | $0 marginal | Private and offline. Only available when running locally. Called `local-qwen` in the eval runs before 2026-11-12. |
 | `mock` | degraded | extractive: streams the top KB answer verbatim | $0 | Always available and grounded. Configurable latency and failure. |
 
 All prices are in `config.ts` and are list prices at build time. The local model's cost is recorded as $0 marginal; electricity and hardware are not modelled.
@@ -74,6 +74,27 @@ All prices are in `config.ts` and are list prices at build time. The local model
    **Seen live (2026-11-11):** the comparison example above escalated correctly, but `groq-strong` (gpt-oss-120b) returned an empty answer under prompt v3 in 3 of 3 direct tries. It spent about 240 tokens and sent no content, so the header check rejected it as `unusable_output` and the request fell back to `groq-fast`. Simple support questions pinned to `strong` were answered normally. Groq's rate limit stopped a larger measurement, so the rate is unknown. The fallback did its job, but on this prompt escalation costs about 1 s and the strong model's tokens for nothing. Next: measure it with `--delay`, then try `reasoning_effort: medium` for the strong tier.
 
    The rule names are `auto_default_fast`, `auto_escalate_strong`, `auto_escalate_denied_by_plan` and `auto_escalate_unavailable`.
+
+   **Two more auto modes,** picked with the model name. The heuristic guesses from wording before any model runs, so I added one mode that reads meaning and one that looks at evidence:
+
+   | mode | decides | from | extra cost | rules |
+   |---|---|---|---|---|
+   | `auto` | before any call | the weighted signals above | none | `auto_*` |
+   | `auto-smart` | after admission, before the answer | a classification call on the fast model: `{"label":"simple"\|"complex","confidence","why"}` | one call, ~250 tokens, ~0.5–1 s | `smart_default_fast`, `smart_escalate_strong`, `smart_fallback_heuristic`… |
+   | `auto-cascade` | at the fast model's header, before commit | what the fast model itself reported | the fast attempt, on escalated requests only | `cascade_start_fast`, attempt outcome `escalated` |
+
+   - **auto-smart** (`domain/routing/classifier.ts`, `application/router.ts`). The classifier is a model call, so it runs after quota admission. It is metered as attempt 0 with outcome `classified`, and the tenant pays for its tokens. The message goes in fenced as data. Ambiguous retrieval still escalates on its own, because the classifier can't see it. If the call fails, times out (2.5 s), returns something unparseable or is less than 0.6 confident, the heuristic decides and the reason says so. A classifier timeout doesn't count against the breaker, so it can't take the fast tier out of the answer chain. It is skipped when the plan has no strong tier, and for messages the scope gate refuses.
+   - **auto-cascade** (`domain/routing/cascade.ts`, support only). Start on fast. The support header is validated before any answer text is sent, so the cascade can drop the fast attempt at that point without breaking the one-commit-point rule. It escalates only on doubt a stronger model can remove: the fast model said `unknown`, rated itself below 0.7, or disagreed with retrieval and would be refused. It never escalates when even a perfect answer (retrieval's top intent, self-confidence 1) would still fall below the refuse threshold. An escalation is not a failure: it doesn't trip the breaker or count as fallback. Chat has no header, so `auto-cascade` on chat is routed by the heuristic and the reason says so.
+
+   **Measured live** (EVALUATION runs 7 and 8; 17 support messages per mode, no judge). After fixing a flaw the first run exposed in each mode:
+
+   | mode | success / refused | served by strong | cost / 1k req | latency p50 |
+   |---|---|---|---|---|
+   | `auto` | 11 / 6 | 3 | $0.136 | 662 ms |
+   | `auto-smart` | 10 / 7 | 5 | $0.185 | 1100 ms |
+   | `auto-cascade` | 11 / 6 | 7 | $0.194 | 849 ms |
+
+   On this support task **neither new mode changed outcomes beyond run-to-run noise, and both cost more**. The six refusals are multi-intent or non-English messages. Retrieval can't settle on one intent for them, and the confidence formula is 80% retrieval, so the strong model refused them too (the cascade rescued 0 of 6). The bigger lever for those messages is multi-intent handling, not routing. The new modes earn their keep elsewhere. `auto-smart` caught a hard question with no cue words that the heuristic kept on fast, and after the v2 prompt it escalated none of the 30 held-out FAQ cases; that matters on open-ended chat traffic. `auto-cascade` is a cheap second opinion before a hand-off. `auto` stays the default.
 4. **Fallback order:** remaining real tiers, then local, then degraded (extractive).
 
 **Why default to fast?** The eval in §5 answers this with numbers. On held-out cases the 120b model is no more accurate than the 20b (100% vs 100% intent) and scarcely better on judged quality (4.53 vs 4.47). It costs twice as much. On this task the KB answer does most of the work, so the big model is worth paying for only when the inputs are hard. The escalation rule targets exactly those inputs.
@@ -227,6 +248,7 @@ Multi-intent ("charged twice … payment methods … refund?"), vague ("it doesn
 
 **Next:**
 - A *provider-level* circuit breaker, so that one Groq outage costs one timeout instead of two.
-- Splitting multi-intent messages and answering each part, instead of handing off.
+- Splitting multi-intent messages and answering each part, instead of handing off. The router-modes run (§3) shows this matters more than routing: the strong model refused the same multi-intent messages the fast one did.
+- A judged quality eval across the three router modes (`npm run eval -- --configs auto:v3,auto-smart:v3,auto-cascade:v3 --judge groq-strong`). The live run in §3 measured routing, cost and outcome, not answer quality.
 - Language detection, with a translated query for retrieval (so Indonesian messages are answered, not refused).
 - A harder, paraphrased eval set, so prompt and model differences show up in accuracy and not only in cost.
