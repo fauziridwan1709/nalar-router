@@ -48,7 +48,6 @@ flowchart LR
     X -->|"stream"| B1 & B2 & B3 & B4
     Q <--> DB
     M --> DB
-    C2 -->|"/admin/*"| DB
 ```
 
 ## 2. Request lifecycle
@@ -174,7 +173,7 @@ erDiagram
         text request_id FK
         int seq
         text backend
-        text outcome "ok, error, timeout_first_token, timeout_total, unusable_output, skipped_circuit_open, refused"
+        text outcome "ok, error, timeout_first_token, timeout_total, unusable_output, skipped_circuit_open, aborted, refused, escalated, classified"
         text error
         int latency_ms
         int prompt_tokens

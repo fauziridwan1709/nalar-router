@@ -860,6 +860,8 @@
     font-weight: 600;
     letter-spacing: -0.02em;
     margin-top: auto;
+    /* a value and its unit ("21.05 s") stay on one line */
+    white-space: nowrap;
   }
   .stat-card .d {
     color: var(--muted);

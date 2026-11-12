@@ -43,7 +43,8 @@ docs/             REPORT.md (design + results), EVALUATION.md (all eval runs), A
 apps/console/src  Same circles; tests/architecture.test.ts enforces them (React only in frameworks/ and main.tsx):
   main.tsx             composition root: styles, createHttpConsoleApi(), <ApiProvider><App/>
   entities/            types (models.ts) and pure rules: format, access (grants, PAGES), quota (levelOf),
-                       backends (backendState), outcomes (groupOf), playground (Turn, applyEvent, TRACE_LABEL), snippets,
+                       backends (backendState), outcomes (groupOf), playground (Turn, applyEvent, describeTraceEntry), snippets,
+                       errors (ApiError), events (GatewayEvent: the typed stream from the gateway),
                        limits (checkPlayground: field limits and the selected model's context window)
   use-cases/           ports.ts (ConsoleApi)
   interface-adapters/gateways/http/  client.ts (fetch, CSRF, ApiError mapping), consoleApi.ts (every endpoint),
@@ -62,6 +63,7 @@ npm run dev                 # gateway with reload on :3000 (reads ./.env)
 npm run dev:console         # vite on :5173, proxies /v1 /admin /api to :3000
 npm test                    # gateway + console tests (must stay green)
 npm run typecheck
+npm run format              # Prettier; CI runs format:check and fails on unformatted code
 npm run build && npm start  # production: one process serves the API and the console
 npm run retrieval-eval      # LLM-free retrieval check, takes about 1 s
 npm run routing-eval        # LLM-free: which tier each eval/example message starts on, and why

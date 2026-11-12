@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/fauziridwan1709/nalar-router/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/fauziridwan1709/nalar-router/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-152%20passing-3fb984">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-160%20passing-3fb984">
   <img alt="Intent accuracy" src="https://img.shields.io/badge/intent%20accuracy-100%25%20(30%20held--out)-3fb984">
   <img alt="Hard-case probe" src="https://img.shields.io/badge/hard--case%20probe-8%2F8-3fb984">
   <img alt="Out-of-domain refusals" src="https://img.shields.io/badge/out--of--domain%20refused-5%2F5-3fb984">
@@ -30,7 +30,7 @@
 
 *Nalar* is Indonesian for "reason" or "common sense". On every request the gateway makes two calls with real consequences: which model is worth paying for, and whether to answer at all. Both are made from evidence, recorded, and visible in the console.
 
-> **Try it:** open the [live console](https://nalar-router.onrender.com), pick a tenant, and send a message. You can watch the answer stream in along with the model that served it, whether fallback fired, what was retrieved, the intent and confidence, tokens, latency and cost. On the **Backends & chaos** tab you can break a backend on purpose and watch the router fall back. The service runs on Render's free tier, so the first request after 15 minutes idle takes about a minute.
+> **Try it:** open the [live console](https://nalar-router.onrender.com), sign in with one of the demo accounts listed on the sign-in page (for example `ops@nalar.example`), and send a message in the Playground. You can watch the answer stream in along with the model that served it, whether fallback fired, what was retrieved, the intent and confidence, tokens, latency and cost. On the **Backends** page you can break a backend on purpose and watch the router fall back. The service runs on Render's free tier, so the first request after 15 minutes idle takes about a minute.
 
 ## Contents
 
@@ -73,7 +73,7 @@
 
 ### Support assistant
 
-- **Retrieval:** BM25 over 2,160 Bitext KB entries, with typo correction. It reaches 94.7% intent accuracy on its own, and a query takes 0.12 ms.
+- **Retrieval:** BM25 over 2,160 Bitext KB entries, with typo correction. It reaches 94.7% intent accuracy on its own, and a query takes 0.14 ms.
 - **Response:** the answer, the detected intent, the retrieved entries, and a confidence score made of three parts (retrieval vote, lexical coverage, the model's own estimate).
 - **Validated output:** the model must emit a JSON header (intent and confidence) before any text streams. If the header is bad, the router falls back to the next backend.
 - **No raw `{{placeholders}}`:** Bitext answers are templates. The model keeps placeholders and the gateway fills them in while streaming, so the LLM never types a phone number, URL or order id. Values come from, in order:
@@ -217,7 +217,7 @@ More diagrams (the routing decision tree and the data model) are in **[docs/ARCH
 
 ## Screenshots
 
-**Dashboard.** Claude-Console layout: ⌘K search, sectioned sidebar, headline cards, backends and resources.
+**Dashboard.** ⌘K search, sectioned sidebar, headline cards, backends and resources.
 
 ![Dashboard](docs/assets/console-dashboard.png)
 
@@ -232,6 +232,8 @@ More diagrams (the routing decision tree and the data model) are in **[docs/ARCH
 | ![API keys](docs/assets/console-keys.png) | ![Cost](docs/assets/console-cost-light.png) |
 | **Quotas** | **Backends and fault injection** |
 | ![Quotas](docs/assets/console-tenants.png) | ![Backends](docs/assets/console-backends.png) |
+| **Evaluations: committed eval runs** | |
+| ![Evaluations](docs/assets/console-evaluations.png) | |
 
 ## Quick start
 
@@ -294,7 +296,7 @@ npm run prepare-data   # seeded and deterministic
 
 ## Configuration
 
-All settings are environment variables, read from `.env` at the repo root (or from the Render dashboard). Defaults live in [`apps/gateway/src/config.ts`](apps/gateway/src/config.ts).
+All settings are environment variables, read from `.env` at the repo root (or from the Render dashboard). Defaults live in [`apps/gateway/src/main/config.ts`](apps/gateway/src/main/config.ts).
 
 | variable | default | purpose |
 |---|---|---|
@@ -326,6 +328,9 @@ All settings are environment variables, read from `.env` at the repo root (or fr
 | `DEMO_MODE` | `true` | Seeds the four demo console accounts and lists them (with passwords) on the sign-in page. **Turn off outside demos.** |
 | `DEMO_PASSWORD_OPERATOR` / `_OWNER` / `_DEVELOPER` / `_VIEWER` | see below | Override a demo account's password. An overridden password is never shown on the sign-in page. |
 | `BOOTSTRAP_OPERATOR_EMAIL` / `BOOTSTRAP_OPERATOR_PASSWORD` | — | Creates one operator account at boot. Outside demo mode this is the way in. |
+| `BOOTSTRAP_OPERATOR_TENANT` | `eval` | Tenant of the bootstrap operator |
+| `AUTH_SCRYPT_LOG2N` | `17` | scrypt cost for passwords (2¹⁷, the OWASP setting) |
+| `DATA_DIR` / `CONSOLE_DIST` / `EVAL_RESULTS_DIR` | `data` / `apps/console/dist` / `tools/eval/results` | Paths to the KB and eval sets, the console build, and the committed eval runs |
 | `TRUST_PROXY` | `1` on Render, else `loopback` | Express `trust proxy`, so the client IP (sign-in rate limit) and HTTPS detection (Secure cookie, HSTS) are right |
 | `SECURE_COOKIES` | auto | `true` forces Secure cookies and HSTS even when the proxy doesn't say HTTPS |
 | `AUTH_MAX_FAILURES_ACCOUNT` / `AUTH_MAX_FAILURES_IP` / `AUTH_FAILURE_WINDOW_MS` | `5` / `20` / `900000` | Failed sign-ins allowed per account and per IP in the window |
@@ -356,7 +361,7 @@ With `DEMO_MODE=true` the sign-in page lists these, and a click fills the form.
 | Developer | `dev@globex.example` | `Globex-Dev-2026!` | Globex | own tenant: dashboards, playground, create keys, revoke the keys they created |
 | Viewer | `viewer@initech.example` | `Initech-View-2026!` | Initech | own tenant, read only: no playground (it spends quota), no keys |
 
-The full permission table is in [`apps/gateway/src/auth/rbac.ts`](apps/gateway/src/auth/rbac.ts).
+The full permission table is in [`apps/gateway/src/entities/auth/rbac.ts`](apps/gateway/src/entities/auth/rbac.ts).
 
 ### How it's secured
 
@@ -388,7 +393,7 @@ curl -N http://localhost:3000/v1/support/answer \
 
 | endpoint | auth | what it does |
 |---|---|---|
-| `POST /v1/support/answer` | tenant key | The support capability. SSE events: `meta` → `route` → `retrieval` → `attempt`… → `intent` → `token`… → `done` (or `refusal` / `error`). Send `"stream": false` for a single JSON response. |
+| `POST /v1/support/answer` | tenant key | The support capability. SSE events: `meta` → `step` → `route` → `retrieval` → `attempt`… → `intent` → `token`… → `done` (or `refusal` / `error`). Send `"stream": false` for a single JSON response. |
 | `POST /v1/chat/completions` | tenant key | Raw gateway, OpenAI-compatible (works with the OpenAI SDKs; JSON by default, chunks with `stream: true`) plus an `x_router` block |
 | `GET /v1/models` | tenant key | OpenAI-format model list: the router modes (`auto`, `auto-smart`, `auto-cascade`), tiers and backends on the key's plan |
 | `GET /v1/backends` | tenant key | Every backend with its online/offline label, where it runs, and whether your plan may use it |
@@ -396,18 +401,21 @@ curl -N http://localhost:3000/v1/support/answer \
 | `GET /v1/requests/:id` | tenant key | One of the tenant's own requests, with its attempts |
 | `GET /admin/usage` · `/admin/requests` · `/admin/requests/:id` | admin token | Usage per tenant; request log with routing decision and attempts |
 | `GET /admin/backends` · `PUT /admin/chaos/:backend` · `DELETE /admin/chaos` | admin token | Health, breaker state, fault injection |
-| `GET /admin/metrics?range=15m\|1h\|24h\|7d&tenant=` | admin token | Time-bucketed requests by outcome, tokens, cost, p50/p95 latency and fallback rate, plus per-tenant and per-backend totals |
+| `GET /admin/metrics?range=15m\|1h\|24h\|7d\|30d&tenant=` | admin token | Time-bucketed requests by outcome, tokens, cost, p50/p95 latency and fallback rate, plus per-tenant and per-backend totals |
 | `GET /admin/evals` | admin token | Summaries of the committed eval runs |
 | `POST /admin/tenants/:id/reset-quota` | admin token | Demo helper |
 | `POST /api/auth/login` · `POST /api/auth/logout` · `GET /api/auth/session` | — / session | Console sign-in; returns the user, their permissions and a CSRF token |
+| `GET /api/auth/demo-accounts` | — (`DEMO_MODE` only) | The demo accounts listed on the sign-in page |
+| `GET /api/console/config` | session | Tenants, backends with context windows, intents, key options, and the request limits the playground checks |
 | `GET /api/console/*` | session + permission | Metrics, requests, usage, backends, evals, keys and audit log, scoped to the user's tenant |
+| `POST /api/console/tenants/:id/reset-quota` · `PUT /api/console/chaos/:backend` · `DELETE /api/console/chaos` | session + CSRF + `quota:reset` / `chaos:write` | Quota reset and fault injection from the console (operators) |
 | `POST /api/console/keys` · `DELETE /api/console/keys/:id` | session + CSRF + permission | Create (secret returned once) and revoke API keys |
 | `POST /api/console/playground/support` · `POST /api/console/playground/chat` | session + CSRF + `playground:run` | The support capability or raw chat completions, streamed or not, as the signed-in user's tenant |
 | `GET /api/console/governance` · `PUT /api/console/governance/pii` · `POST /api/console/governance/pii/test` | session (+ CSRF, `governance:write` to change) | PII policy, stats, and a dry-run detector |
 | `GET /api/console/members` | session + `members:read` | Who can sign in to the tenant |
 | `GET /healthz` | — | Liveness check |
 
-Common error codes: `400 invalid_request`, `401 invalid_api_key`, `403 insufficient_scope`, `403 model_not_allowed`, `422 pii_detected`, `429 quota_exceeded`, `502 all_backends_failed`, `503 quota_unavailable`. Every code, with its status, retry rule and when it happens, is in **[docs/ERRORS.md](docs/ERRORS.md)**. Payload schemas and the full event reference are in **[docs/API.md](docs/API.md)**.
+Common error codes: `400 invalid_request`, `400 context_length_exceeded`, `401 invalid_api_key`, `403 insufficient_scope`, `403 model_not_allowed`, `422 pii_detected`, `429 quota_exceeded`, `502 all_backends_failed`, `503 quota_unavailable`. Every code, with its status, retry rule and when it happens, is in **[docs/ERRORS.md](docs/ERRORS.md)**. Payload schemas and the full event reference are in **[docs/API.md](docs/API.md)**.
 
 ## Evaluation
 
@@ -431,7 +439,7 @@ Results are written to `tools/eval/results/<timestamp>.{md,json}`. The eval goes
 ## Testing
 
 ```bash
-npm test          # 152 vitest tests (131 gateway, 21 console), no network: scripted fake backends
+npm test          # 160 vitest tests (135 gateway, 25 console), no network: scripted fake backends
 npm run typecheck
 ```
 
@@ -451,7 +459,7 @@ The tests cover:
 - **Error catalog:** every code thrown in the source is in the catalog and in docs/ERRORS.md.
 - **Architecture:** the clean-architecture dependency rule, in both apps.
 
-CI runs typecheck, tests, build and the retrieval eval on every push.
+CI runs a Prettier check, typecheck, tests, build, and the retrieval and routing evals on every pull request and every push to `main`.
 
 ## Deployment
 

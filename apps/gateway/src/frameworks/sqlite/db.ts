@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   request_quota INTEGER NOT NULL,       -- per calendar month (UTC)
   quota_reset_at INTEGER NOT NULL DEFAULT 0,
   profile TEXT NOT NULL DEFAULT '{}',   -- JSON: company facts used to fill answer placeholders
-  pii_policy TEXT NOT NULL DEFAULT '{"mode":"mask"}', -- JSON PiiPolicy, see guardrails/pii.ts
+  pii_policy TEXT NOT NULL DEFAULT '{"mode":"mask"}', -- JSON PiiPolicy, see entities/guardrails/pii.ts
   created_at INTEGER NOT NULL
 );
 
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,           -- stored lower-case
   name TEXT NOT NULL,
   role TEXT NOT NULL,                   -- operator|owner|developer|viewer
-  password_hash TEXT NOT NULL,          -- scrypt, see auth/passwords.ts
+  password_hash TEXT NOT NULL,          -- scrypt, see interface-adapters/gateways/crypto/passwords.ts
   created_at INTEGER NOT NULL,
   last_login_at INTEGER,
   disabled_at INTEGER
