@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { SupportOutputParser, parseHeader } from "../src/domain/support/parser.js";
-import { Bm25Index } from "../src/domain/support/retrieval.js";
-import { planRoute } from "../src/domain/routing/policy.js";
-import { assessComplexity } from "../src/domain/routing/complexity.js";
-import { CircuitBreaker } from "../src/domain/routing/breaker.js";
-import { executeWithFallback } from "../src/application/executor.js";
-import { BackendError } from "../src/domain/errors.js";
-import { admit, getUsage } from "../src/infrastructure/db/quota.js";
-import { openDb } from "../src/infrastructure/db/db.js";
-import { getTenant } from "../src/infrastructure/db/tenants.js";
-import { computeMetrics, outcomeGroup } from "../src/infrastructure/db/metrics.js";
+import { SupportOutputParser, parseHeader } from "../src/entities/support/parser.js";
+import { Bm25Index } from "../src/entities/support/retrieval.js";
+import { planRoute } from "../src/entities/routing/policy.js";
+import { assessComplexity } from "../src/entities/routing/complexity.js";
+import { CircuitBreaker } from "../src/entities/routing/breaker.js";
+import { executeWithFallback } from "../src/use-cases/executor.js";
+import { BackendError } from "../src/entities/errors.js";
+import { admit, getUsage } from "../src/interface-adapters/gateways/sqlite/quota.js";
+import { openDb } from "../src/frameworks/sqlite/db.js";
+import { getTenant } from "../src/interface-adapters/gateways/sqlite/tenants.js";
+import { computeMetrics, outcomeGroup } from "../src/interface-adapters/gateways/sqlite/metrics.js";
 import { FakeBackend, KB, TENANTS, cfg, fail, hang, reply } from "./helpers.js";
-import { PlaceholderRenderer, buildSlots, extractFromMessage, fillablePlaceholders } from "../src/domain/support/placeholders.js";
+import { PlaceholderRenderer, buildSlots, extractFromMessage, fillablePlaceholders } from "../src/entities/support/placeholders.js";
 
 const INTENTS = new Set(["cancel_order", "track_order", "get_refund", "unknown"]);
 const tenant = (id: string) => {

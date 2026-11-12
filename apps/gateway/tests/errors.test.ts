@@ -1,12 +1,12 @@
 /**
- * The error catalog (domain/errors.ts) is the contract: every code thrown in the source uses its
+ * The error catalog (entities/errors.ts) is the contract: every code thrown in the source uses its
  * catalogued status, and every code is documented in docs/ERRORS.md.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { ERROR_CATALOG, GatewayError } from "../src/domain/errors.js";
+import { ERROR_CATALOG, GatewayError } from "../src/entities/errors.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "../src");
