@@ -27,9 +27,13 @@ export type ClassifierResult =
   | ({ status: "ok"; backend: string; latencyMs: number } & RouterVerdict)
   | { status: "failed"; backend?: string; latencyMs?: number; error: string };
 
-const SYSTEM = `You are the router of an LLM gateway. Decide whether the user's message needs a large model.
-"complex": several requests in one, comparisons or trade-offs, reasoning, planning or prioritising, calculations, code, a long or tangled situation, or an angry dispute that needs careful handling.
-"simple": one clear request a small model answers well from a FAQ (track an order, cancel, refund policy, change an address, reset a password), including vague one-liners.
+// v2. v1 named "an angry dispute" and "a long or tangled situation" as complex, and escalated 4 of 34
+// plain FAQ questions ("i dont know how to check the early exit penalty": "requires explanation").
+// v2 says what a small model handles well first; on the same 42 messages it escalated none of them
+// and caught the same 5 of 7 complex ones (EVALUATION.md, router modes).
+const SYSTEM = `You are the router of a customer-support LLM gateway. A small model answers one support request well from the FAQ, even when the message is vague, misspelled, emotional, or asks how to do something. Send a message to the large model only when answering it takes real reasoning.
+"complex": two or more distinct requests or problems that must be untangled, a comparison or recommendation, a calculation, code, or a situation where the order of steps or a judgement call matters.
+"simple": everything else, including one request said angrily or at length.
 Placeholders like {{Customer Email}} stand for masked personal data; ignore them.
 Reply with JSON only: {"label":"simple"|"complex","confidence":<0-1>,"why":"<at most 8 words>"}`;
 
