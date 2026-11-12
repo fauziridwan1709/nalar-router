@@ -25,9 +25,9 @@
 </p>
 
 <p align="center">
-  <a href="docs/assets/demo.mp4"><img src="docs/assets/demo.png" alt="Demo: a support question with an email and a card number; the gateway masks both before the model, streams the answer with them restored, and the trace shows time to first token and total response time" width="100%"></a>
+  <a href="docs/assets/demo.mp4?raw=true"><img src="docs/assets/demo.png" alt="Product tour: the nalar console sign-in page with its four demo accounts" width="100%"></a>
   <br>
-  <sub><b>Demo (26 s, click to play):</b> a customer message with an email and a card number. The gateway masks both before the model, streams the answer with them restored, and the trace shows every step, including time to first token.</sub>
+  <sub><b>Product tour (6 min, voice-over and subtitles, <a href="docs/assets/demo.mp4?raw=true">download MP4</a>):</b> the sign-in page and what each demo account's plan and quota allow, then every console page as Acme Corp's owner: a playground request with personal data masked and a real fallback, API keys, usage, cost, reliability, logs with routing decisions, quotas, guardrails, access, the audit log, backends and evaluations.</sub>
 </p>
 
 ---
