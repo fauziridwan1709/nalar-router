@@ -11,10 +11,11 @@ apps/gateway/     Node ≥22.13 + Express 5 API (TypeScript → dist/). Serves t
                   Clean architecture; dependencies point inward (tests/architecture.test.ts enforces it):
   src/domain/          pure rules, no I/O: types.ts, errors.ts (ERROR_CATALOG), tokens.ts, quota.ts (decideAdmission),
                        metering.ts (attempt/request records, summarize), routing/ (policy.ts planRoute,
-                       complexity.ts assessComplexity, breaker.ts), guardrails/pii.ts, auth/rbac.ts,
+                       complexity.ts assessComplexity, classifier.ts auto-smart prompt/parser,
+                       cascade.ts auto-cascade rule, breaker.ts), guardrails/pii.ts, auth/rbac.ts,
                        support/ (retrieval.ts BM25, prompt.ts v1–v3, parser.ts header validation, placeholders.ts)
   src/application/     use cases + ports: capability.ts (prepare → admit → run → meter → respond), support.ts,
-                       chat.ts, executor.ts (fallback/timeouts/attempts), deps.ts (AppDeps),
+                       chat.ts, executor.ts (fallback/timeouts/attempts), router.ts (auto-smart classify + re-plan), deps.ts (AppDeps),
                        ports/ (backend.ts Backend, sink.ts EventSink/CollectSink, stores.ts QuotaStore/MeteringStore)
   src/infrastructure/  adapters: db/ (db.ts schema+seed, quota.ts, metering.ts, metrics.ts, tenants.ts),
                        backends/ (openaiCompat.ts, mock.ts, chaos.ts), auth/ (apiKeys, sessions, passwords, rateLimit), health.ts
@@ -50,6 +51,7 @@ npm run typecheck
 npm run build && npm start  # production: one process serves the API and the console
 npm run retrieval-eval      # LLM-free retrieval check, takes about 1 s
 npm run routing-eval        # LLM-free: which tier each eval/example message starts on, and why
+npm run router-modes-eval -- --base http://localhost:3000   # live: auto vs auto-smart vs auto-cascade on 17 messages
 npm run eval -- --base http://localhost:3000 --configs groq-fast:v2,groq-strong:v2 --judge groq-strong --delay 17000
 ```
 
@@ -64,6 +66,7 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 - **The model never types contact details or ids.** It writes `{{placeholders}}`, and `PlaceholderRenderer` fills them from the message, the tenant profile, UI labels, or a fallback phrase. Create a fresh renderer for each attempt. Raw `{{…}}` must never reach the customer in `fill` mode.
 - **Refusals are `StopRequest`, not errors.** They don't trip the circuit breaker and they don't fall back.
 - **Every attempt is metered,** including failed ones. `usage_source` is `provider` only when the provider actually reported usage. Otherwise it is `estimated`, or `none` when the provider rejected the call outright.
+- **Router modes are `auto` (heuristic), `auto-smart` (classifier) and `auto-cascade` (fast first, escalate on an unsure header).** The classifier runs after admission and is metered as attempt 0 (`classified`); if it fails, times out or is unsure, the heuristic decides, and it never fails a request. A cascade escalation happens only before commit, is outcome `escalated`, and neither trips the breaker nor counts as fallback.
 - **Routing reasons are data.** If you add a rule, give it a `rule` id and a human-readable `reason` in `planRoute`, and add a test. Complexity signals live in `domain/routing/complexity.ts` with their weights; after changing one, run `npm run routing-eval` and report the route changes.
 - Prices and thresholds belong in `config.ts`, not inline.
 - **The server enforces access.** Every console route checks a permission from `auth/rbac.ts`; the console hiding a control is not the control. Non-operators are pinned to their own tenant, and another tenant's object returns the same 404 as a missing one.

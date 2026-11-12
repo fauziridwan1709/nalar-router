@@ -1,6 +1,6 @@
 # PROJECT.md: state of the work, and how to pick it up
 
-This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-11 (PR #4 merged; PR #5 open: gateway clean architecture, complexity routing, error catalog; PR #6 open on top of it: console clean architecture).
+This is the hand-off file for any new session, human or agent. Read it first, then [CLAUDE.md](CLAUDE.md) for code conventions and invariants. Last updated 2026-11-12 (PRs #5 and #6 merged, but #6 merged into #5's branch after #5 had landed, so the console refactor reaches `main` only through the router-modes PR, branch `feat/auto-routing-modes`, which is stacked on it).
 
 ## What this is
 
@@ -32,10 +32,11 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - [x] **Merge PR #2** (PII guardrail, Claude-Console redesign). Merged 2026-11-11.
 - [x] **Merge PR #3** (chat completions + `stream` toggle in the playground, logo reverted).
 - [x] **Merge PR #4** (OpenAI SDK compatibility, Quotas redesign, orange theme).
-- [ ] **Merge PR #5** (clean architecture, complexity-based routing, error catalog + docs/ERRORS.md). Merging redeploys Render and wipes the SQLite data (accepted); keep `DEMO_MODE=true`.
-- [ ] **Then merge PR #6** (console clean architecture). It is stacked on PR #5's branch; after #5 merges, retarget #6 to `main` if GitHub doesn't do it automatically.
+- [x] **Merge PR #5** (clean architecture, complexity-based routing, error catalog + docs/ERRORS.md). Merged 2026-11-11.
+- [x] **PR #6** (console clean architecture) merged 2026-11-11, but into PR #5's branch, not `main`.
+- [ ] **Merge the router-modes PR** (`feat/auto-routing-modes`: `auto-smart` and `auto-cascade`, plus PR #6's commits). Redeploys Render and wipes SQLite (accepted).
 - [ ] Refresh the README screenshots other than Quotas: they still show the old blue accent.
-- [ ] Optional: per-signal routing eval with real models (does escalating complex queries actually raise judged quality?).
+- [ ] Optional: judged quality eval across the router modes: `npm run eval -- --configs auto:v3,auto-smart:v3,auto-cascade:v3 --judge groq-strong --delay 17000` (~30 min on the free tier). The live router-modes run measured cost and outcome only.
 - [ ] Before recording or submitting, sign in on the live console as `ops@nalar.example` and click **Run sample traffic** on the Reliability page. The Render disk is ephemeral, so metering is empty after every redeploy.
 - [ ] Add a short "Beyond the brief" section to `docs/REPORT.md`: sign-in/RBAC, API key management, PII guardrail, console redesign. Say why each was added and what it cost, so it reads as judgement rather than scope creep.
 - [ ] Submit: repo link, live URL, video link
@@ -48,7 +49,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - [x] Metering per request (model, tokens, latency, estimated cost, outcome) in a database: SQLite `requests` plus per-attempt `attempts`, with `usage_source` as provider, estimated, mixed or none
 
 ### Routing
-- [x] Two or more backends with rules you can defend: groq-fast (gpt-oss-20b), groq-strong (gpt-oss-120b), local-qwen (Qwen3.5-4B on MLX), and mock (extractive). Default is fast; escalate to strong on long messages or ambiguous retrieval; tenant plan entitlement; explicit pins (`apps/gateway/src/router/policy.ts`).
+- [x] Two or more backends with rules you can defend: groq-fast (gpt-oss-20b), groq-strong (gpt-oss-120b), local-qwen (Qwen3.5-4B on MLX), and mock (extractive). Default is fast; escalate to strong on a complexity score (length, ambiguous retrieval, reasoning cues…); tenant plan entitlement; explicit pins (`apps/gateway/src/domain/routing/policy.ts`). Three auto modes: `auto` (heuristic), `auto-smart` (classifier call), `auto-cascade` (fast first, escalate before commit on the fast model's own doubt).
 - [x] Fallback on failure or slowness, recorded and inspectable: first-token and total timeouts, circuit breaker, fault injection, `attempts` table, route strip and drawer in the console
 
 ### Support assistant
@@ -155,6 +156,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 | Console in the same layers | pages called `fetch` through a shared `api()` with URLs spread across 15 files, and rules (quota level, backend status, the playground reducer) lived inside components. Now they sit behind one `ConsoleApi` port and in pure domain functions with tests. The bell and the Quotas page share one quota rule. |
 | Clean architecture, enforced by a test | the gateway grew to about 4.7k lines with use cases reaching into SQLite and Express. Layers (domain / application / infrastructure / interfaces) with ports make the rules unit-testable and Postgres a new adapter, not a rewrite. `tests/architecture.test.ts` fails the build on an outward import. |
 | Complexity-based auto routing, as a heuristic | weighted signals (length, ambiguity, several questions, reasoning cues, steps, constraints, code, math) instead of a classifier: free, no added latency, replayable, every decision explains itself. Weights keep the two original rules escalating on their own; `npm run routing-eval` showed no route change on the 43 eval messages. |
+| Two more auto modes, measured honestly | the user asked for a smarter auto. `auto-smart` (fast-model classifier, metered, falls back to the heuristic) and `auto-cascade` (escalate at the header, before commit). The first live run exposed a flaw in each (cascade escalated on a retrieval-dominated score; classifier v1 escalated FAQ questions); both fixed and re-measured. Result: on this support task neither changes outcomes beyond noise and both cost ~40% more, so `auto` stays the default. Refusals are bounded by retrieval, not by the model (EVALUATION runs 7–8). |
 | Error catalog | `GatewayError` only accepts a code from `ERROR_CATALOG`, a test ties it to docs/ERRORS.md, and process-level failures (port in use, uncaught errors, SIGTERM) drain and exit cleanly. |
 | OpenAI compatibility is tested with the real SDK | `stream` used to default to `true`, so `client.chat.completions.create()` without `stream` got SSE and broke. Now it follows OpenAI: JSON by default, `stream_options`, `max_completion_tokens`, text parts, `developer`, sampling params, `/v1/models`, OpenAI error `type`. `tests/openai-sdk.test.ts` runs the `openai` package against the gateway. Tools, `response_format` and images are rejected by name. |
 | Ephemeral SQLite on Render is accepted for now | the user decided a redeploy wiping usage is fine for the demo; Litestream → R2 or a paid disk are the options when it isn't. |
@@ -168,7 +170,8 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - **Hand-offs:** multi-intent, vague and Indonesian messages are refused with a hand-off instead of answered. This is deliberate and documented.
 - **Judge score:** v3 scores about 0.1 lower than v2-raw. The judge compares against template references; this is documented and not hidden.
 - **Token estimate:** chars/4 runs 6–17% high vs the provider. That's the safe direction for quota; such rows are labelled `estimated`.
-- **groq-strong empty answers:** gpt-oss-120b sometimes ends a support turn (prompt v3) with no content after about 240 tokens. The gateway rejects it (`unusable_output`) and falls back to fast, so escalated requests may still be served by fast. The rate is unmeasured (rate-limited); see REPORT §3.
+- **groq-strong empty answers:** gpt-oss-120b sometimes ends a support turn (prompt v3) with no content after about 240 tokens. The gateway rejects it (`unusable_output`) and falls back to fast, so escalated requests may still be served by fast. Seen 3/3 on the comparison example on 2026-11-11, then 1 of 41 strong attempts across the two router-modes runs on 2026-11-12 (the same message); see REPORT §3.
+- **auto-smart classifier:** not fully stable at temperature 0 (two identical messages got different labels), and the prompt-injection message made it reply unparseably once (the heuristic then decided, as designed). The v2 prompt is written for support traffic.
 - **Chat endpoint:** `/v1/chat/completions` is OpenAI's Chat Completions format (tested with the `openai` SDK), not Anthropic's Messages format; no tools, `response_format` or images. It has no placeholder rendering. That's intentional: the raw path stays raw. It masks PII but does not restore it.
 - **PII:** personal names aren't detected. A short message whose only content words sit next to PII can still be refused by the scope gate (lead-ins like "email me at" are already stripped for retrieval).
 - **Auth:** the sign-in failure limiter is in memory (fine for one instance). Users are seeded; there is no user management or password change UI.
@@ -178,7 +181,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 
 ## Next steps (in priority order)
 
-- [ ] Merge PR #5; on Render check sign-in, a playground run of "A complex request" (Routing tab shows the complexity score), and the OpenAI SDK against `https://nalar-router.onrender.com/v1`.
+- [ ] Merge the router-modes PR; on Render check sign-in, the "Plain words, hard problem" template as Auto vs Auto · smart (Routing tab shows the classifier verdict), and the OpenAI SDK against `https://nalar-router.onrender.com/v1` (`/v1/models` lists the three modes).
 - [ ] Measure how often `groq-strong` returns an empty answer under prompt v3 (seen 3/3 on the comparison example), then try `reasoning_effort: medium` for the strong tier.
 - [ ] REPORT.md "Beyond the brief" section (see the checklist above).
 - [ ] Record the video demo (user). Optionally script it with `.agents/skills/product-demo` (writes to `out/product-demo/`).
