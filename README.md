@@ -24,9 +24,9 @@
   <img alt="Dataset" src="https://img.shields.io/badge/dataset-Bitext%2027%20intents-FFD21E?logo=huggingface&logoColor=black">
 </p>
 
+https://github.com/user-attachments/assets/1122ce71-a45a-4297-892d-8c268a82533b
+
 <p align="center">
-  <a href="docs/assets/demo.mp4?raw=true"><img src="docs/assets/demo.png" alt="Product tour: the nalar console sign-in page with its four demo accounts" width="100%"></a>
-  <br>
   <sub><b>Product tour (6 min, voice-over and subtitles, <a href="docs/assets/demo.mp4?raw=true">download MP4</a>):</b> the sign-in page and what each demo account's plan and quota allow, then every console page as Acme Corp's owner: a playground request with personal data masked and a real fallback, API keys, usage, cost, reliability, logs with routing decisions, quotas, guardrails, access, the audit log, backends and evaluations.</sub>
 </p>
 
