@@ -16,8 +16,9 @@
  *     - `auto-smart` (classifier): a short call to the fast model labels the message simple or
  *       complex (classifier.ts); complex, or ambiguous retrieval, starts on strong. The call is
  *       made after admission (it is metered); if it fails or is unsure, the heuristic decides.
- *     - `auto-cascade` (support only): always start on fast; if the fast model's header is unsure
- *       (cascade.ts), drop that attempt before anything is streamed and move up to strong. Chat
+ *     - `auto-cascade` (support only): always start on fast; if the fast model's header shows doubt
+ *       a better model could remove (cascade.ts), drop that attempt before anything is streamed
+ *       and move up to strong. Chat
  *       has no header, so chat requests asking for it are routed by the heuristic.
  *     On the support task the KB answer usually does the heavy lifting, so paying for the big
  *     model on every request buys little; we spend it where it matters.
@@ -61,8 +62,8 @@ export interface RouteOptions {
   complexityThreshold: number;
   /** auto-smart: a classifier verdict below this confidence is ignored and the heuristic decides */
   classifierMinConfidence: number;
-  /** auto-cascade: the fast model's combined confidence below this escalates to strong */
-  cascadeEscalateBelow: number;
+  /** auto-cascade: the fast model's own header confidence below this escalates to strong */
+  cascadeModelConfidenceBelow: number;
 }
 
 export interface RoutePlan<B extends RoutableBackend = RoutableBackend> {
@@ -73,8 +74,6 @@ export interface RoutePlan<B extends RoutableBackend = RoutableBackend> {
   mode: AutoMode | "pinned";
   /** auto-smart only: true until the classifier has run (call planRoute again with `classifier`) */
   needsClassifier?: boolean;
-  /** auto-cascade only: escalate when the fast model's combined confidence is below this */
-  cascadeEscalateBelow?: number;
   signals: Omit<RouteSignals, "text" | "cascadeCapable"> & { allowedTiers: Tier[]; complexity?: ComplexityAssessment };
 }
 
@@ -170,9 +169,8 @@ export function planRoute<B extends RoutableBackend>(
     return {
       chain: order(TIER_ORDER_FAST_FIRST),
       rule: "cascade_start_fast",
-      reason: `cascade: start on fast, escalate to strong if its header confidence < ${opts.cascadeEscalateBelow} or its intent disagrees with retrieval`,
+      reason: `cascade: start on fast; escalate to strong before streaming if the fast model says unknown, rates itself below ${opts.cascadeModelConfidenceBelow}, or disagrees with retrieval and would be refused`,
       mode: "cascade",
-      cascadeEscalateBelow: opts.cascadeEscalateBelow,
       signals: sig,
     };
   }

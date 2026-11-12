@@ -54,8 +54,8 @@ export const config = {
     complexityThreshold: num(env.ROUTE_COMPLEXITY_THRESHOLD, 0.5),
     /** auto-smart: a classifier verdict below this confidence is ignored and the heuristic decides */
     classifierMinConfidence: num(env.ROUTE_CLASSIFIER_MIN_CONFIDENCE, 0.6),
-    /** auto-cascade: escalate to strong when the fast model's combined confidence is below this ("high" starts at 0.75) */
-    cascadeEscalateBelow: num(env.ROUTE_CASCADE_ESCALATE_BELOW, 0.75),
+    /** auto-cascade: escalate to strong when the fast model's own header confidence is below this (domain/routing/cascade.ts) */
+    cascadeModelConfidenceBelow: num(env.ROUTE_CASCADE_MODEL_CONFIDENCE_BELOW, 0.7),
   },
 
   /** auto-smart's classification call (domain/routing/classifier.ts) */

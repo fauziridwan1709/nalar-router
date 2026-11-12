@@ -211,7 +211,9 @@ export async function runSupport(
         const conf = confidenceOf(retrieval, h.intent, h.modelConfidence);
         if (plan.mode === "cascade" && actx.backend.config.tier === "fast" && strongAhead(actx.backend)) {
           const why = cascadeEscalation({
-            intent: h.intent, confidence: conf.value, topIntent: retrieval.topIntent, escalateBelow: plan.cascadeEscalateBelow ?? deps.config.routing.cascadeEscalateBelow,
+            intent: h.intent, modelConfidence: h.modelConfidence, confidence: conf.value, topIntent: retrieval.topIntent,
+            ceiling: confidenceOf(retrieval, retrieval.topIntent ?? "", 1).value,
+            refuseBelow: deps.config.support.refuseBelow, modelConfidenceBelow: deps.config.routing.cascadeModelConfidenceBelow,
           });
           if (why) {
             sink.emit("step", { name: "cascade_escalated", backend: actx.backend.config.id, detail: `${why}: dropping this attempt before anything was sent, moving up to strong` });

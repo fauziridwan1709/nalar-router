@@ -7,7 +7,7 @@ import { summarize, type AttemptRecord } from "../src/domain/metering.js";
 import type { Tenant } from "../src/domain/types.js";
 import { FakeBackend, cfg, hang, reply, sse, startServer, withClassifier } from "./helpers.js";
 
-const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5, classifierMinConfidence: 0.6, cascadeEscalateBelow: 0.75 };
+const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5, classifierMinConfidence: 0.6, cascadeModelConfidenceBelow: 0.7 };
 const tenant = (plan: "pro" | "free"): Tenant =>
   ({ id: plan, name: plan, plan, allowedTiers: plan === "pro" ? ["fast", "strong", "degraded"] : ["fast", "degraded"] }) as Tenant;
 const backends = [cfg("f", "fast"), cfg("s", "strong"), cfg("m", "degraded")].map((config) => ({ config }));
@@ -60,7 +60,8 @@ describe("auto-cascade routing (planRoute)", () => {
     planRoute(backends, tenant(t), { queryTokens: 200, text: "long", retrievalTopShare: 1, hint: "auto-cascade", cascadeCapable: true, ...over }, opts);
   it("always starts on fast, even for a message the heuristic would escalate", () => {
     const p = cascade();
-    expect(p).toMatchObject({ rule: "cascade_start_fast", mode: "cascade", cascadeEscalateBelow: 0.75 });
+    expect(p).toMatchObject({ rule: "cascade_start_fast", mode: "cascade" });
+    expect(p.reason).toContain("rates itself below 0.7");
     expect(p.chain.map((b) => b.config.id)).toEqual(["f", "s", "m"]);
   });
   it("falls back to the heuristic where there is no header to judge (chat)", () => {
@@ -72,7 +73,6 @@ describe("auto-cascade routing (planRoute)", () => {
   it("stays on fast when the plan has no strong tier", () => {
     const p = cascade({ queryTokens: 5 }, "free");
     expect(p.rule).toBe("cascade_default_fast");
-    expect(p.cascadeEscalateBelow).toBeUndefined();
   });
 });
 
@@ -90,12 +90,25 @@ describe("classifier verdicts and cascade escalation (pure)", () => {
     expect(m[1].content).toContain("<<<\n");
     expect(m[1].content.length).toBeLessThan(2100);
   });
-  it("escalates on low confidence, disagreement with retrieval, or an out-of-scope call", () => {
-    const base = { intent: "cancel_order", confidence: 0.9, topIntent: "cancel_order", escalateBelow: 0.75 };
+  const base = {
+    intent: "cancel_order", modelConfidence: 0.95, confidence: 0.68, ceiling: 0.69, topIntent: "cancel_order", refuseBelow: 0.5, modelConfidenceBelow: 0.7,
+  };
+  it("doesn't escalate when the low score is retrieval's, not the model's", () => {
+    // live run: agreeing with retrieval at 0.684 when 0.686 was the best possible; strong can't help
     expect(cascadeEscalation(base)).toBeNull();
-    expect(cascadeEscalation({ ...base, confidence: 0.6 })).toBe("confidence 0.6 < 0.75");
-    expect(cascadeEscalation({ ...base, intent: "get_refund" })).toBe("fast model said get_refund, retrieval says cancel_order");
-    expect(cascadeEscalation({ ...base, intent: "unknown" })).toBe("fast model said the message is out of scope");
+  });
+  it("escalates on the fast model's own doubt", () => {
+    expect(cascadeEscalation({ ...base, modelConfidence: 0.5 })).toBe("fast model's own confidence 0.5 < 0.7");
+    expect(cascadeEscalation({ ...base, intent: "unknown" })).toMatch(/^fast model said the message is out of scope/);
+  });
+  it("escalates a disagreement only if it would be refused and agreeing could pass", () => {
+    const disagree = { ...base, intent: "get_refund", confidence: 0.3, ceiling: 0.79 };
+    expect(cascadeEscalation(disagree)).toMatch(/^fast model said get_refund, retrieval says cancel_order, so it would be refused/);
+    expect(cascadeEscalation({ ...disagree, confidence: 0.55 })).toBeNull(); // answered anyway: keep it
+  });
+  it("never escalates when even a perfect answer would be refused", () => {
+    expect(cascadeEscalation({ ...base, intent: "unknown", ceiling: 0.45 })).toBeNull();
+    expect(cascadeEscalation({ ...base, modelConfidence: 0.1, ceiling: 0.45 })).toBeNull();
   });
   it("doesn't count classification or a cascade escalation as fallback", () => {
     const a = (outcome: AttemptRecord["outcome"]): AttemptRecord =>
@@ -200,7 +213,7 @@ describe("auto-smart over HTTP", () => {
 describe("auto-cascade over HTTP", () => {
   it("keeps a confident fast answer and never calls strong", async () => {
     const strong = new FakeBackend(cfg("s", "strong"), reply(CONFIDENT));
-    const s = await startServer([new FakeBackend(cfg("f", "fast"), reply(CONFIDENT)), strong], { routing: { cascadeEscalateBelow: 0.5 } });
+    const s = await startServer([new FakeBackend(cfg("f", "fast"), reply(CONFIDENT)), strong]);
     close = s.close;
     const r = await support(s.base, "auto-cascade");
     expect(r).toMatchObject({ outcome: "success", backend: "f", fallbackUsed: false });
