@@ -88,6 +88,20 @@ describe("playground events", () => {
     const t = run([["reasoning", { seq: 1, backend: "a", text: "x" }], ["reasoning", { seq: 1, backend: "a", text: "y" }], ["reasoning", { seq: 2, backend: "b", text: "z" }]]);
     expect(t.reasoning).toEqual([{ seq: 1, backend: "a", text: "xy" }, { seq: 2, backend: "b", text: "z" }]);
   });
+  it("puts the first token on the trace at the gateway's time to first token, and the total on done", () => {
+    const t = run([
+      ["meta", { t: 0 }],
+      ["intent", { intent: "cancel_order", confidence: 0.9, label: "high", t: 400 }],
+      ["done", { outcome: "success", backend: "groq-fast", ttftMs: 420, latencyMs: 1500, usage: { totalTokens: 900 }, costUsd: 0.0001, t: 1500 }],
+    ]);
+    expect(t.trace.map((x) => [x.event, x.t])).toEqual([["meta", 0], ["intent", 400], ["first_token", 420], ["done", 1500]]);
+    expect(TRACE_LABEL.first_token(t.trace[2].data)).toBe("first token from groq-fast: time to first token 420 ms");
+    expect(TRACE_LABEL.done(t.trace[3].data)).toMatch(/^response complete in 1\.50 s \(first token at 420 ms\); metered: success/);
+  });
+  it("adds no first-token line when no token was sent (a refusal)", () => {
+    const t = run([["refusal", { reason: "low_confidence", t: 300 }], ["done", { outcome: "refused_low_confidence", ttftMs: null, latencyMs: 310, t: 310 }]]);
+    expect(t.trace.map((x) => x.event)).toEqual(["refusal", "done"]);
+  });
   it("describes trace events in words", () => {
     expect(TRACE_LABEL.route({ rule: "auto_escalate_strong", chain: ["groq-strong", "groq-fast"] })).toBe("routed by auto_escalate_strong: groq-strong › groq-fast");
   });

@@ -3,7 +3,7 @@
  * same events always produce the same turn, whether they arrived streamed or from a JSON body.
  */
 import type { PlaygroundEndpoint } from "./models";
-import { fmtN, fmtUsd } from "./format";
+import { fmtMs, fmtN, fmtUsd } from "./format";
 
 export interface Turn {
   id: number;
@@ -54,7 +54,14 @@ export function applyEvent(t0: Turn, ev: string, data: any): Turn {
     }
     case "refusal": return { ...t, refusal: data };
     case "error": return { ...t, error: data };
-    case "done": return { ...t, done: data, streaming: false };
+    case "done": {
+      // tokens aren't traced one by one, so the first one gets its own line, at the gateway's
+      // measured time to first token, in time order with the rest
+      const trace = data.ttftMs != null
+        ? [...t.trace, { event: "first_token", t: data.ttftMs, data: { ttftMs: data.ttftMs, backend: data.backend } }].sort((a, b) => a.t - b.t)
+        : t.trace;
+      return { ...t, trace, done: data, streaming: false };
+    }
     default: return t;
   }
 }
@@ -80,5 +87,8 @@ export const TRACE_LABEL: Record<string, (d: any) => string> = {
   intent: (d) => `intent ${d.intent}, confidence ${d.confidence} (${d.label}); first answer token sent, no fallback after this`,
   refusal: (d) => `refused: ${d.reason}${d.detail ? ` (${d.detail})` : ""}`,
   error: (d) => `error: ${d.code}`,
-  done: (d) => `metered: ${d.outcome.replace(/_/g, " ")}, ${fmtN(d.usage?.totalTokens)} tokens, ${fmtUsd(d.costUsd)}`,
+  first_token: (d) => `first token${d.backend ? ` from ${d.backend}` : ""}: time to first token ${fmtMs(d.ttftMs)}`,
+  done: (d) =>
+    `response complete in ${fmtMs(d.latencyMs)}${d.ttftMs != null ? ` (first token at ${fmtMs(d.ttftMs)})` : ""}; ` +
+    `metered: ${d.outcome.replace(/_/g, " ")}, ${fmtN(d.usage?.totalTokens)} tokens, ${fmtUsd(d.costUsd)}`,
 };

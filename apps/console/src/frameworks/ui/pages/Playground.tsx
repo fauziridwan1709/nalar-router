@@ -468,7 +468,7 @@ function Inspector({ t }: { t: Turn }) {
             <ol className="trace">
               {t.trace.map((s, i) => {
                 const bad = (s.event === "attempt" && s.data.status !== "started" && s.data.status !== "ok" && s.data.status !== "refused") || s.event === "error";
-                const ok = s.event === "intent" || (s.event === "done" && s.data.outcome === "success");
+                const ok = s.event === "intent" || s.event === "first_token" || (s.event === "done" && s.data.outcome === "success");
                 const warn = s.event === "refusal" || (s.event === "step" && s.data.name === "scope_gate" && !s.data.passed);
                 const pii = s.event === "step" && s.data.name === "pii_guard" && s.data.masked?.length > 0;
                 return (
