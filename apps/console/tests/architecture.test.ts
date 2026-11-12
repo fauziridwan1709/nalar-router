@@ -24,7 +24,13 @@ import { describe, expect, it } from "vitest";
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "../src");
 const walk = (d: string): string[] =>
-  readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : /\.tsx?$/.test(f) && !f.endsWith(".d.ts") ? [join(d, f)] : []));
+  readdirSync(d).flatMap((f) =>
+    statSync(join(d, f)).isDirectory()
+      ? walk(join(d, f))
+      : /\.tsx?$/.test(f) && !f.endsWith(".d.ts")
+        ? [join(d, f)]
+        : [],
+  );
 const layerOf = (file: string) => {
   const rel = relative(SRC, file);
   return rel === "main.tsx" ? "root" : rel.split("/")[0];
@@ -41,7 +47,9 @@ const resolveSpec = (from: string, spec: string) => {
   return base;
 };
 function importsOf(file: string) {
-  return [...readFileSync(file, "utf8").matchAll(/^\s*(?:import|export)\s+(?:type\s+)?[^'"]*?from\s+["']([^"']+)["']/gm)].map((m) => ({
+  return [
+    ...readFileSync(file, "utf8").matchAll(/^\s*(?:import|export)\s+(?:type\s+)?[^'"]*?from\s+["']([^"']+)["']/gm),
+  ].map((m) => ({
     spec: m[1],
     layer: m[1].startsWith(".") ? layerOf(resolveSpec(file, m[1])) : "external",
   }));
@@ -68,20 +76,28 @@ describe("console architecture: dependencies point inward", () => {
 
   it("no layer imports an outer one; the UI never reaches the HTTP adapter", () => {
     const bad = files.flatMap((f) =>
-      importsOf(f).filter((i) => i.layer !== "external" && !ALLOWED[layerOf(f)].includes(i.layer)).map((i) => `${relative(SRC, f)} → ${i.spec}`),
+      importsOf(f)
+        .filter((i) => i.layer !== "external" && !ALLOWED[layerOf(f)].includes(i.layer))
+        .map((i) => `${relative(SRC, f)} → ${i.spec}`),
     );
     expect(bad).toEqual([]);
   });
 
   it("React lives only in frameworks/ and main.tsx", () => {
     const inner = files.filter((f) => !["frameworks", "root"].includes(layerOf(f)));
-    const reactImports = inner.flatMap((f) => importsOf(f).filter((i) => REACT.test(i.spec)).map((i) => `${relative(SRC, f)} → ${i.spec}`));
+    const reactImports = inner.flatMap((f) =>
+      importsOf(f)
+        .filter((i) => REACT.test(i.spec))
+        .map((i) => `${relative(SRC, f)} → ${i.spec}`),
+    );
     expect(reactImports).toEqual([]);
     expect(inner.filter((f) => f.endsWith(".tsx")).map((f) => relative(SRC, f))).toEqual([]);
   });
 
   it("only the HTTP gateway calls fetch", () => {
-    const fetchOutside = files.filter((f) => !isHttpGateway(f) && /(?<![.\w])fetch\(/.test(readFileSync(f, "utf8").replace(/`[^`]*`/g, "")));
+    const fetchOutside = files.filter(
+      (f) => !isHttpGateway(f) && /(?<![.\w])fetch\(/.test(readFileSync(f, "utf8").replace(/`[^`]*`/g, "")),
+    );
     expect(fetchOutside.map((f) => relative(SRC, f))).toEqual([]);
   });
 

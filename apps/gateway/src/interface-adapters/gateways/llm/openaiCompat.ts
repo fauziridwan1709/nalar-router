@@ -20,7 +20,11 @@ export class OpenAICompatBackend implements Backend {
       temperature: req.temperature ?? 0.2,
       ...Object.fromEntries(Object.entries(req.sampling ?? {}).filter(([, v]) => v !== undefined)),
       ...(this.config.extraBody ?? {}),
-      ...(this.config.reasoningBody ? (req.includeReasoning ? this.config.reasoningBody.on : this.config.reasoningBody.off) : {}),
+      ...(this.config.reasoningBody
+        ? req.includeReasoning
+          ? this.config.reasoningBody.on
+          : this.config.reasoningBody.off
+        : {}),
     };
     let res: Response;
     try {

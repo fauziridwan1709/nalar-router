@@ -25,9 +25,9 @@ The response is a stream of Server-Sent Events, in this order:
 | `meta` | `requestId`, tenant |
 | `route` | `rule`, `reason`, `chain`, `signals` (why this backend was picked). On auto routing `signals.complexity` is `{score, level, threshold, signals: [{id, weight, detail}]}`; see REPORT §3 |
 | `retrieval` | `coverage`, intent `votes`, top `entries` (id, intent, score, question, answer) |
-| `attempt` | one per backend try: `started`, then `ok` / `error` / `timeout_first_token` / `timeout_total` / `unusable_output` / `skipped_circuit_open` / `refused`, with latency, tokens and cost |
+| `attempt` | one per backend try: `started`, then `ok` / `error` / `timeout_first_token` / `timeout_total` / `unusable_output` / `skipped_circuit_open` / `aborted` / `refused` / `escalated` (auto-cascade) / `classified` (auto-smart, attempt 0), with latency, tokens and cost |
 | `intent` | `intent`, `confidence` (0–1), `label`, `components`, `agreesWithRetrieval`. Sent right before the first token. |
-| `step` | intermediate decisions: `scope_gate` (passed or refused, with the reason), `header_validated` (the model's intent and self-reported confidence), and `placeholders_rendered` (each slot filled, with its value and source: `message`, `profile`, `ui_label` or `fallback`) |
+| `step` | intermediate decisions: `pii_guard` (the types masked, never the values), `route_classified` (the auto-smart verdict), `cascade_escalated` (why the fast attempt was dropped), `scope_gate` (passed or refused, with the reason), `header_validated` (the model's intent and self-reported confidence), and `placeholders_rendered` (each slot filled, with its value and source: `message`, `profile`, `ui_label` or `fallback`) |
 | `reasoning` | `{seq, backend, text}`: model thinking, only sent when `include_reasoning` is set. It is diagnostic only: never parsed, never part of the answer, and it can come from an attempt that is later discarded by fallback. |
 | `token` | `{text}`, the streamed answer |
 | `refusal` | `reason` (`out_of_scope` / `low_confidence`) and the message shown to the customer |
@@ -82,11 +82,11 @@ This lists every backend, including ones not configured on this host. For each i
 
 The probe only feeds the label. Routing relies on the circuit breaker and fallback.
 
-## `GET /admin/metrics?range=15m|1h|24h|7d&tenant=`
+## `GET /admin/metrics?range=15m|1h|24h|7d|30d&tenant=`
 
 Dashboard aggregates come from the same `requests` table that meters billing and enforces quota, so the charts always agree with both. The response includes:
 - `totals`: requests, success rate, tokens, cost, model calls, fallback rate, p50 and p95 latency, and outcome groups
-- `buckets[]`: the same figures per time bucket. Buckets are aligned to the wall clock: 1 min for `15m`, 5 min for `1h`, 1 h for `24h`, 6 h for `7d`.
+- `buckets[]`: the same figures per time bucket. Buckets are aligned to the wall clock: 1 min for `15m`, 5 min for `1h`, 1 h for `24h`, 6 h for `7d`, 1 day for `30d`.
 - `byTenant[]` and `byBackend[]` breakdowns
 
 Outcome groups:

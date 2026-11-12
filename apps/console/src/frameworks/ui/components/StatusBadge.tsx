@@ -4,11 +4,13 @@ export { useBackendStatus } from "../hooks/useBackendStatus";
 export { LOCATION_LABEL } from "../../../entities/backends";
 import type { BackendStatus } from "../../../entities/models";
 
-
 /** "online" / "offline", with "degraded" when the breaker is open on an online backend */
 export function statusOf(b: BackendStatus) {
   const s = backendState(b);
-  return { ...s, color: s.label === "online" ? "var(--good)" : s.label === "degraded" ? "var(--warning)" : "var(--critical)" };
+  return {
+    ...s,
+    color: s.label === "online" ? "var(--good)" : s.label === "degraded" ? "var(--warning)" : "var(--critical)",
+  };
 }
 
 /** status is never color alone: icon + word */
@@ -22,4 +24,3 @@ export function StatusBadge({ b }: { b: BackendStatus }) {
     </span>
   );
 }
-

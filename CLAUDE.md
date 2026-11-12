@@ -16,12 +16,14 @@ apps/gateway/     Node ≥22.13 + Express 5 API (TypeScript → dist/). Serves t
                        routing/ (policy.ts planRoute, complexity.ts assessComplexity, classifier.ts auto-smart prompt/parser,
                        cascade.ts auto-cascade rule, context.ts context windows, breaker.ts), guardrails/pii.ts,
                        auth/ (rbac.ts, apiKey.ts scopes/limits, user.ts session lifetimes, failureLimiter.ts),
-                       support/ (retrieval.ts BM25, prompt.ts v1–v3, parser.ts header validation, placeholders.ts)
+                       support/ (retrieval.ts BM25, prompt.ts v1–v3, parser.ts header validation, placeholders.ts,
+                       confidence.ts the 0.45/0.35/0.20 confidence signal)
   src/use-cases/       Application Business Rules: capability.ts (prepare → admit → run → meter → respond), support.ts,
                        chat.ts, executor.ts (fallback/timeouts/attempts), router.ts (auto-smart classify + re-plan),
                        access.ts (API key auth, tenant scoping, redaction), identity.ts (sign-in/out, sessions),
                        apiKeys.ts, tenants.ts (quota, PII policy, members), observability.ts (metrics, logs, audit),
                        operations.ts (backend status, models, fault injection, evals), deps.ts (AppDeps, GatewayDeps),
+                       events.ts (attempt/route event shapes, failure mapping shared by support and chat),
                        ports/ (backend, sink, stores, tenants, identity, apiKeys, reporting, operations)
   src/interface-adapters/
     controllers/http/  api.ts (/healthz, /v1), console.ts (session API), admin.ts (admin token), specs.ts (zod schemas,
@@ -41,7 +43,8 @@ docs/             REPORT.md (design + results), EVALUATION.md (all eval runs), A
 apps/console/src  Same circles; tests/architecture.test.ts enforces them (React only in frameworks/ and main.tsx):
   main.tsx             composition root: styles, createHttpConsoleApi(), <ApiProvider><App/>
   entities/            types (models.ts) and pure rules: format, access (grants, PAGES), quota (levelOf),
-                       backends (backendState), outcomes (groupOf), playground (Turn, applyEvent, TRACE_LABEL), snippets,
+                       backends (backendState), outcomes (groupOf), playground (Turn, applyEvent, describeTraceEntry), snippets,
+                       errors (ApiError), events (GatewayEvent: the typed stream from the gateway),
                        limits (checkPlayground: field limits and the selected model's context window)
   use-cases/           ports.ts (ConsoleApi)
   interface-adapters/gateways/http/  client.ts (fetch, CSRF, ApiError mapping), consoleApi.ts (every endpoint),
@@ -60,6 +63,7 @@ npm run dev                 # gateway with reload on :3000 (reads ./.env)
 npm run dev:console         # vite on :5173, proxies /v1 /admin /api to :3000
 npm test                    # gateway + console tests (must stay green)
 npm run typecheck
+npm run format              # Prettier; CI runs format:check and fails on unformatted code
 npm run build && npm start  # production: one process serves the API and the console
 npm run retrieval-eval      # LLM-free retrieval check, takes about 1 s
 npm run routing-eval        # LLM-free: which tier each eval/example message starts on, and why
@@ -90,7 +94,7 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 
 ## Agent skills (`.agents/skills`, linked in `.claude/skills`)
 
-- **Console UI work:** read `frontend-design` and `web-design-guidelines`; for React specifics, `vercel-react-best-practices`. Use Astryx components (`@astryxdesign/core/*`, pinned 0.7.13) for controls before hand-rolling one, and Lucide for icons. Every chart follows the dataviz rules already in `apps/console/src/charts.tsx`: validated palette, one axis, a tooltip, and a table view.
+- **Console UI work:** read `frontend-design` and `web-design-guidelines`; for React specifics, `vercel-react-best-practices`. Use Astryx components (`@astryxdesign/core/*`, pinned 0.7.13) for controls before hand-rolling one, and Lucide for icons. Every chart follows the dataviz rules already in `apps/console/src/frameworks/ui/components/charts.tsx`: validated palette, one axis, a tooltip, and a table view.
 - **Gateway and API work:** `nodejs-backend-patterns` and `api-and-interface-design`. Keep the error shape and the invariants above.
 - **Always:** `karpathy-guidelines` (surgical changes, verifiable success criteria).
 - **Verifying the running console:** `webapp-testing`. To record the demo video: `product-demo`.

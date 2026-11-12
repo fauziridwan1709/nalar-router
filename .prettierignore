@@ -1,0 +1,11 @@
+node_modules
+dist
+data
+docs
+*.md
+.agents
+.claude
+apps/gateway/var
+tools/eval/results
+package-lock.json
+skills-lock.json

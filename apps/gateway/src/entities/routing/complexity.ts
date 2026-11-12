@@ -95,9 +95,11 @@ const INLINE_NUMBER = /(?:^|\s)(\d{1,2})[.)]\s+(?=[A-Za-z])/g;
 const SEQUENCE = /\bfirst\b[\s\S]{1,200}\b(?:then|next|after that|finally)\b/i;
 const CONSTRAINTS =
   /\b(at least|at most|no more than|fewer than|exactly|must|without using|only use|in (?:json|yaml|a table|markdown|bullet points)|as (?:json|yaml|a table|a list)|word limit|under \d+ words)\b/gi;
-const CODE = /```|\b(?:function\s*\(|def \w+\(|class \w+[:({]|SELECT\b[\s\S]+\bFROM\b|import \w+|console\.log|=>\s*[{(]|\w+\(\)\s*;)/;
+const CODE =
+  /```|\b(?:function\s*\(|def \w+\(|class \w+[:({]|SELECT\b[\s\S]+\bFROM\b|import \w+|console\.log|=>\s*[{(]|\w+\(\)\s*;)/;
 // "-" and "/" count only with spaces around them, so ids and dates (123-456, 12/05) aren't arithmetic
-const MATH = /\d\s*[*×^+]\s*\d|\d\s+[-/]\s+\d|\b(calculate|compute|how much (?:in total|altogether)|percentage of|sum of)\b/i;
+const MATH =
+  /\d\s*[*×^+]\s*\d|\d\s+[-/]\s+\d|\b(calculate|compute|how much (?:in total|altogether)|percentage of|sum of)\b/i;
 
 const uniq = (xs: string[]) => [...new Set(xs.map((x) => x.toLowerCase()))];
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -108,17 +110,27 @@ export function assessComplexity(input: ComplexityInput, opts: ComplexityOptions
   const signals: ComplexitySignal[] = [];
   const add = (id: ComplexitySignalId, weight: number, detail: string) => signals.push({ id, weight, detail });
 
-  if (input.queryTokens > opts.longQueryTokens) add("long_query", W.long_query, `${input.queryTokens} tokens > ${opts.longQueryTokens}`);
-  else if (input.queryTokens > opts.longQueryTokens / 2) add("medium_query", W.medium_query, `${input.queryTokens} tokens > ${opts.longQueryTokens / 2}`);
+  if (input.queryTokens > opts.longQueryTokens)
+    add("long_query", W.long_query, `${input.queryTokens} tokens > ${opts.longQueryTokens}`);
+  else if (input.queryTokens > opts.longQueryTokens / 2)
+    add("medium_query", W.medium_query, `${input.queryTokens} tokens > ${opts.longQueryTokens / 2}`);
 
   if (input.retrievalTopShare !== undefined && input.retrievalTopShare < opts.ambiguousVoteShare) {
-    add("ambiguous_intent", W.ambiguous_intent, `top intent share ${input.retrievalTopShare.toFixed(2)} < ${opts.ambiguousVoteShare}`);
+    add(
+      "ambiguous_intent",
+      W.ambiguous_intent,
+      `top intent share ${input.retrievalTopShare.toFixed(2)} < ${opts.ambiguousVoteShare}`,
+    );
   }
 
   const questionMarks = (text.match(/\?/g) ?? []).length;
   const wh = uniq(text.match(WH_WORDS) ?? []);
   if (questionMarks >= 2 || wh.length >= 2) {
-    add("multi_question", W.multi_question, questionMarks >= 2 ? `${questionMarks} questions` : `asks ${wh.join(" + ")}`);
+    add(
+      "multi_question",
+      W.multi_question,
+      questionMarks >= 2 ? `${questionMarks} questions` : `asks ${wh.join(" + ")}`,
+    );
   }
 
   const cues = uniq(text.match(REASONING_CUES) ?? []);
@@ -139,7 +151,12 @@ export function assessComplexity(input: ComplexityInput, opts: ComplexityOptions
 
   if ((input.turns ?? 0) >= 6) add("long_conversation", W.long_conversation, `${input.turns} messages`);
 
-  const score = round(Math.min(1, signals.reduce((n, s) => n + s.weight, 0)));
+  const score = round(
+    Math.min(
+      1,
+      signals.reduce((n, s) => n + s.weight, 0),
+    ),
+  );
   const level: ComplexityLevel = score >= opts.complexityThreshold ? "complex" : score >= 0.2 ? "moderate" : "simple";
   return { score, level, threshold: opts.complexityThreshold, signals };
 }

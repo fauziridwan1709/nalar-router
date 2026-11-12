@@ -6,3 +6,5 @@ data/raw
 *.db-*
 .env
 .DS_Store
+out
+.agents/skills/*/scripts/package-lock.json

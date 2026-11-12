@@ -18,19 +18,45 @@ export function finishRequest(db: DB, requestId: string, f: FinalRecord, attempt
          error_code=?, error_message=?
        WHERE id=?`,
     ).run(
-      Date.now(), f.outcome, f.httpStatus, f.backend ?? null, f.model ?? null,
+      Date.now(),
+      f.outcome,
+      f.httpStatus,
+      f.backend ?? null,
+      f.model ?? null,
       f.routeReason === undefined ? null : JSON.stringify(f.routeReason),
-      s.fallbackUsed ? 1 : 0, s.promptTokens, s.completionTokens, s.usageSource,
-      Math.round(f.latencyMs), f.ttftMs == null ? null : Math.round(f.ttftMs), s.costUsd,
-      f.intent ?? null, f.confidence ?? null, f.errorCode ?? null, f.errorMessage ?? null, requestId,
+      s.fallbackUsed ? 1 : 0,
+      s.promptTokens,
+      s.completionTokens,
+      s.usageSource,
+      Math.round(f.latencyMs),
+      f.ttftMs == null ? null : Math.round(f.ttftMs),
+      s.costUsd,
+      f.intent ?? null,
+      f.confidence ?? null,
+      f.errorCode ?? null,
+      f.errorMessage ?? null,
+      requestId,
     );
     const ins = db.prepare(
       `INSERT INTO attempts (request_id, seq, backend, model, started_at, outcome, error, latency_ms, ttft_ms,
          prompt_tokens, completion_tokens, usage_source, cost_usd) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     );
     for (const a of attempts) {
-      ins.run(requestId, a.seq, a.backend, a.model, a.startedAt, a.outcome, a.error ?? null, Math.round(a.latencyMs),
-        a.ttftMs == null ? null : Math.round(a.ttftMs), a.promptTokens, a.completionTokens, a.usageSource, a.costUsd);
+      ins.run(
+        requestId,
+        a.seq,
+        a.backend,
+        a.model,
+        a.startedAt,
+        a.outcome,
+        a.error ?? null,
+        Math.round(a.latencyMs),
+        a.ttftMs == null ? null : Math.round(a.ttftMs),
+        a.promptTokens,
+        a.completionTokens,
+        a.usageSource,
+        a.costUsd,
+      );
     }
     db.prepare("DELETE FROM reservations WHERE request_id = ?").run(requestId);
     db.exec("COMMIT");
@@ -43,7 +69,14 @@ export function finishRequest(db: DB, requestId: string, f: FinalRecord, attempt
 
 /** Requests rejected after auth but before admission (bad input, model not allowed). Never count against quota. */
 export function recordRejected(
-  db: DB, requestId: string, tenantId: string, endpoint: string, status: number, code: string, message: string, credential: string | null = null,
+  db: DB,
+  requestId: string,
+  tenantId: string,
+  endpoint: string,
+  status: number,
+  code: string,
+  message: string,
+  credential: string | null = null,
 ) {
   const now = Date.now();
   db.prepare(
@@ -67,7 +100,9 @@ const TRAIL = `(SELECT group_concat(backend || ':' || outcome, ',') FROM
 export function listRequests(db: DB, opts: { tenantId?: string; limit?: number }) {
   const limit = Math.min(500, Math.max(1, opts.limit ?? 50));
   const rows = opts.tenantId
-    ? db.prepare(`SELECT r.*, ${TRAIL} FROM requests r WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?`).all(opts.tenantId, limit)
+    ? db
+        .prepare(`SELECT r.*, ${TRAIL} FROM requests r WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?`)
+        .all(opts.tenantId, limit)
     : db.prepare(`SELECT r.*, ${TRAIL} FROM requests r ORDER BY created_at DESC LIMIT ?`).all(limit);
   return rows.map((r: any) => ({ ...r, route_reason: r.route_reason ? JSON.parse(r.route_reason) : null }));
 }

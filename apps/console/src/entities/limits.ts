@@ -10,7 +10,8 @@ import type { ConsoleConfig, PlaygroundEndpoint } from "./models";
 
 export const estimateTokens = (text: string) => (text ? Math.ceil(text.length / 4) : 0);
 /** +4 per message for role and formatting, +2 for the assistant priming, as the gateway counts */
-export const estimateMessagesTokens = (messages: { content: string }[]) => messages.reduce((n, m) => n + 4 + estimateTokens(m.content), 2);
+export const estimateMessagesTokens = (messages: { content: string }[]) =>
+  messages.reduce((n, m) => n + 4 + estimateTokens(m.content), 2);
 
 type Backend = ConsoleConfig["backends"][number];
 const AUTO = new Set(["auto", "auto-smart", "auto-cascade"]);
@@ -20,11 +21,16 @@ const AUTO = new Set(["auto", "auto-smart", "auto-cascade"]);
  * auto mode: the largest among the backends the plan allows, because the gateway skips the
  * smaller ones. `null` means no limit (a backend without a declared window can take it).
  */
-export function contextWindowFor(model: string, backends: Backend[], allowedTiers: string[]): { window: number | null; label: string } {
+export function contextWindowFor(
+  model: string,
+  backends: Backend[],
+  allowedTiers: string[],
+): { window: number | null; label: string } {
   const usable = backends.filter((b) => b.enabled && allowedTiers.includes(b.tier));
   const byId = backends.find((b) => b.id === model);
   const candidates = byId ? [byId] : AUTO.has(model) ? usable : usable.filter((b) => b.tier === model);
-  if (!candidates.length || candidates.some((b) => b.contextWindow === null)) return { window: null, label: byId?.id ?? model };
+  if (!candidates.length || candidates.some((b) => b.contextWindow === null))
+    return { window: null, label: byId?.id ?? model };
   const largest = candidates.reduce((a, b) => (b.contextWindow! > a.contextWindow! ? b : a));
   return { window: largest.contextWindow, label: byId ? byId.id : largest.id };
 }
@@ -54,7 +60,11 @@ export interface PlaygroundCheck {
 
 const n = (x: number) => x.toLocaleString("en-US");
 
-export function checkPlayground(input: PlaygroundInput, cfg: Pick<ConsoleConfig, "backends" | "limits">, allowedTiers: string[]): PlaygroundCheck {
+export function checkPlayground(
+  input: PlaygroundInput,
+  cfg: Pick<ConsoleConfig, "backends" | "limits">,
+  allowedTiers: string[],
+): PlaygroundCheck {
   const L = cfg.limits;
   const problems: string[] = [];
   const { window, label } = contextWindowFor(input.model, cfg.backends, allowedTiers);
@@ -72,7 +82,10 @@ export function checkPlayground(input: PlaygroundInput, cfg: Pick<ConsoleConfig,
     if (input.message.length > maxChars) problems.push(`The user message is limited to ${n(maxChars)} characters.`);
     if (input.system.length > maxChars) problems.push(`The system prompt is limited to ${n(maxChars)} characters.`);
     const total = input.message.length + input.system.length;
-    if (total > L.chatTotalChars) problems.push(`System prompt and message together are limited to ${n(L.chatTotalChars)} characters (now ${n(total)}).`);
+    if (total > L.chatTotalChars)
+      problems.push(
+        `System prompt and message together are limited to ${n(L.chatTotalChars)} characters (now ${n(total)}).`,
+      );
     const messages = [...(input.system.trim() ? [{ content: input.system }] : []), { content: input.message }];
     promptTokens = estimateMessagesTokens(messages);
     completionTokens = L.chatDefaultCompletionTokens;
@@ -85,5 +98,13 @@ export function checkPlayground(input: PlaygroundInput, cfg: Pick<ConsoleConfig,
         `Shorten it or pick a model with a larger context.`,
     );
   }
-  return { problems, chars: input.message.length, maxChars, promptTokens, completionTokens, window, windowLabel: label };
+  return {
+    problems,
+    chars: input.message.length,
+    maxChars,
+    promptTokens,
+    completionTokens,
+    window,
+    windowLabel: label,
+  };
 }

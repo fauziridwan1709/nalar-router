@@ -6,14 +6,45 @@ import type { Permission, Role } from "./models";
 
 export const GRANTS: Record<Role, Permission[] | "all"> = {
   operator: "all",
-  owner: ["dashboard:read", "requests:read", "usage:read", "evals:read", "backends:read", "governance:read", "playground:run", "keys:read", "keys:create", "keys:revoke_own", "keys:revoke_any", "audit:read", "governance:write", "members:read"],
-  developer: ["dashboard:read", "requests:read", "usage:read", "evals:read", "backends:read", "governance:read", "playground:run", "keys:read", "keys:create", "keys:revoke_own"],
+  owner: [
+    "dashboard:read",
+    "requests:read",
+    "usage:read",
+    "evals:read",
+    "backends:read",
+    "governance:read",
+    "playground:run",
+    "keys:read",
+    "keys:create",
+    "keys:revoke_own",
+    "keys:revoke_any",
+    "audit:read",
+    "governance:write",
+    "members:read",
+  ],
+  developer: [
+    "dashboard:read",
+    "requests:read",
+    "usage:read",
+    "evals:read",
+    "backends:read",
+    "governance:read",
+    "playground:run",
+    "keys:read",
+    "keys:create",
+    "keys:revoke_own",
+  ],
   viewer: ["dashboard:read", "requests:read", "usage:read", "evals:read", "backends:read", "governance:read"],
 };
 export const ROLES: Role[] = ["operator", "owner", "developer", "viewer"];
 export const hasPermission = (r: Role, p: Permission) => GRANTS[r] === "all" || (GRANTS[r] as Permission[]).includes(p);
 
-export const ROLE_LABEL: Record<string, string> = { operator: "Operator", owner: "Owner", developer: "Developer", viewer: "Viewer" };
+export const ROLE_LABEL: Record<string, string> = {
+  operator: "Operator",
+  owner: "Owner",
+  developer: "Developer",
+  viewer: "Viewer",
+};
 
 /** every page, the permission it needs, and where it sits in the sidebar */
 export const PAGES = {

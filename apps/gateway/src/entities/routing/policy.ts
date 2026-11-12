@@ -18,8 +18,8 @@
  *       made after admission (it is metered); if it fails or is unsure, the heuristic decides.
  *     - `auto-cascade` (support only): always start on fast; if the fast model's header shows doubt
  *       a better model could remove (cascade.ts), drop that attempt before anything is streamed
- *       and move up to strong. Chat
- *       has no header, so chat requests asking for it are routed by the heuristic.
+ *       and move up to strong. Chat has no header, so chat requests asking for it are routed by
+ *       the heuristic.
  *     On the support task the KB answer usually does the heavy lifting, so paying for the big
  *     model on every request buys little; we spend it where it matters.
  *  4. Fallback order after the primary: remaining real tiers, then the local model,
@@ -35,7 +35,11 @@ import { contextLengthExceeded, fitsContext, type ContextNeed } from "./context.
 
 /** heuristic = `auto`; the model names are what callers send */
 export type AutoMode = "heuristic" | "smart" | "cascade";
-export const AUTO_MODELS: Record<string, AutoMode> = { auto: "heuristic", "auto-smart": "smart", "auto-cascade": "cascade" };
+export const AUTO_MODELS: Record<string, AutoMode> = {
+  auto: "heuristic",
+  "auto-smart": "smart",
+  "auto-cascade": "cascade",
+};
 export const isAutoModel = (m: string | undefined) => m === undefined || m in AUTO_MODELS;
 
 export interface RouteSignals {
@@ -83,6 +87,25 @@ export interface RoutePlan<B extends RoutableBackend = RoutableBackend> {
 const TIER_ORDER_FAST_FIRST: Tier[] = ["fast", "strong", "local", "degraded"];
 const TIER_ORDER_STRONG_FIRST: Tier[] = ["strong", "fast", "local", "degraded"];
 
+/** what every route plan starts from: the backends this tenant may use, and which of them fit the request */
+interface Candidates<B extends RoutableBackend> {
+  enabled: B[];
+  /** enabled and on the tenant's plan */
+  allowed: B[];
+  /** allowed, and the context window holds the prompt plus the answer budget */
+  usable: B[];
+  /** allowed but too small for this request */
+  tooSmall: B[];
+  /** usable backends in the given tier order */
+  inOrder: (tiers: Tier[]) => B[];
+  /** "; skipped x (context window too small)", appended to the route reason */
+  contextNote: string;
+  signals: RoutePlan["signals"];
+}
+
+const largestWindow = <B extends RoutableBackend>(bs: B[]) =>
+  bs.reduce((a, b) => ((b.config.contextWindow ?? 0) > (a.config.contextWindow ?? 0) ? b : a));
+
 export function planRoute<B extends RoutableBackend>(
   backends: B[],
   tenant: Tenant,
@@ -91,62 +114,98 @@ export function planRoute<B extends RoutableBackend>(
 ): RoutePlan<B> {
   const enabled = backends.filter((b) => b.config.enabled);
   const allowed = enabled.filter((b) => tenant.allowedTiers.includes(b.config.tier));
-  // the text itself isn't kept: route reasons are stored and shown, and the text may be long
-  const { text: _text, cascadeCapable: _cc, ...kept } = signals;
-  const sig: RoutePlan["signals"] = { ...kept, allowedTiers: tenant.allowedTiers };
   if (!allowed.length) {
     throw new GatewayError(503, "no_backend_available", "No model backend is available for this tenant's plan.");
   }
-
   // context window: a backend that can't hold the prompt plus the answer budget is never tried,
   // not even as a fallback, so the provider never truncates or rejects it mid-chain
   const need = signals.context;
   const fits = (b: B) => !need || fitsContext(b.config, need);
-  const tooSmall = allowed.filter((b) => !fits(b));
   const usable = allowed.filter(fits);
-  const order = (tiers: Tier[]) =>
-    tiers.flatMap((t) => usable.filter((b) => b.config.tier === t));
-  const contextNote = tooSmall.length ? `; skipped ${tooSmall.map((b) => b.config.id).join(", ")} (context window too small)` : "";
+  const tooSmall = allowed.filter((b) => !fits(b));
+  // the text itself isn't kept: route reasons are stored and shown, and the text may be long
+  const { text: _text, cascadeCapable: _cascadeCapable, ...kept } = signals;
+  const candidates: Candidates<B> = {
+    enabled,
+    allowed,
+    usable,
+    tooSmall,
+    inOrder: (tiers) => tiers.flatMap((t) => usable.filter((b) => b.config.tier === t)),
+    contextNote: tooSmall.length
+      ? `; skipped ${tooSmall.map((b) => b.config.id).join(", ")} (context window too small)`
+      : "",
+    signals: { ...kept, allowedTiers: tenant.allowedTiers },
+  };
 
-  const hint = signals.hint && !isAutoModel(signals.hint) ? signals.hint : null;
-  if (hint) {
-    const byId = enabled.find((b) => b.config.id === hint);
-    const byTier = enabled.filter((b) => b.config.tier === hint);
-    const wanted = byId ? [byId] : byTier;
-    if (!wanted.length) {
-      throw new GatewayError(400, "unknown_model", `Unknown or disabled model/tier "${hint}".`, {
-        available: [...Object.keys(AUTO_MODELS), ...new Set(enabled.map((b) => b.config.tier)), ...enabled.map((b) => b.config.id)],
-      });
-    }
-    const onPlan = wanted.filter((b) => tenant.allowedTiers.includes(b.config.tier));
-    if (!onPlan.length) {
-      throw new GatewayError(403, "model_not_allowed", `Your plan (${tenant.plan}) does not include "${hint}".`, {
-        allowedTiers: tenant.allowedTiers,
-      });
-    }
-    // a pinned model that can't hold the request is an error, not a silent switch to another model
-    const permitted = onPlan.filter(fits);
-    if (!permitted.length) {
-      const largest = onPlan.reduce((a, b) => ((b.config.contextWindow ?? 0) > (a.config.contextWindow ?? 0) ? b : a));
-      throw contextLengthExceeded(hint, largest.config.contextWindow!, need!);
-    }
-    const rest = order(TIER_ORDER_FAST_FIRST).filter((b) => !permitted.includes(b));
-    return {
-      chain: [...permitted, ...rest],
-      rule: "explicit_hint",
-      reason: `caller pinned "${hint}"; fallback follows default order${contextNote}`,
-      mode: "pinned",
-      signals: sig,
-    };
-  }
-
+  const pinned = signals.hint && !isAutoModel(signals.hint) ? signals.hint : null;
+  if (pinned) return planPinned(pinned, candidates, tenant, need);
   if (!usable.length) {
-    const largest = tooSmall.reduce((a, b) => ((b.config.contextWindow ?? 0) > (a.config.contextWindow ?? 0) ? b : a));
+    const largest = largestWindow(tooSmall);
     throw contextLengthExceeded(largest.config.id, largest.config.contextWindow!, need!);
   }
+  return planAuto(candidates, tenant, signals, opts);
+}
 
+/**
+ * The caller named a backend or a tier: try it first, then fall back in the default order.
+ * Unknown, off-plan or too-small choices are errors, never a silent switch to another model.
+ */
+function planPinned<B extends RoutableBackend>(
+  hint: string,
+  c: Candidates<B>,
+  tenant: Tenant,
+  need: RouteSignals["context"],
+): RoutePlan<B> {
+  const byId = c.enabled.find((b) => b.config.id === hint);
+  const wanted = byId ? [byId] : c.enabled.filter((b) => b.config.tier === hint);
+  if (!wanted.length) {
+    throw new GatewayError(400, "unknown_model", `Unknown or disabled model/tier "${hint}".`, {
+      available: [
+        ...Object.keys(AUTO_MODELS),
+        ...new Set(c.enabled.map((b) => b.config.tier)),
+        ...c.enabled.map((b) => b.config.id),
+      ],
+    });
+  }
+  const onPlan = wanted.filter((b) => tenant.allowedTiers.includes(b.config.tier));
+  if (!onPlan.length) {
+    throw new GatewayError(403, "model_not_allowed", `Your plan (${tenant.plan}) does not include "${hint}".`, {
+      allowedTiers: tenant.allowedTiers,
+    });
+  }
+  const permitted = onPlan.filter((b) => c.usable.includes(b));
+  if (!permitted.length) {
+    const largest = largestWindow(onPlan);
+    throw contextLengthExceeded(hint, largest.config.contextWindow!, need!);
+  }
+  const rest = c.inOrder(TIER_ORDER_FAST_FIRST).filter((b) => !permitted.includes(b));
+  return {
+    chain: [...permitted, ...rest],
+    rule: "explicit_hint",
+    reason: `caller pinned "${hint}"; fallback follows default order${c.contextNote}`,
+    mode: "pinned",
+    signals: c.signals,
+  };
+}
+
+/** auto, auto-smart and auto-cascade: fast first, or strong first when the request looks hard */
+function planAuto<B extends RoutableBackend>(
+  c: Candidates<B>,
+  tenant: Tenant,
+  signals: RouteSignals,
+  opts: RouteOptions,
+): RoutePlan<B> {
+  const sig = c.signals;
+  const order = c.inOrder;
+  const usable = c.usable;
+  const contextNote = c.contextNote;
   const complexity = assessComplexity(
-    { text: signals.text ?? "", queryTokens: signals.queryTokens, turns: signals.turns, retrievalTopShare: signals.retrievalTopShare },
+    {
+      text: signals.text ?? "",
+      queryTokens: signals.queryTokens,
+      turns: signals.turns,
+      retrievalTopShare: signals.retrievalTopShare,
+    },
     opts,
   );
   sig.complexity = complexity;
@@ -182,10 +241,21 @@ export function planRoute<B extends RoutableBackend>(
 
   if (requested === "cascade") {
     if (!signals.cascadeCapable) {
-      return decide("heuristic", "auto", heuristicWantsStrong, heuristic, "auto-cascade needs the support header, so the heuristic routed this: ");
+      return decide(
+        "heuristic",
+        "auto",
+        heuristicWantsStrong,
+        heuristic,
+        "auto-cascade needs the support header, so the heuristic routed this: ",
+      );
     }
     if (!hasStrong) {
-      return decide("cascade", "cascade", false, `no strong tier to escalate to (${planHasStrong ? "none enabled" : `plan "${tenant.plan}"`}), so the cascade stays on fast; ${heuristic}`);
+      return decide(
+        "cascade",
+        "cascade",
+        false,
+        `no strong tier to escalate to (${planHasStrong ? "none enabled" : `plan "${tenant.plan}"`}), so the cascade stays on fast; ${heuristic}`,
+      );
     }
     return {
       chain: order(TIER_ORDER_FAST_FIRST),
@@ -205,13 +275,25 @@ export function planRoute<B extends RoutableBackend>(
     const c = signals.classifier;
     if (!c) {
       // provisional: the classifier runs after admission, then planRoute is called again with it
-      return { ...decide("smart", "smart", heuristicWantsStrong, heuristic), rule: "smart_pending", needsClassifier: true };
+      return {
+        ...decide("smart", "smart", heuristicWantsStrong, heuristic),
+        rule: "smart_pending",
+        needsClassifier: true,
+      };
     }
     if (c.status === "failed" || c.confidence < opts.classifierMinConfidence) {
-      const why = c.status === "failed" ? `classifier failed (${c.error})` : `classifier unsure (${c.label} at ${c.confidence} < ${opts.classifierMinConfidence})`;
-      return { ...decide("smart", "smart", heuristicWantsStrong, heuristic, `${why}, so the heuristic decided: `), rule: "smart_fallback_heuristic" };
+      const why =
+        c.status === "failed"
+          ? `classifier failed (${c.error})`
+          : `classifier unsure (${c.label} at ${c.confidence} < ${opts.classifierMinConfidence})`;
+      return {
+        ...decide("smart", "smart", heuristicWantsStrong, heuristic, `${why}, so the heuristic decided: `),
+        rule: "smart_fallback_heuristic",
+      };
     }
-    const why = `classifier says ${c.label} (${c.confidence}${c.why ? `, "${c.why}"` : ""})` + (ambiguous ? `; ${ambiguous.id} (${ambiguous.detail})` : "");
+    const why =
+      `classifier says ${c.label} (${c.confidence}${c.why ? `, "${c.why}"` : ""})` +
+      (ambiguous ? `; ${ambiguous.id} (${ambiguous.detail})` : "");
     return decide("smart", "smart", c.label === "complex" || !!ambiguous, why);
   }
 

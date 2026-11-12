@@ -38,7 +38,7 @@ The goal is to **stand out**, so judgement and honesty are part of what's assess
 - [x] **PR #7** (`feat/auto-routing-modes`: `auto-smart`, `auto-cascade`, `local-qwen3.5-4b`) merged 2026-11-12.
 - [ ] **Tag the one-day version.** The brief was fully met by `d05955e` (2026-11-10, 17:19). Tag it (e.g. `one-day-submission`) and link it from the README and REPORT, so assessors can review the timeboxed version on its own.
 - [ ] **Merge the Uncle Bob refactor** (`refactor/uncle-bob-clean-architecture`: folders renamed to Martin's circles, console/admin logic moved into use cases, docs fixed to match the code). Redeploys Render and wipes SQLite (accepted).
-- [ ] Refresh the README screenshots other than Quotas: they still show the old blue accent.
+- [x] Refresh the README screenshots (done 2026-11-12).
 - [ ] Optional: judged quality eval across the router modes: `npm run eval -- --configs auto:v3,auto-smart:v3,auto-cascade:v3 --judge groq-strong --delay 17000` (~30 min on the free tier). The live router-modes run measured cost and outcome only.
 - [ ] Before recording or submitting, sign in on the live console as `ops@nalar.example` and click **Run sample traffic** on the Reliability page. The Render disk is ephemeral, so metering is empty after every redeploy.
 - [ ] Add a short "Beyond the brief" section to `docs/REPORT.md`: sign-in/RBAC, API key management, PII guardrail, console redesign. Say why each was added and what it cost, so it reads as judgement rather than scope creep.
@@ -91,7 +91,7 @@ Every requirement above was met on day 1 (2026-11-10), by commit `d05955e`: both
 
 - **Code:**
   - npm-workspaces monorepo: `apps/gateway` (Express 5, TypeScript, `node:sqlite`), `apps/console` (React 19, Vite 8, Astryx 0.7.13, hand-rolled SVG charts), `tools/eval`
-  - **152 tests** pass: 131 gateway (incl. sign-in, sessions, CSRF, RBAC, tenant isolation, API keys, PII guardrail, error hygiene, router modes, context windows, OpenAI SDK, architecture) and 21 console; CI (GitHub Actions) runs typecheck, tests, build and the retrieval eval
+  - **160 tests** pass: 135 gateway (incl. sign-in, sessions, CSRF, RBAC, tenant isolation, API keys, PII guardrail, error hygiene, router modes, context windows, OpenAI SDK, architecture) and 25 console; CI (GitHub Actions) runs Prettier, typecheck, tests, build, and the retrieval and routing evals
 - **Branches:** PRs #1–#8 are merged into `main`. `refactor/uncle-bob-clean-architecture` (Uncle Bob folder names, use cases for the console routes, doc fixes) is not yet merged.
 - **Default prompt is v3:** it tells the model which placeholders the gateway can fill. v1 and v2 are kept for reproducible comparisons.
 - **Tenants:**
@@ -189,7 +189,6 @@ Every requirement above was met on day 1 (2026-11-10), by commit `d05955e`: both
 - **Auth:** the sign-in failure limiter is in memory (fine for one instance). Users are seeded; there is no user management or password change UI.
 - **Console tests** cover the architecture and the domain rules; there are no component or end-to-end tests in CI (pages were smoke-tested with Playwright by hand).
 - **Console bundle** is about 1 MB (Astryx + CodeBlock); code-splitting by page would fix the Vite warning.
-- **Stale assets:** `docs/assets/console-overview.png` and `console-overview-dark.png` are no longer referenced; a safety check blocked the agent from deleting them. Run `git rm docs/assets/console-overview*.png`.
 
 ## Next steps (in priority order)
 
@@ -198,7 +197,7 @@ Before the deadline (12 Nov, 23:59 WIB):
 - [ ] Tag `d05955e` as the one-day version; write REPORT.md "Beyond the brief" (time spent, why each extra) and a half-page summary at the top.
 - [ ] Rotate the Groq key (`.env` and Render).
 - [ ] Optional: tunnel the local Qwen to Render for the demo (README "Local model on the deployed URL").
-- [ ] Refresh the README screenshots (the old blue accent).
+- [x] README screenshots refreshed 2026-11-12 (orange theme, Uncle Bob refactor, real sample traffic).
 - [ ] On the live console: sign in as `ops@nalar.example`, **Run sample traffic** on Reliability, then record the video (user).
 - [ ] Invite the assessors or make the repo public; submit repo link, live URL, video link.
 

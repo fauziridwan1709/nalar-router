@@ -26,4 +26,3 @@ export class SseSink implements StreamingSink {
     if (!this.res.writableEnded) this.res.end();
   }
 }
-

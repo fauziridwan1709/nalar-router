@@ -96,7 +96,22 @@ const FALLBACK: Record<string, string> = {
   "Company Account": "company account",
 };
 
-const PLAN_WORDS = ["platinum", "premium", "gold", "silver", "bronze", "standard", "basic", "free", "freemium", "pro", "business", "personal", "family", "enterprise"];
+const PLAN_WORDS = [
+  "platinum",
+  "premium",
+  "gold",
+  "silver",
+  "bronze",
+  "standard",
+  "basic",
+  "free",
+  "freemium",
+  "pro",
+  "business",
+  "personal",
+  "family",
+  "enterprise",
+];
 
 /** Pull concrete values the customer typed. Conservative: no match → leave it to the fallback. */
 export function extractFromMessage(message: string): Record<string, string> {
@@ -107,7 +122,9 @@ export function extractFromMessage(message: string): Record<string, string> {
   const invoice = grab(new RegExp(`\\binvoice\\s*(?:number|no\\.?|id)?\\s*[#:]?\\s*${id}`, "i"));
   const tracking = grab(new RegExp(`\\btracking\\s*(?:number|no\\.?|id|code)?\\s*[#:]?\\s*${id}`, "i"));
   const account = grab(new RegExp(`\\baccount\\s*(?:number|no\\.?)\\s*[#:]?\\s*${id}`, "i"));
-  const money = /(?:\$|usd\s?|rp\.?\s?|idr\s?|€|£)\s?(\d[\d.,]*)|(\d[\d.,]*)\s?(?:dollars|usd|rupiah|idr|euros?)/i.exec(message);
+  const money = /(?:\$|usd\s?|rp\.?\s?|idr\s?|€|£)\s?(\d[\d.,]*)|(\d[\d.,]*)\s?(?:dollars|usd|rupiah|idr|euros?)/i.exec(
+    message,
+  );
   const plan = PLAN_WORDS.find((w) => new RegExp(`\\b${w}\\b`, "i").test(message));
   if (order) out["Order Number"] = order;
   if (invoice) out["Invoice Number"] = invoice;
@@ -223,7 +240,10 @@ export class PlaceholderRenderer {
       if (v.source === "fallback") {
         const noun = ID_NOUN[canonical(normaliseName(name), this.slots)];
         const tail = before.replace(/["'“‘(\s]+$/, "").toLowerCase();
-        if (noun && (tail.endsWith(noun) || tail.endsWith(noun.split(" ")[0]) || tail.endsWith("number") || tail.endsWith("#"))) {
+        if (
+          noun &&
+          (tail.endsWith(noun) || tail.endsWith(noun.split(" ")[0]) || tail.endsWith("number") || tail.endsWith("#"))
+        ) {
           value = "on file";
         } else if (DETERMINER.test(before)) {
           value = value.replace(/^(your|our|the|my|a|an)\s+/i, "");

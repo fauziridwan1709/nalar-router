@@ -25,11 +25,23 @@ export function mountApi(app: Express, deps: GatewayDeps, runCapability: RunCapa
   });
 
   app.post("/v1/support/answer", tenantAuth("support.answer"), async (req, res) => {
-    await runCapability(req, res, "support.answer", { tenant: req.tenant!, credential: req.apiKey!.id }, supportSpec(deps, res, req.body));
+    await runCapability(
+      req,
+      res,
+      "support.answer",
+      { tenant: req.tenant!, credential: req.apiKey!.id },
+      supportSpec(deps, res, req.body),
+    );
   });
 
   app.post("/v1/chat/completions", tenantAuth("chat.completions"), async (req, res) => {
-    await runCapability(req, res, "chat.completions", { tenant: req.tenant!, credential: req.apiKey!.id }, chatSpec(deps, res, req.body));
+    await runCapability(
+      req,
+      res,
+      "chat.completions",
+      { tenant: req.tenant!, credential: req.apiKey!.id },
+      chatSpec(deps, res, req.body),
+    );
   });
 
   app.get("/v1/models", tenantAuth("chat.completions"), (req, res) => {

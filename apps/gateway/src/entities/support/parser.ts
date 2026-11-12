@@ -43,7 +43,10 @@ export class SupportOutputParser {
     const sep = this.buf.indexOf("###");
     if (sep >= 0) {
       this.header = parseHeader(this.buf.slice(0, sep), this.validIntents);
-      const rest = this.buf.slice(sep + 3).replace(/^#*\s*\n?/, "").replace(/^\s+/, "");
+      const rest = this.buf
+        .slice(sep + 3)
+        .replace(/^#*\s*\n?/, "")
+        .replace(/^\s+/, "");
       this.buf = "";
       return rest;
     }
@@ -64,7 +67,10 @@ export class SupportOutputParser {
       this.buf = "";
       return rest;
     }
-    throw new BackendError("unusable_output", `stream ended without a valid header: ${JSON.stringify(this.buf.slice(0, 120))}`);
+    throw new BackendError(
+      "unusable_output",
+      `stream ended without a valid header: ${JSON.stringify(this.buf.slice(0, 120))}`,
+    );
   }
 
   private stripThinking() {

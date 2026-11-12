@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/fauziridwan1709/nalar-router/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/fauziridwan1709/nalar-router/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-152%20passing-3fb984">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-160%20passing-3fb984">
   <img alt="Intent accuracy" src="https://img.shields.io/badge/intent%20accuracy-100%25%20(30%20held--out)-3fb984">
   <img alt="Hard-case probe" src="https://img.shields.io/badge/hard--case%20probe-8%2F8-3fb984">
   <img alt="Out-of-domain refusals" src="https://img.shields.io/badge/out--of--domain%20refused-5%2F5-3fb984">
@@ -24,13 +24,19 @@
   <img alt="Dataset" src="https://img.shields.io/badge/dataset-Bitext%2027%20intents-FFD21E?logo=huggingface&logoColor=black">
 </p>
 
+<p align="center">
+  <a href="docs/assets/demo.mp4?raw=true"><img src="docs/assets/demo.png" alt="Product tour: the nalar console sign-in page with its four demo accounts" width="100%"></a>
+  <br>
+  <sub><b>Product tour (6 min, voice-over and subtitles, <a href="docs/assets/demo.mp4?raw=true">download MP4</a>):</b> the sign-in page and what each demo account's plan and quota allow, then every console page as Acme Corp's owner: a playground request with personal data masked and a real fallback, API keys, usage, cost, reliability, logs with routing decisions, quotas, guardrails, access, the audit log, backends and evaluations.</sub>
+</p>
+
 ---
 
 **nalar-router** is a small, multi-tenant LLM gateway with one packaged capability on top: a **customer-support assistant**. It answers from a knowledge base, reports the intent it detected, and **refuses rather than guesses** when it isn't sure.
 
 *Nalar* is Indonesian for "reason" or "common sense". On every request the gateway makes two calls with real consequences: which model is worth paying for, and whether to answer at all. Both are made from evidence, recorded, and visible in the console.
 
-> **Try it:** open the [live console](https://nalar-router.onrender.com), pick a tenant, and send a message. You can watch the answer stream in along with the model that served it, whether fallback fired, what was retrieved, the intent and confidence, tokens, latency and cost. On the **Backends & chaos** tab you can break a backend on purpose and watch the router fall back. The service runs on Render's free tier, so the first request after 15 minutes idle takes about a minute.
+> **Try it:** open the [live console](https://nalar-router.onrender.com), sign in with one of the demo accounts listed on the sign-in page (for example `ops@nalar.example`), and send a message in the Playground. You can watch the answer stream in along with the model that served it, whether fallback fired, what was retrieved, the intent and confidence, tokens, latency and cost. On the **Backends** page you can break a backend on purpose and watch the router fall back. The service runs on Render's free tier, so the first request after 15 minutes idle takes about a minute.
 
 ## Contents
 
@@ -48,6 +54,7 @@
 - [Deployment](#deployment)
 - [Project structure](#project-structure)
 - [Design decisions and trade-offs](#design-decisions-and-trade-offs)
+- [Next development: improving retrieval](#next-development-improving-retrieval)
 - [Dataset and credits](#dataset-and-credits)
 
 ## Features
@@ -62,15 +69,17 @@
 ### Routing and fallback
 
 - **Four backends:** Groq `gpt-oss-20b` (fast), Groq `gpt-oss-120b` (strong), Qwen3.5-4B running locally on Apple MLX, and an extractive fallback that always works.
+- **Reasoning effort is `low` for both Groq models, for now.** The fast and strong tiers differ in model size, not in how hard they think. The playground's Reasoning switch (and `include_reasoning`) only controls whether the reasoning text is returned; gpt-oss reasons, and is billed for it, either way. Raising strong to `medium` is a next step, to be measured first (REPORT §3).
 - **Rules you can defend:** the router respects the tenant's plan, defaults to the cheap model, and escalates to the strong one when a query-complexity score reaches 0.5. The score adds up weighted signals: length, ambiguous retrieval, several questions, reasoning cues, multi-step structure, constraints, code, math. Each decision is stored as `{rule, reason, chain, signals}` with the score and the signals that fired.
 - **Three router modes:** `auto` is that heuristic (free, instant). `auto-smart` has the fast model classify the message first (one metered call, about 0.5 s), which catches hard questions in plain words and keeps long simple ones on fast. `auto-cascade` starts every support request on fast and moves to strong before anything is streamed, but only on doubt a stronger model could remove. Measured side by side in [REPORT §3](docs/REPORT.md#3-routing).
+- **What `mock` is:** the fourth backend, `mock` (model `extractive-kb-v1`), is not a language model and not a test double. It is the gateway's degraded mode: it streams the best-matching knowledge-base answer word for word, with the intent retrieval voted for, in the same header-then-answer format a model writes. It costs nothing, needs no network or key, and can't be rate-limited, so it is the last link of every route chain: when every real model fails, the customer still gets a grounded answer instead of an error. Its token counts are estimates (labelled `estimated`), its speed is set by `MOCK_TOKEN_DELAY_MS`, and fault injection works on it like on any backend. Without a Groq key it serves every request, which is why the app runs with zero setup. On chat completions it has no KB answer to give, so it echoes the request and says no model was used.
 - **Fallback:** triggered by an error, no first token within the timeout, the total timeout, or unusable model output. Every attempt is recorded, and a per-backend circuit breaker skips backends that keep failing.
 - **One commit point:** fallback can happen only before the first byte reaches the client. Two models' outputs are never spliced into one answer.
 - **Fault injection** per backend (`error`, `hang`, `garbage`, extra latency), so fallback can be demonstrated on demand.
 
 ### Support assistant
 
-- **Retrieval:** BM25 over 2,160 Bitext KB entries, with typo correction. It reaches 94.7% intent accuracy on its own, and a query takes 0.12 ms.
+- **Retrieval:** BM25 over 2,160 Bitext KB entries, with typo correction. It reaches 94.7% intent accuracy on its own, and a query takes 0.14 ms.
 - **Response:** the answer, the detected intent, the retrieved entries, and a confidence score made of three parts (retrieval vote, lexical coverage, the model's own estimate).
 - **Validated output:** the model must emit a JSON header (intent and confidence) before any text streams. If the header is bad, the router falls back to the next backend.
 - **No raw `{{placeholders}}`:** Bitext answers are templates. The model keeps placeholders and the gateway fills them in while streaming, so the LLM never types a phone number, URL or order id. Values come from, in order:
@@ -214,7 +223,7 @@ More diagrams (the routing decision tree and the data model) are in **[docs/ARCH
 
 ## Screenshots
 
-**Dashboard.** Claude-Console layout: ⌘K search, sectioned sidebar, headline cards, backends and resources.
+**Dashboard.** ⌘K search, sectioned sidebar, headline cards, backends and resources.
 
 ![Dashboard](docs/assets/console-dashboard.png)
 
@@ -229,6 +238,8 @@ More diagrams (the routing decision tree and the data model) are in **[docs/ARCH
 | ![API keys](docs/assets/console-keys.png) | ![Cost](docs/assets/console-cost-light.png) |
 | **Quotas** | **Backends and fault injection** |
 | ![Quotas](docs/assets/console-tenants.png) | ![Backends](docs/assets/console-backends.png) |
+| **Evaluations: committed eval runs** | |
+| ![Evaluations](docs/assets/console-evaluations.png) | |
 
 ## Quick start
 
@@ -291,7 +302,7 @@ npm run prepare-data   # seeded and deterministic
 
 ## Configuration
 
-All settings are environment variables, read from `.env` at the repo root (or from the Render dashboard). Defaults live in [`apps/gateway/src/config.ts`](apps/gateway/src/config.ts).
+All settings are environment variables, read from `.env` at the repo root (or from the Render dashboard). Defaults live in [`apps/gateway/src/main/config.ts`](apps/gateway/src/main/config.ts).
 
 | variable | default | purpose |
 |---|---|---|
@@ -323,6 +334,9 @@ All settings are environment variables, read from `.env` at the repo root (or fr
 | `DEMO_MODE` | `true` | Seeds the four demo console accounts and lists them (with passwords) on the sign-in page. **Turn off outside demos.** |
 | `DEMO_PASSWORD_OPERATOR` / `_OWNER` / `_DEVELOPER` / `_VIEWER` | see below | Override a demo account's password. An overridden password is never shown on the sign-in page. |
 | `BOOTSTRAP_OPERATOR_EMAIL` / `BOOTSTRAP_OPERATOR_PASSWORD` | — | Creates one operator account at boot. Outside demo mode this is the way in. |
+| `BOOTSTRAP_OPERATOR_TENANT` | `eval` | Tenant of the bootstrap operator |
+| `AUTH_SCRYPT_LOG2N` | `17` | scrypt cost for passwords (2¹⁷, the OWASP setting) |
+| `DATA_DIR` / `CONSOLE_DIST` / `EVAL_RESULTS_DIR` | `data` / `apps/console/dist` / `tools/eval/results` | Paths to the KB and eval sets, the console build, and the committed eval runs |
 | `TRUST_PROXY` | `1` on Render, else `loopback` | Express `trust proxy`, so the client IP (sign-in rate limit) and HTTPS detection (Secure cookie, HSTS) are right |
 | `SECURE_COOKIES` | auto | `true` forces Secure cookies and HSTS even when the proxy doesn't say HTTPS |
 | `AUTH_MAX_FAILURES_ACCOUNT` / `AUTH_MAX_FAILURES_IP` / `AUTH_FAILURE_WINDOW_MS` | `5` / `20` / `900000` | Failed sign-ins allowed per account and per IP in the window |
@@ -353,7 +367,7 @@ With `DEMO_MODE=true` the sign-in page lists these, and a click fills the form.
 | Developer | `dev@globex.example` | `Globex-Dev-2026!` | Globex | own tenant: dashboards, playground, create keys, revoke the keys they created |
 | Viewer | `viewer@initech.example` | `Initech-View-2026!` | Initech | own tenant, read only: no playground (it spends quota), no keys |
 
-The full permission table is in [`apps/gateway/src/auth/rbac.ts`](apps/gateway/src/auth/rbac.ts).
+The full permission table is in [`apps/gateway/src/entities/auth/rbac.ts`](apps/gateway/src/entities/auth/rbac.ts).
 
 ### How it's secured
 
@@ -385,7 +399,7 @@ curl -N http://localhost:3000/v1/support/answer \
 
 | endpoint | auth | what it does |
 |---|---|---|
-| `POST /v1/support/answer` | tenant key | The support capability. SSE events: `meta` → `route` → `retrieval` → `attempt`… → `intent` → `token`… → `done` (or `refusal` / `error`). Send `"stream": false` for a single JSON response. |
+| `POST /v1/support/answer` | tenant key | The support capability. SSE events: `meta` → `step` → `route` → `retrieval` → `attempt`… → `intent` → `token`… → `done` (or `refusal` / `error`). Send `"stream": false` for a single JSON response. |
 | `POST /v1/chat/completions` | tenant key | Raw gateway, OpenAI-compatible (works with the OpenAI SDKs; JSON by default, chunks with `stream: true`) plus an `x_router` block |
 | `GET /v1/models` | tenant key | OpenAI-format model list: the router modes (`auto`, `auto-smart`, `auto-cascade`), tiers and backends on the key's plan |
 | `GET /v1/backends` | tenant key | Every backend with its online/offline label, where it runs, and whether your plan may use it |
@@ -393,18 +407,21 @@ curl -N http://localhost:3000/v1/support/answer \
 | `GET /v1/requests/:id` | tenant key | One of the tenant's own requests, with its attempts |
 | `GET /admin/usage` · `/admin/requests` · `/admin/requests/:id` | admin token | Usage per tenant; request log with routing decision and attempts |
 | `GET /admin/backends` · `PUT /admin/chaos/:backend` · `DELETE /admin/chaos` | admin token | Health, breaker state, fault injection |
-| `GET /admin/metrics?range=15m\|1h\|24h\|7d&tenant=` | admin token | Time-bucketed requests by outcome, tokens, cost, p50/p95 latency and fallback rate, plus per-tenant and per-backend totals |
+| `GET /admin/metrics?range=15m\|1h\|24h\|7d\|30d&tenant=` | admin token | Time-bucketed requests by outcome, tokens, cost, p50/p95 latency and fallback rate, plus per-tenant and per-backend totals |
 | `GET /admin/evals` | admin token | Summaries of the committed eval runs |
 | `POST /admin/tenants/:id/reset-quota` | admin token | Demo helper |
 | `POST /api/auth/login` · `POST /api/auth/logout` · `GET /api/auth/session` | — / session | Console sign-in; returns the user, their permissions and a CSRF token |
+| `GET /api/auth/demo-accounts` | — (`DEMO_MODE` only) | The demo accounts listed on the sign-in page |
+| `GET /api/console/config` | session | Tenants, backends with context windows, intents, key options, and the request limits the playground checks |
 | `GET /api/console/*` | session + permission | Metrics, requests, usage, backends, evals, keys and audit log, scoped to the user's tenant |
+| `POST /api/console/tenants/:id/reset-quota` · `PUT /api/console/chaos/:backend` · `DELETE /api/console/chaos` | session + CSRF + `quota:reset` / `chaos:write` | Quota reset and fault injection from the console (operators) |
 | `POST /api/console/keys` · `DELETE /api/console/keys/:id` | session + CSRF + permission | Create (secret returned once) and revoke API keys |
 | `POST /api/console/playground/support` · `POST /api/console/playground/chat` | session + CSRF + `playground:run` | The support capability or raw chat completions, streamed or not, as the signed-in user's tenant |
 | `GET /api/console/governance` · `PUT /api/console/governance/pii` · `POST /api/console/governance/pii/test` | session (+ CSRF, `governance:write` to change) | PII policy, stats, and a dry-run detector |
 | `GET /api/console/members` | session + `members:read` | Who can sign in to the tenant |
 | `GET /healthz` | — | Liveness check |
 
-Common error codes: `400 invalid_request`, `401 invalid_api_key`, `403 insufficient_scope`, `403 model_not_allowed`, `422 pii_detected`, `429 quota_exceeded`, `502 all_backends_failed`, `503 quota_unavailable`. Every code, with its status, retry rule and when it happens, is in **[docs/ERRORS.md](docs/ERRORS.md)**. Payload schemas and the full event reference are in **[docs/API.md](docs/API.md)**.
+Common error codes: `400 invalid_request`, `400 context_length_exceeded`, `401 invalid_api_key`, `403 insufficient_scope`, `403 model_not_allowed`, `422 pii_detected`, `429 quota_exceeded`, `502 all_backends_failed`, `503 quota_unavailable`. Every code, with its status, retry rule and when it happens, is in **[docs/ERRORS.md](docs/ERRORS.md)**. Payload schemas and the full event reference are in **[docs/API.md](docs/API.md)**.
 
 ## Evaluation
 
@@ -428,7 +445,7 @@ Results are written to `tools/eval/results/<timestamp>.{md,json}`. The eval goes
 ## Testing
 
 ```bash
-npm test          # 152 vitest tests (131 gateway, 21 console), no network: scripted fake backends
+npm test          # 160 vitest tests (135 gateway, 25 console), no network: scripted fake backends
 npm run typecheck
 ```
 
@@ -448,7 +465,7 @@ The tests cover:
 - **Error catalog:** every code thrown in the source is in the catalog and in docs/ERRORS.md.
 - **Architecture:** the clean-architecture dependency rule, in both apps.
 
-CI runs typecheck, tests, build and the retrieval eval on every push.
+CI runs a Prettier check, typecheck, tests, build, and the retrieval and routing evals on every pull request and every push to `main`.
 
 ## Deployment
 
@@ -543,6 +560,19 @@ The short version is below. The long version is in [docs/REPORT.md](docs/REPORT.
 - **Fallback only before the first byte.** An honest `partial` error is better than splicing two models' text together.
 - **SQLite.** Real transactions keep quota correct and simple. The price is that it's ephemeral on the free host.
 - **Cut on purpose:** multi-turn memory, embeddings, per-second API rate limits, tenant and user management, SSO/MFA, and a production database.
+
+## Next development: improving retrieval
+
+BM25 is the right call for this dataset today: Bitext questions are short and templated, BM25 reaches 99.6% recall@8 on held-out rows, and it adds no second model to the request path. Its measured gaps are elsewhere: Indonesian messages, paraphrases far from the templates, and messages that ask several things at once are refused with a hand-off (REPORT §5). Recent work points at four upgrades, in the order I would try them. Each should be measured on the hard and out-of-domain sets before it ships, since the in-domain set is already saturated.
+
+| upgrade | what it fixes here | recent work |
+|---|---|---|
+| **Hybrid retrieval: BM25 + a multilingual dense embedding, fused with reciprocal rank fusion** | Indonesian and paraphrased messages, which share few words with the English templates | Qwen3 Embedding ([arXiv 2506.05176](https://arxiv.org/html/2506.05176v3)); SEA-BED, an embedding benchmark for Southeast Asian languages, which shows quality varies a lot by language, so Indonesian must be measured, not assumed ([arXiv 2508.12243](https://arxiv.org/pdf/2508.12243)); SEA-LION-Embedding, open embeddings for Southeast Asia (2026, [arXiv 2606.03027](https://arxiv.org/pdf/2606.03027)) |
+| **A cross-encoder reranker over the fused top-k** | picks the right entry when several intents score alike, which today lowers the confidence signal and causes refusals | an April 2026 benchmark of retrieval strategies finds hybrid search followed by neural reranking clearly beats every single-stage method ([arXiv 2604.01733](https://arxiv.org/abs/2604.01733)); the Qwen3 Embedding paper ships matching rerankers |
+| **Uncertainty-aware fusion** | the confidence signal is 80% retrieval; scoring how sure each retriever is per query would make refusals better calibrated | UMG-RAG, a training-free method that estimates each retriever's per-query reliability from the entropy of its score distribution and fuses accordingly (June 2026, [arXiv 2606.13550](https://arxiv.org/abs/2606.13550)) |
+| **Multi-intent decomposition before retrieval** | "charged twice … payment methods … refund?" is refused today; split it, retrieve per part, answer each | Omni-RAG decomposes multi-intent queries into sub-queries and retrieves per intent ([arXiv 2506.21384](https://arxiv.org/html/2506.21384v1)); ReDI, decomposition plus interpretation with fused results ([arXiv 2509.06544](https://arxiv.org/pdf/2509.06544)); a 2025 customer-support case study where intent recognition (splitting complex questions), RAG-Fusion and reranking together beat baseline RAG ([arXiv 2508.05664](https://arxiv.org/abs/2508.05664)) |
+
+The ports make these drop-in: a dense index or a reranker is a new gateway behind the same retrieval call, and `npm run retrieval-eval` plus the hard-case probe measure the change.
 
 ## Dataset and credits
 

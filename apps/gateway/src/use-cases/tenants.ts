@@ -10,7 +10,10 @@ import type { GatewayDeps } from "./deps.js";
 /** quota standing per tenant: usage this period plus outcome counts */
 export function usageReport(deps: GatewayDeps, tenants: Tenant[]) {
   return tenants.map((t) => ({
-    tenant: t.id, name: t.name, plan: t.plan, allowedTiers: t.allowedTiers,
+    tenant: t.id,
+    name: t.name,
+    plan: t.plan,
+    allowedTiers: t.allowedTiers,
     ...deps.quota.usage(t),
     outcomes: deps.reporting.outcomes(t.id),
   }));
@@ -27,7 +30,11 @@ export function quotaOverview(deps: GatewayDeps, tenantId: string | null) {
     const usage = deps.quota.usage(t);
     const q = deps.reporting.quotaRejections(t.id, usage.periodStart);
     return {
-      tenant: t.id, name: t.name, plan: t.plan, allowedTiers: t.allowedTiers, profileFields: Object.keys(t.profile).length,
+      tenant: t.id,
+      name: t.name,
+      plan: t.plan,
+      allowedTiers: t.allowedTiers,
+      profileFields: Object.keys(t.profile).length,
       ...usage,
       quotaRejections: q.rejected,
       rejecting: q.lastRejectedAt != null && q.lastRejectedAt >= (q.lastAdmittedAt ?? 0),
@@ -37,11 +44,17 @@ export function quotaOverview(deps: GatewayDeps, tenantId: string | null) {
 }
 
 /** start a new quota period now; `actor` is null for the admin-token route, which isn't audited */
-export function resetTenantQuota(deps: GatewayDeps, tenantId: string, actor: Actor | null, opts: { strictId: boolean } = { strictId: true }) {
+export function resetTenantQuota(
+  deps: GatewayDeps,
+  tenantId: string,
+  actor: Actor | null,
+  opts: { strictId: boolean } = { strictId: true },
+) {
   const t = opts.strictId ? findTenant(deps, tenantId) : deps.tenants.get(tenantId);
   if (!t) throw new GatewayError(404, "not_found", "Tenant not found.");
   deps.quota.reset(t.id);
-  if (actor) deps.audit.record({ tenantId: t.id, actor: actor.user, action: "quota.reset", target: t.id, ip: actor.ip });
+  if (actor)
+    deps.audit.record({ tenantId: t.id, actor: actor.user, action: "quota.reset", target: t.id, ip: actor.ip });
   return deps.quota.usage(deps.tenants.get(t.id)!);
 }
 
@@ -52,10 +65,11 @@ export function governanceReport(deps: GatewayDeps, user: User, tenantId: string
   const t = deps.tenants.get(tenantId)!;
   const { requests, withPii } = deps.reporting.piiActivity(tenantId, now - GOVERNANCE_WINDOW_DAYS * 86_400_000);
   const byType: Record<string, number> = {};
-  for (const r of withPii) for (const part of r.pii.split(",")) {
-    const [k, n] = part.split(":");
-    byType[k] = (byType[k] ?? 0) + Number(n || 0);
-  }
+  for (const r of withPii)
+    for (const part of r.pii.split(",")) {
+      const [k, n] = part.split(":");
+      byType[k] = (byType[k] ?? 0) + Number(n || 0);
+    }
   return {
     tenant: { id: t.id, name: t.name },
     piiPolicy: t.piiPolicy,
@@ -71,14 +85,27 @@ export function governanceReport(deps: GatewayDeps, user: User, tenantId: string
   };
 }
 
-export function updatePiiPolicy(deps: GatewayDeps, actor: Actor, tenantId: string, policy: { mode: PiiMode; types: PiiType[] }) {
+export function updatePiiPolicy(
+  deps: GatewayDeps,
+  actor: Actor,
+  tenantId: string,
+  policy: { mode: PiiMode; types: PiiType[] },
+) {
   if (policy.mode !== "off" && policy.types.length === 0) {
-    throw new GatewayError(400, "invalid_request", "Pick at least one type of personal data, or turn the guardrail off.");
+    throw new GatewayError(
+      400,
+      "invalid_request",
+      "Pick at least one type of personal data, or turn the guardrail off.",
+    );
   }
   const before = deps.tenants.get(tenantId)!.piiPolicy;
   deps.tenants.setPiiPolicy(tenantId, { mode: policy.mode, types: [...new Set(policy.types)] });
   deps.audit.record({
-    tenantId, actor: actor.user, action: "governance.pii_policy", target: tenantId, ip: actor.ip,
+    tenantId,
+    actor: actor.user,
+    action: "governance.pii_policy",
+    target: tenantId,
+    ip: actor.ip,
     meta: { from: before.mode, to: policy.mode, types: policy.types },
   });
   return { piiPolicy: deps.tenants.get(tenantId)!.piiPolicy };
@@ -87,7 +114,10 @@ export function updatePiiPolicy(deps: GatewayDeps, actor: Actor, tenantId: strin
 /** a dry run of the detector with the tenant's policy: nothing is stored or sent to a model */
 export function testPiiPolicy(deps: GatewayDeps, tenantId: string, text: string) {
   const s = scanPii(text, deps.tenants.get(tenantId)!.piiPolicy.types);
-  return { masked: s.masked, findings: s.findings.map((f) => ({ type: f.type, label: PII_LABEL[f.type], placeholder: `{{${f.slot}}}` })) };
+  return {
+    masked: s.masked,
+    findings: s.findings.map((f) => ({ type: f.type, label: PII_LABEL[f.type], placeholder: `{{${f.slot}}}` })),
+  };
 }
 
 export const listMembers = (deps: GatewayDeps, tenantId: string | null) => deps.users.members(tenantId);

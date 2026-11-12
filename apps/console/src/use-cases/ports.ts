@@ -4,18 +4,30 @@
  * implements it over HTTP, and tests can pass a fake.
  */
 import type {
-  ApiKey, AuditEntry, BackendStatus, ConsoleConfig, DemoAccount, EvalRun, Governance, Member, Metrics,
-  PiiTestResult, PlaygroundBody, PlaygroundEndpoint, Range, SessionUser, TenantUsage,
+  ApiKey,
+  AuditEntry,
+  BackendStatus,
+  ConsoleConfig,
+  DemoAccount,
+  EvalRun,
+  Governance,
+  Member,
+  Metrics,
+  PiiTestResult,
+  PlaygroundBody,
+  PlaygroundEndpoint,
+  Range,
+  RequestDetail,
+  RequestRow,
+  SessionUser,
+  TenantUsage,
 } from "../entities/models";
 import { ApiError } from "../entities/errors";
-
-/** one request row in the Logs table, and its detail with attempts (shapes owned by the gateway) */
-export type RequestRow = Record<string, any>;
-export type RequestDetail = Record<string, any>;
+import type { GatewayEvent } from "../entities/events";
 
 export interface PlaygroundHandlers {
-  /** each event in the support stream's vocabulary: meta, route, retrieval, attempt, token, reasoning, refusal, error, done */
-  onEvent: (event: string, data: any) => void;
+  /** each event of the run, typed: meta, route, retrieval, attempt, token, reasoning, refusal, error, done */
+  onEvent: (event: GatewayEvent) => void;
   /** the response body as an API client receives it, growing while it streams */
   onRaw: (raw: string) => void;
 }
@@ -40,7 +52,10 @@ export interface ConsoleApi {
   requests(q: { limit: number; tenant?: string }): Promise<RequestRow[]>;
   request(id: string): Promise<RequestDetail>;
   keys(tenant?: string): Promise<ApiKey[]>;
-  createKey(tenant: string | undefined, body: { name: string; scopes: string[]; expiresInDays: number | null }): Promise<{ key: ApiKey; secret: string }>;
+  createKey(
+    tenant: string | undefined,
+    body: { name: string; scopes: string[]; expiresInDays: number | null },
+  ): Promise<{ key: ApiKey; secret: string }>;
   revokeKey(id: string, tenant?: string): Promise<void>;
   audit(tenant?: string): Promise<AuditEntry[]>;
   members(tenant?: string): Promise<Member[]>;
@@ -49,5 +64,11 @@ export interface ConsoleApi {
   testPii(tenant: string | undefined, text: string): Promise<PiiTestResult>;
   evals(): Promise<EvalRun[]>;
   /** one playground run, streamed or not; throws ApiError when the gateway refuses it */
-  playground(endpoint: PlaygroundEndpoint, body: PlaygroundBody, stream: boolean, handlers: PlaygroundHandlers, signal?: AbortSignal): Promise<{ status: number }>;
+  playground(
+    endpoint: PlaygroundEndpoint,
+    body: PlaygroundBody,
+    stream: boolean,
+    handlers: PlaygroundHandlers,
+    signal?: AbortSignal,
+  ): Promise<{ status: number }>;
 }

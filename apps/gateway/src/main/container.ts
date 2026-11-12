@@ -21,7 +21,11 @@ import { sqliteApiKeyRepository } from "../interface-adapters/gateways/sqlite/ap
 import { sqliteMeteringStore } from "../interface-adapters/gateways/sqlite/metering.js";
 import { sqliteQuotaStore } from "../interface-adapters/gateways/sqlite/quota.js";
 import { sqliteReporting } from "../interface-adapters/gateways/sqlite/reporting.js";
-import { sqliteAuditLog, sqliteSessionStore, sqliteUserDirectory } from "../interface-adapters/gateways/sqlite/sessions.js";
+import {
+  sqliteAuditLog,
+  sqliteSessionStore,
+  sqliteUserDirectory,
+} from "../interface-adapters/gateways/sqlite/sessions.js";
 import { sqliteTenantRepository } from "../interface-adapters/gateways/sqlite/tenants.js";
 import { DEMO_TENANTS, DEMO_USERS, openDb, type DB, type SeedTenant, type SeedUser } from "../frameworks/sqlite/db.js";
 
@@ -42,23 +46,43 @@ export function buildBackend(cfg: BackendConfig): Backend {
 export function consoleUsers(config: Config): SeedUser[] {
   const users = config.demoMode ? [...DEMO_USERS] : [];
   const b = config.auth.bootstrapOperator;
-  if (b) users.push({ id: "usr_bootstrap_operator", tenantId: b.tenantId, email: b.email, name: "Operator", role: "operator", password: b.password });
+  if (b)
+    users.push({
+      id: "usr_bootstrap_operator",
+      tenantId: b.tenantId,
+      email: b.email,
+      name: "Operator",
+      role: "operator",
+      password: b.password,
+    });
   return users;
 }
 
 const demoAccounts = (config: Config): DemoAccount[] =>
   config.demoMode
-    ? DEMO_USERS.map((u) => ({ email: u.email, role: u.role, tenantId: u.tenantId, password: u.passwordFromEnv ? null : u.password }))
+    ? DEMO_USERS.map((u) => ({
+        email: u.email,
+        role: u.role,
+        tenantId: u.tenantId,
+        password: u.passwordFromEnv ? null : u.password,
+      }))
     : [];
 
 export function createGateway(
   config: Config,
-  overrides: Partial<{ db: DB; backends: Backend[]; kbEntries: KbEntry[]; seed: SeedTenant[]; chaos: ChaosRegistry }> = {},
+  overrides: Partial<{
+    db: DB;
+    backends: Backend[];
+    kbEntries: KbEntry[];
+    seed: SeedTenant[];
+    chaos: ChaosRegistry;
+  }> = {},
 ): Gateway {
   const chaos = overrides.chaos ?? new ChaosRegistry();
   const raw = overrides.backends ?? config.backends.map(buildBackend);
   const backends = raw.map((b) => withChaos(b, chaos));
-  const kbEntries: KbEntry[] = overrides.kbEntries ?? JSON.parse(readFileSync(resolve(config.dataDir, "kb.json"), "utf8"));
+  const kbEntries: KbEntry[] =
+    overrides.kbEntries ?? JSON.parse(readFileSync(resolve(config.dataDir, "kb.json"), "utf8"));
   const intents = [...new Set(kbEntries.map((e) => e.intent))].sort();
   const db = overrides.db ?? openDb(config.dbPath, overrides.seed ?? DEMO_TENANTS, consoleUsers(config));
   const { auth } = config;

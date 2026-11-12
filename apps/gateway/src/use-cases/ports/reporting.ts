@@ -15,7 +15,13 @@ export interface Reporting {
   /** count of each outcome for a tenant, all time */
   outcomes(tenantId: string): { outcome: string; n: number }[];
   /** quota rejections since `since`, and when the newest rejection and admission happened */
-  quotaRejections(tenantId: string, since: number): { rejected: number; lastRejectedAt: number | null; lastAdmittedAt: number | null };
+  quotaRejections(
+    tenantId: string,
+    since: number,
+  ): { rejected: number; lastRejectedAt: number | null; lastAdmittedAt: number | null };
   /** requests since `since`, and the PII summary and error code of those that had PII */
-  piiActivity(tenantId: string, since: number): { requests: number; withPii: { pii: string; errorCode: string | null }[] };
+  piiActivity(
+    tenantId: string,
+    since: number,
+  ): { requests: number; withPii: { pii: string; errorCode: string | null }[] };
 }

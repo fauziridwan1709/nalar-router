@@ -9,11 +9,13 @@ import { bearer } from "./request.js";
 import { safeEq } from "./security.js";
 import type { HttpSettings } from "./settings.js";
 import { ChaosBody } from "./shared.js";
+import { parseBody } from "./specs.js";
 
 export function mountAdmin(app: Express, deps: GatewayDeps, cfg: HttpSettings) {
   const adminAuth = (req: Request, _res: Response, next: NextFunction) => {
     const tok = req.header("x-admin-token") ?? bearer(req);
-    if (!tok || !safeEq(tok, cfg.adminToken)) return next(new GatewayError(401, "invalid_admin_token", "Admin token required."));
+    if (!tok || !safeEq(tok, cfg.adminToken))
+      return next(new GatewayError(401, "invalid_admin_token", "Admin token required."));
     next();
   };
   const tenantParam = (req: Request) => (req.query.tenant ? String(req.query.tenant) : undefined);
@@ -36,7 +38,7 @@ export function mountAdmin(app: Express, deps: GatewayDeps, cfg: HttpSettings) {
   app.put("/admin/chaos/:backend", adminAuth, (req, res) => {
     const id = String(req.params.backend);
     if (!deps.backends.some((b) => b.config.id === id)) throw new GatewayError(404, "not_found", "Backend not found.");
-    res.json(setFaultInjection(deps, null, id, ChaosBody.parse(req.body ?? {})));
+    res.json(setFaultInjection(deps, null, id, parseBody(ChaosBody, req.body)));
   });
   app.delete("/admin/chaos", adminAuth, (_req, res) => {
     res.json(clearFaultInjection(deps, null));

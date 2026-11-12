@@ -6,6 +6,7 @@ import type { Role, SessionUser, DemoAccount } from "../../../entities/models";
 import { ApiError } from "../../../entities/errors";
 import { ROLE_LABEL } from "../../../entities/access";
 import { useApi } from "../hooks/api";
+import { shortName } from "../../../entities/format";
 
 const ROLE_HINT: Record<string, string> = {
   operator: "Every tenant, backends, faults",
@@ -25,7 +26,10 @@ export function SignIn({ onSignedIn, notice }: { onSignedIn: (u: SessionUser) =>
   const id = useId();
 
   useEffect(() => {
-    api.auth.demoAccounts().then(setDemo).catch(() => {});
+    api.auth
+      .demoAccounts()
+      .then(setDemo)
+      .catch(() => {});
   }, []);
 
   async function submit(e?: FormEvent) {
@@ -53,15 +57,25 @@ export function SignIn({ onSignedIn, notice }: { onSignedIn: (u: SessionUser) =>
         <SparkTrail tint="#d97757" />
         <div className="logo">
           <Logo size={26} />
-          <b>nalar <span style={{ color: "#8f8f8c" }}>console</span></b>
+          <b>
+            nalar <span style={{ color: "#8f8f8c" }}>console</span>
+          </b>
         </div>
         <div className="signin-quote">
-          <h2>One gateway for every model your <em>support team</em> relies on.</h2>
+          <h2>
+            One gateway for every model your <em>support team</em> relies on.
+          </h2>
           <p>Quotas that fail closed, routing with fallback, and metering you can audit request by request.</p>
           <ul>
-            <li><ShieldCheck size={17} /> Role-based access, sessions and an audit trail</li>
-            <li><ScanEye size={17} /> Personal data masked before any model sees it</li>
-            <li><KeyRound size={17} /> Scoped, expiring API keys, shown once</li>
+            <li>
+              <ShieldCheck size={17} /> Role-based access, sessions and an audit trail
+            </li>
+            <li>
+              <ScanEye size={17} /> Personal data masked before any model sees it
+            </li>
+            <li>
+              <KeyRound size={17} /> Scoped, expiring API keys, shown once
+            </li>
           </ul>
         </div>
         <span className="tiny muted">Move your cursor across this panel.</span>
@@ -71,30 +85,61 @@ export function SignIn({ onSignedIn, notice }: { onSignedIn: (u: SessionUser) =>
         <form onSubmit={submit} noValidate aria-describedby={err ? `${id}-err` : undefined}>
           <h1>Sign in</h1>
           <p>Use the account your tenant administrator gave you.</p>
-          {notice && <div className="banner info small"><Info size={15} /> {notice}</div>}
+          {notice && (
+            <div className="banner info small">
+              <Info size={15} /> {notice}
+            </div>
+          )}
           <div className="field">
             <label htmlFor={`${id}-email`}>Email</label>
             <div className="input">
-              <input id={`${id}-email`} type="email" autoComplete="username" placeholder="you@company.com" value={email} autoFocus
-                onChange={(e) => setEmail(e.target.value)} aria-invalid={!!err && !email.trim()} maxLength={254} />
+              <input
+                id={`${id}-email`}
+                type="email"
+                autoComplete="username"
+                placeholder="you@company.com"
+                value={email}
+                autoFocus
+                onChange={(e) => setEmail(e.target.value)}
+                aria-invalid={!!err && !email.trim()}
+                maxLength={254}
+              />
             </div>
           </div>
           <div className="field">
             <label htmlFor={`${id}-pw`}>Password</label>
             <div className="input">
-              <input id={`${id}-pw`} type={show ? "text" : "password"} autoComplete="current-password" value={password}
-                onChange={(e) => setPassword(e.target.value)} aria-invalid={!!err && !password} maxLength={256} />
-              <button type="button" className="icon-btn" onClick={() => setShow((s) => !s)} aria-label={show ? "Hide password" : "Show password"}>
+              <input
+                id={`${id}-pw`}
+                type={show ? "text" : "password"}
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                aria-invalid={!!err && !password}
+                maxLength={256}
+              />
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setShow((s) => !s)}
+                aria-label={show ? "Hide password" : "Show password"}
+              >
                 {show ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
-          {err && <div id={`${id}-err`} className="banner error small" role="alert">{err}</div>}
+          {err && (
+            <div id={`${id}-err`} className="banner error small" role="alert">
+              {err}
+            </div>
+          )}
           <button type="submit" className="btn primary" disabled={busy}>
             {busy ? <span className="spinner" aria-hidden /> : null}
             {busy ? "Signing in…" : "Continue"} {!busy && <ArrowRight size={16} />}
           </button>
-          <p className="tiny muted" style={{ margin: 0 }}>Sessions end after 2 hours idle or 12 hours in total. Repeated failed attempts pause sign-in for a while.</p>
+          <p className="tiny muted" style={{ margin: 0 }}>
+            Sessions end after 2 hours idle or 12 hours in total. Repeated failed attempts pause sign-in for a while.
+          </p>
         </form>
 
         {demo.length > 0 && (
@@ -105,13 +150,19 @@ export function SignIn({ onSignedIn, notice }: { onSignedIn: (u: SessionUser) =>
             </div>
             <div className="demo-grid">
               {demo.map((d) => (
-                <button key={d.email} type="button" className="demo-card"
+                <button
+                  key={d.email}
+                  type="button"
+                  className="demo-card"
                   onClick={() => {
                     setEmail(d.email);
                     if (d.password) setPassword(d.password);
                     setErr(null);
-                  }}>
-                  <span className="who"><span className={`role-dot ${d.role}`} aria-hidden /> {ROLE_LABEL[d.role]} · {d.tenant.split(" (")[0]}</span>
+                  }}
+                >
+                  <span className="who">
+                    <span className={`role-dot ${d.role}`} aria-hidden /> {ROLE_LABEL[d.role]} · {shortName(d.tenant)}
+                  </span>
                   <span className="mono">{d.email}</span>
                   <span className="tiny muted">{ROLE_HINT[d.role]}</span>
                 </button>

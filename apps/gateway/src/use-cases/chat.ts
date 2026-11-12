@@ -4,7 +4,8 @@
  * fallback and metering as the support assistant; output is OpenAI-compatible.
  */
 import type { ChatMessage, Sampling } from "./ports/backend.js";
-import { BackendError, publicAttemptError, type ErrorCode } from "../entities/errors.js";
+import { BackendError, GatewayError } from "../entities/errors.js";
+import { attemptEvent, failureOf, routeEvent } from "./events.js";
 import type { AppDeps } from "./deps.js";
 import type { RunResult } from "./capability.js";
 import type { Tenant } from "../entities/types.js";
@@ -13,7 +14,6 @@ import { executeWithFallback } from "./executor.js";
 import { planRoute, type RouteSignals } from "../entities/routing/policy.js";
 import { resolveRoute } from "./router.js";
 import { estimateMessagesTokens } from "../entities/tokens.js";
-import { GatewayError } from "../entities/errors.js";
 import { PII_LABEL, scanPii, summarizeCounts, type PiiType } from "../entities/guardrails/pii.js";
 
 /**
@@ -31,20 +31,32 @@ export function guardChatMessages(tenant: Tenant, messages: ChatMessage[]) {
   });
   const types = Object.keys(counts) as PiiType[];
   if (types.length && policy.mode === "block") {
-    throw new GatewayError(422, "pii_detected",
+    throw new GatewayError(
+      422,
+      "pii_detected",
       `The messages contain personal data (${types.map((t) => PII_LABEL[t].toLowerCase()).join(", ")}). This tenant's policy blocks it; remove it and try again.`,
-      { types, pii: summarizeCounts(counts) });
+      { types, pii: summarizeCounts(counts) },
+    );
   }
   return { messages: out, pii: types.length ? summarizeCounts(counts) : null };
 }
 
 /** `completionTokens`: the caller's max_tokens, which must fit in the model's context next to the messages */
-export function prepareChat(deps: AppDeps, tenant: Tenant, messages: ChatMessage[], model: string | undefined, completionTokens: number) {
+export function prepareChat(
+  deps: AppDeps,
+  tenant: Tenant,
+  messages: ChatMessage[],
+  model: string | undefined,
+  completionTokens: number,
+) {
   const estimatedPromptTokens = estimateMessagesTokens(messages);
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
   // route on the size of the newest user turn; a long history alone shouldn't force the big model
   const routeSignals: RouteSignals = {
-    queryTokens: Math.ceil(lastUser.length / 4), text: lastUser, turns: messages.length, hint: model,
+    queryTokens: Math.ceil(lastUser.length / 4),
+    text: lastUser,
+    turns: messages.length,
+    hint: model,
     context: { promptTokens: estimatedPromptTokens, completionTokens },
   };
   const plan = planRoute(deps.backends, tenant, routeSignals, deps.config.routing);
@@ -68,11 +80,17 @@ export async function runChat(
   },
 ): Promise<RunResult> {
   // auto-smart classifies first (metered as attempt 0); other modes return the plan as is
-  const { plan, attempts: routeAttempts } = await resolveRoute(deps, prepared.tenant, prepared.routeSignals, prepared.plan, ctx);
+  const { plan, attempts: routeAttempts } = await resolveRoute(
+    deps,
+    prepared.tenant,
+    prepared.routeSignals,
+    prepared.plan,
+    ctx,
+  );
   for (const a of routeAttempts) {
-    ctx.sink.emit("attempt", { ...a, status: a.outcome, error: a.error ? publicAttemptError(a.outcome) : a.error });
+    ctx.sink.emit("attempt", attemptEvent(a));
   }
-  const routeReason = { rule: plan.rule, reason: plan.reason, mode: plan.mode, chain: plan.chain.map((b) => b.config.id), signals: plan.signals };
+  const routeReason = routeEvent(plan);
   ctx.sink.emit("route", routeReason);
   let firstTokenAt: number | null = null;
   const result = await executeWithFallback({
@@ -86,7 +104,7 @@ export async function runChat(
     includeReasoning: ctx.includeReasoning,
     onReasoning: (r) => ctx.sink.emit("reasoning", r),
     onAttemptStart: (a) => ctx.sink.emit("attempt", { ...a, status: "started" }),
-    onAttemptEnd: (a) => ctx.sink.emit("attempt", { ...a, status: a.outcome, error: a.error ? publicAttemptError(a.outcome) : a.error }),
+    onAttemptEnd: (a) => ctx.sink.emit("attempt", attemptEvent(a)),
     consume: async (text, actx) => {
       let committed = false;
       for await (const t of text) {
@@ -106,23 +124,31 @@ export async function runChat(
   const ttftMs = firstTokenAt ? firstTokenAt - ctx.startedAt : null;
   if (result.status === "ok") {
     return {
-      outcome: "success", httpStatus: 200, attempts: [...routeAttempts, ...result.attempts], backend: result.backend.config.id,
-      model: result.backend.config.model, routeReason, latencyMs, ttftMs,
+      outcome: "success",
+      httpStatus: 200,
+      attempts: [...routeAttempts, ...result.attempts],
+      backend: result.backend.config.id,
+      model: result.backend.config.model,
+      routeReason,
+      latencyMs,
+      ttftMs,
     };
   }
-  const err = result.status === "failed" ? result.error : new BackendError("error", "stopped");
-  const aborted = err.kind === "aborted";
+  // chat never stops on purpose (no refusals on the raw path), so anything else is a failure
+  const error = result.status === "failed" ? result.error : new BackendError("error", "stopped");
   const committed = result.status === "failed" && result.committed;
-  const code: ErrorCode = aborted ? "client_aborted" : committed ? "stream_interrupted" : "all_backends_failed";
-  ctx.sink.emit("error", {
-    code,
-    message: aborted ? "Client disconnected." : committed ? "The answer was interrupted." : "All model backends failed.",
-    partial: committed,
-  });
+  const failure = failureOf(error, committed);
+  ctx.sink.emit("error", { code: failure.code, message: failure.message, partial: committed });
   return {
-    outcome: aborted ? "client_aborted" : committed ? "partial" : "failed_all_backends",
-    httpStatus: aborted ? 499 : 502, attempts: [...routeAttempts, ...result.attempts], routeReason, latencyMs, ttftMs,
-    backend: result.backend?.config.id ?? null, model: result.backend?.config.model ?? null,
-    errorCode: code, errorMessage: err.message,
+    outcome: failure.outcome,
+    httpStatus: failure.httpStatus,
+    attempts: [...routeAttempts, ...result.attempts],
+    routeReason,
+    latencyMs,
+    ttftMs,
+    backend: result.backend?.config.id ?? null,
+    model: result.backend?.config.model ?? null,
+    errorCode: failure.code,
+    errorMessage: error.message,
   };
 }

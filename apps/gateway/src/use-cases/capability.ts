@@ -96,7 +96,8 @@ export async function runCapability(
     if (!(e instanceof GatewayError)) console.error(`[${requestId}] prepare failed`, e);
     try {
       deps.metering.rejected(requestId, tenant.id, endpoint, ge.status, ge.code, ge.message, credential);
-      if (ge.code === "pii_detected" && typeof ge.details?.pii === "string") deps.metering.pii(requestId, ge.details.pii);
+      if (ge.code === "pii_detected" && typeof ge.details?.pii === "string")
+        deps.metering.pii(requestId, ge.details.pii);
     } catch (me) {
       console.error(`[${requestId}] metering a rejected request failed`, me); // must not mask the client error
     }
@@ -136,12 +137,21 @@ export async function runCapability(
 
   let result: RunResult;
   try {
-    result = await spec.run({ maxCompletionTokens: admission.maxCompletionTokens, sink, clientSignal: transport.clientSignal, startedAt });
+    result = await spec.run({
+      maxCompletionTokens: admission.maxCompletionTokens,
+      sink,
+      clientSignal: transport.clientSignal,
+      startedAt,
+    });
   } catch (e) {
     console.error(`[${requestId}] unhandled error in run`, e);
     result = {
-      outcome: "internal_error", httpStatus: 500, attempts: [], latencyMs: Date.now() - startedAt,
-      errorCode: "internal_error", errorMessage: String((e as Error)?.message ?? e),
+      outcome: "internal_error",
+      httpStatus: 500,
+      attempts: [],
+      latencyMs: Date.now() - startedAt,
+      errorCode: "internal_error",
+      errorMessage: String((e as Error)?.message ?? e),
     };
     sink.emit("error", { code: "internal_error", message: "Internal error." });
   }
@@ -167,7 +177,12 @@ export async function runCapability(
     fallbackUsed: summary?.fallbackUsed ?? result.attempts.length > 1,
     attempts: result.attempts.length,
     usage: summary
-      ? { promptTokens: summary.promptTokens, completionTokens: summary.completionTokens, totalTokens: summary.totalTokens, source: summary.usageSource }
+      ? {
+          promptTokens: summary.promptTokens,
+          completionTokens: summary.completionTokens,
+          totalTokens: summary.totalTokens,
+          source: summary.usageSource,
+        }
       : null,
     costUsd: summary?.costUsd ?? null,
     latencyMs: result.latencyMs,
@@ -179,5 +194,6 @@ export async function runCapability(
   sink.emit("done", done);
 
   if (spec.stream) (sink as StreamingSink).end();
-  else transport.respond(result.httpStatus === 499 ? 200 : result.httpStatus, spec.respondJson(sink as CollectSink, done));
+  else
+    transport.respond(result.httpStatus === 499 ? 200 : result.httpStatus, spec.respondJson(sink as CollectSink, done));
 }

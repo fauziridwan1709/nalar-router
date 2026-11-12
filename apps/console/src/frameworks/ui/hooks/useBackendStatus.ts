@@ -8,7 +8,11 @@ export function useBackendStatus(everyMs = 10_000) {
   const [list, setList] = useState<BackendStatus[]>([]);
   useEffect(() => {
     let alive = true;
-    const load = () => api.backends().then((l) => alive && setList(l)).catch(() => {});
+    const load = () =>
+      api
+        .backends()
+        .then((l) => alive && setList(l))
+        .catch(() => {});
     load();
     const t = setInterval(load, everyMs);
     return () => {

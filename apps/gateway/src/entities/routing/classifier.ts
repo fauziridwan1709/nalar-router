@@ -63,6 +63,12 @@ export function parseVerdict(raw: string): RouterVerdict | null {
   const c = Number(o.confidence);
   const confidence = Number.isFinite(c) ? Math.min(1, Math.max(0, c)) : 0.5;
   // model text ends up in a stored, displayed reason: one short line, no braces
-  const why = typeof o.why === "string" ? o.why.replace(/[\s{}]+/g, " ").trim().slice(0, 80) : "";
+  const why =
+    typeof o.why === "string"
+      ? o.why
+          .replace(/[\s{}]+/g, " ")
+          .trim()
+          .slice(0, 80)
+      : "";
   return { label, confidence: Math.round(confidence * 100) / 100, why };
 }

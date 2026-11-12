@@ -31,7 +31,12 @@ export async function request(path: string, init: RequestInit = {}) {
 /** the gateway's `{error: {code, message, details}}` as an ApiError; a generic line for anything odd */
 export async function toError(res: Response) {
   const j = await res.json().catch(() => ({}));
-  return new ApiError(res.status, j?.error?.code ?? "http_error", j?.error?.message ?? "Something went wrong. Try again.", j?.error?.details);
+  return new ApiError(
+    res.status,
+    j?.error?.code ?? "http_error",
+    j?.error?.message ?? "Something went wrong. Try again.",
+    j?.error?.details,
+  );
 }
 
 /** JSON in, JSON out; non-2xx becomes an ApiError */

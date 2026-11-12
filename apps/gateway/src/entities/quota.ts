@@ -28,20 +28,25 @@ export interface Usage {
   costUsd: number;
 }
 
-
 export type AdmissionDecision =
-  | { admitted: true; promptEst: number; maxCompletionTokens: number }
-  | { admitted: false; message: string };
+  { admitted: true; promptEst: number; maxCompletionTokens: number } | { admitted: false; message: string };
 
 /**
  * A request is admitted only if a request is left and the tokens left cover its prompt plus a
  * minimum answer. Its completion budget is then capped to what is left, so one request can't
  * run far past the quota.
  */
-export function decideAdmission(usage: Usage, estimatedPromptTokens: number, requestedMaxTokens: number): AdmissionDecision {
+export function decideAdmission(
+  usage: Usage,
+  estimatedPromptTokens: number,
+  requestedMaxTokens: number,
+): AdmissionDecision {
   const promptEst = Math.max(1, estimatedPromptTokens);
   if (usage.requestsRemaining <= 0) {
-    return { admitted: false, message: `Monthly request quota exhausted (${usage.requestsUsed}/${usage.requestQuota}).` };
+    return {
+      admitted: false,
+      message: `Monthly request quota exhausted (${usage.requestsUsed}/${usage.requestQuota}).`,
+    };
   }
   if (usage.tokensRemaining < promptEst + MIN_COMPLETION_TOKENS) {
     return {
@@ -52,6 +57,9 @@ export function decideAdmission(usage: Usage, estimatedPromptTokens: number, req
   return {
     admitted: true,
     promptEst,
-    maxCompletionTokens: Math.max(MIN_COMPLETION_TOKENS, Math.min(requestedMaxTokens, usage.tokensRemaining - promptEst)),
+    maxCompletionTokens: Math.max(
+      MIN_COMPLETION_TOKENS,
+      Math.min(requestedMaxTokens, usage.tokensRemaining - promptEst),
+    ),
   };
 }

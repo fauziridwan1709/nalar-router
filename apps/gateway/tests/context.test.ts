@@ -5,7 +5,13 @@ import { planRoute } from "../src/entities/routing/policy.js";
 import type { Tenant } from "../src/entities/types.js";
 import { FakeBackend, cfg, reply, sse, startServer } from "./helpers.js";
 
-const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5, classifierMinConfidence: 0.6, cascadeModelConfidenceBelow: 0.7 };
+const opts = {
+  longQueryTokens: 60,
+  ambiguousVoteShare: 0.6,
+  complexityThreshold: 0.5,
+  classifierMinConfidence: 0.6,
+  cascadeModelConfidenceBelow: 0.7,
+};
 const pro = { id: "pro", name: "pro", plan: "pro", allowedTiers: ["fast", "strong", "degraded"] } as Tenant;
 const small = cfg("f", "fast", { contextWindow: 1_000 });
 const big = cfg("s", "strong", { contextWindow: 100_000 });
@@ -55,7 +61,12 @@ describe("context windows (planRoute)", () => {
   });
 
   it("a backend without a declared window always fits", () => {
-    const p = planRoute([{ config: cfg("m", "degraded") }], pro, { queryTokens: 1, hint: "m", context: { promptTokens: 10_000_000, completionTokens: 1 } }, opts);
+    const p = planRoute(
+      [{ config: cfg("m", "degraded") }],
+      pro,
+      { queryTokens: 1, hint: "m", context: { promptTokens: 10_000_000, completionTokens: 1 } },
+      opts,
+    );
     expect(p.chain[0].config.id).toBe("m");
   });
 });
@@ -64,7 +75,11 @@ describe("context windows over HTTP", () => {
   let close: (() => Promise<void>) | undefined;
   afterEach(async () => close?.());
   const post = (base: string, path: string, body: unknown) =>
-    fetch(base + path, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer k-pro" }, body: JSON.stringify(body) });
+    fetch(base + path, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer k-pro" },
+      body: JSON.stringify(body),
+    });
 
   it("chat: pinning a model too small for the messages is an OpenAI-style 400; no model is called", async () => {
     const f = new FakeBackend(cfg("f", "fast", { contextWindow: 1_000 }), reply("hello"));
@@ -79,16 +94,26 @@ describe("context windows over HTTP", () => {
     expect(body.error.details.contextWindow).toBe(1_000);
     expect(f.calls).toBe(0);
     // metered as a rejected request, not counted against quota
-    const row = s.gw.db.prepare("SELECT outcome, error_code, counts_against_quota FROM requests ORDER BY created_at DESC LIMIT 1").get() as any;
+    const row = s.gw.db
+      .prepare("SELECT outcome, error_code, counts_against_quota FROM requests ORDER BY created_at DESC LIMIT 1")
+      .get() as any;
     expect(row).toEqual({ outcome: "rejected", error_code: "context_length_exceeded", counts_against_quota: 0 });
   });
 
   it("chat: max_tokens is part of the budget", async () => {
     const s = await startServer([new FakeBackend(cfg("f", "fast", { contextWindow: 1_000 }), reply("hello"))]);
     close = s.close;
-    const ok = await post(s.base, "/v1/chat/completions", { model: "f", max_tokens: 500, messages: [{ role: "user", content: "hi" }] });
+    const ok = await post(s.base, "/v1/chat/completions", {
+      model: "f",
+      max_tokens: 500,
+      messages: [{ role: "user", content: "hi" }],
+    });
     expect(ok.status).toBe(200);
-    const over = await post(s.base, "/v1/chat/completions", { model: "f", max_tokens: 1_000, messages: [{ role: "user", content: "hi" }] });
+    const over = await post(s.base, "/v1/chat/completions", {
+      model: "f",
+      max_tokens: 1_000,
+      messages: [{ role: "user", content: "hi" }],
+    });
     expect(over.status).toBe(400);
     expect((await over.json()).error.code).toBe("context_length_exceeded");
   });

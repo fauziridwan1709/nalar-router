@@ -5,9 +5,23 @@
 
 export type Role = "operator" | "owner" | "developer" | "viewer";
 export type Permission =
-  | "dashboard:read" | "requests:read" | "usage:read" | "evals:read" | "backends:read" | "playground:run"
-  | "keys:read" | "keys:create" | "keys:revoke_own" | "keys:revoke_any" | "audit:read" | "tenants:all" | "quota:reset" | "chaos:write"
-  | "governance:read" | "governance:write" | "members:read";
+  | "dashboard:read"
+  | "requests:read"
+  | "usage:read"
+  | "evals:read"
+  | "backends:read"
+  | "playground:run"
+  | "keys:read"
+  | "keys:create"
+  | "keys:revoke_own"
+  | "keys:revoke_any"
+  | "audit:read"
+  | "tenants:all"
+  | "quota:reset"
+  | "chaos:write"
+  | "governance:read"
+  | "governance:write"
+  | "members:read";
 
 export interface SessionUser {
   id: string;
@@ -25,16 +39,36 @@ export interface ConsoleTenant {
   allowedTiers: string[];
   /** company facts the gateway uses to fill {{…}} placeholders */
   profile: Record<string, string>;
+  /** what the PII guardrail does with personal data in this tenant's requests */
+  piiMode: PiiMode;
 }
+
+export type PiiMode = "mask" | "block" | "off";
 export interface ConsoleConfig {
   tenants: ConsoleTenant[];
   /** contextWindow: max tokens in + out per call, or null when the backend has no limit */
-  backends: { id: string; tier: string; model: string; location: string; enabled: boolean; contextWindow: number | null }[];
+  backends: {
+    id: string;
+    tier: string;
+    model: string;
+    location: string;
+    enabled: boolean;
+    contextWindow: number | null;
+  }[];
   intents: string[];
   keyScopes: string[];
   keyExpiryDays: number[];
   maxActiveKeys: number;
   limits: ConsoleLimits;
+  support: SupportSettings;
+}
+
+/** how the support assistant answers, so the playground describes it with the real numbers */
+export interface SupportSettings {
+  /** knowledge-base entries given to the model */
+  contextK: number;
+  /** confidence = vote × retrieval vote + coverage × coverage + model × the model's own confidence */
+  confidenceWeights: { vote: number; coverage: number; model: number };
 }
 
 /** the request limits the API enforces, so the playground can check before sending */
@@ -62,10 +96,67 @@ export interface BackendStatus {
   model: string;
   enabled: boolean;
   location: string;
-  health?: { label: "online" | "offline"; availability: string; reason?: string; checkedAt: number | null; probeLatencyMs?: number | null };
+  health?: {
+    label: "online" | "offline";
+    availability: string;
+    reason?: string;
+    checkedAt: number | null;
+    probeLatencyMs?: number | null;
+  };
   breaker: { state: string; reopensInMs?: number; lastError?: string | null; consecutiveFailures?: number };
   chaos?: { failRate: number; mode: string; addedLatencyMs: number };
-  [k: string]: any;
+  /** operators only: prices (USD per 1M tokens) and timeouts */
+  priceInPerM?: number;
+  priceOutPerM?: number;
+  firstTokenTimeoutMs?: number;
+  totalTimeoutMs?: number;
+  contextWindow?: number | null;
+}
+
+/** one metered request, with the gateway's column names */
+export interface RequestRow {
+  id: string;
+  tenant_id: string;
+  endpoint: string;
+  created_at: number;
+  outcome: string;
+  /** an API key id, or user:<id> for a console playground run */
+  credential: string | null;
+  credential_name?: string | null;
+  /** PII types and counts, e.g. "email:1,card:1"; never values */
+  pii: string | null;
+  /** "backend:outcome,…" in attempt order */
+  attempt_trail?: string | null;
+  intent: string | null;
+  prompt_tokens: number;
+  completion_tokens: number;
+  usage_source: string;
+  latency_ms: number | null;
+  ttft_ms: number | null;
+  cost_usd: number;
+  fallback_used: number;
+  error_code: string | null;
+  error_message: string | null;
+  route_reason: { rule: string; reason: string; chain: string[]; signals: unknown } | null;
+}
+
+export interface AttemptRow {
+  id: number;
+  seq: number;
+  backend: string;
+  outcome: string;
+  error: string | null;
+  latency_ms: number | null;
+  ttft_ms: number | null;
+  prompt_tokens: number;
+  completion_tokens: number;
+  usage_source: string;
+  cost_usd: number;
+}
+
+/** a metered request with every attempt, for the Logs drawer */
+export interface RequestDetail extends RequestRow {
+  attempts: AttemptRow[];
 }
 
 export interface ApiKey {
@@ -192,9 +283,15 @@ export interface PiiTestResult {
 
 export interface Governance {
   tenant: { id: string; name: string };
-  piiPolicy: { mode: "mask" | "block" | "off"; types: string[] };
+  piiPolicy: { mode: PiiMode; types: string[] };
   piiTypes: { id: string; label: string }[];
-  stats: { windowDays: number; requests: number; requestsWithPii: number; blocked: number; byType: Record<string, number> };
+  stats: {
+    windowDays: number;
+    requests: number;
+    requestsWithPii: number;
+    blocked: number;
+    byType: Record<string, number>;
+  };
   canEdit: boolean;
 }
 
@@ -226,8 +323,16 @@ export interface EvalRun {
 }
 
 export type PlaygroundEndpoint = "support" | "chat";
-export const ENDPOINT_PATH: Record<PlaygroundEndpoint, string> = { support: "/v1/support/answer", chat: "/v1/chat/completions" };
+export const ENDPOINT_PATH: Record<PlaygroundEndpoint, string> = {
+  support: "/v1/support/answer",
+  chat: "/v1/chat/completions",
+};
 
 export type PlaygroundBody =
   | { message: string; model?: string; prompt_version?: string; include_reasoning?: boolean; tenant?: string }
-  | { messages: { role: "system" | "user" | "assistant"; content: string }[]; model?: string; include_reasoning?: boolean; tenant?: string };
+  | {
+      messages: { role: "system" | "user" | "assistant"; content: string }[];
+      model?: string;
+      include_reasoning?: boolean;
+      tenant?: string;
+    };

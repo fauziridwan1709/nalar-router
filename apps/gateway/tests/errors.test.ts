@@ -12,7 +12,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "../src");
 const DOC = readFileSync(resolve(HERE, "../../../docs/ERRORS.md"), "utf8");
 const walk = (d: string): string[] =>
-  readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : f.endsWith(".ts") ? [join(d, f)] : []));
+  readdirSync(d).flatMap((f) =>
+    statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : f.endsWith(".ts") ? [join(d, f)] : [],
+  );
 
 describe("error catalog", () => {
   it("documents every code in docs/ERRORS.md with its status", () => {
@@ -33,7 +35,9 @@ describe("error catalog", () => {
 
   it("serialises to the documented wire shape and knows if a retry can help", () => {
     const e = new GatewayError(429, "quota_exceeded", "Monthly token quota exhausted.", { tokensRemaining: 0 });
-    expect(e.toJSON()).toEqual({ error: { code: "quota_exceeded", message: "Monthly token quota exhausted.", details: { tokensRemaining: 0 } } });
+    expect(e.toJSON()).toEqual({
+      error: { code: "quota_exceeded", message: "Monthly token quota exhausted.", details: { tokensRemaining: 0 } },
+    });
     expect(e.retryable).toBe(true);
     expect(new GatewayError(400, "invalid_request", "x").retryable).toBe(false);
   });

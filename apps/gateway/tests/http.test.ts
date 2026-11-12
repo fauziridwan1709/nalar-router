@@ -42,7 +42,10 @@ describe("support endpoint", () => {
     expect(ev[0].data.admission.maxCompletionTokens).toBeGreaterThan(0);
     expect(typeof ev[2].data.t).toBe("number"); // server-side elapsed ms on every non-token event
     expect(names).toContain("intent");
-    const answer = ev.filter((e) => e.event === "token").map((e) => e.data.text).join("");
+    const answer = ev
+      .filter((e) => e.event === "token")
+      .map((e) => e.data.text)
+      .join("");
     expect(answer).toBe("Go to Orders and press Cancel.");
     const done = ev.at(-1)!.data;
     expect(done).toMatchObject({ outcome: "success", backend: "f", fallbackUsed: false, intent: "cancel_order" });
@@ -59,12 +62,16 @@ describe("support endpoint", () => {
       new FakeBackend(cfg("m", "degraded"), reply(GOOD)),
     ]);
     close = s.close;
-    const r = await (await post(s.base, "/v1/support/answer", "k-pro", { message: "cancel my order", stream: false })).json();
+    const r = await (
+      await post(s.base, "/v1/support/answer", "k-pro", { message: "cancel my order", stream: false })
+    ).json();
     expect(r.outcome).toBe("success");
     expect(r.backend).toBe("m");
     expect(r.fallbackUsed).toBe(true);
     expect(r.attempts.map((a: any) => a.outcome)).toEqual(["unusable_output", "ok"]);
-    const detail = await (await fetch(`${s.base}/admin/requests/${r.requestId}`, { headers: { "x-admin-token": "adm" } })).json();
+    const detail = await (
+      await fetch(`${s.base}/admin/requests/${r.requestId}`, { headers: { "x-admin-token": "adm" } })
+    ).json();
     expect(detail.attempts).toHaveLength(2);
     expect(detail.route_reason.chain).toEqual(["f", "m"]);
     const list = await (await fetch(`${s.base}/admin/requests`, { headers: { "x-admin-token": "adm" } })).json();
@@ -77,12 +84,17 @@ describe("support endpoint", () => {
       new FakeBackend(cfg("m", "degraded"), reply(GOOD)),
     ]);
     close = s.close;
-    const r = await (await post(s.base, "/v1/support/answer", "k-pro", { message: "cancel my order", stream: false })).json();
+    const r = await (
+      await post(s.base, "/v1/support/answer", "k-pro", { message: "cancel my order", stream: false })
+    ).json();
     expect(r.attempts.map((a: any) => a.outcome)).toEqual(["timeout_first_token", "ok"]);
   });
 
   it("returns 502 with a clear error when every backend fails", async () => {
-    const s = await startServer([new FakeBackend(cfg("f", "fast"), fail()), new FakeBackend(cfg("m", "degraded"), fail())]);
+    const s = await startServer([
+      new FakeBackend(cfg("f", "fast"), fail()),
+      new FakeBackend(cfg("m", "degraded"), fail()),
+    ]);
     close = s.close;
     const res = await post(s.base, "/v1/support/answer", "k-pro", { message: "cancel my order", stream: false });
     expect(res.status).toBe(502);
@@ -93,7 +105,9 @@ describe("support endpoint", () => {
     const f = new FakeBackend(cfg("f", "fast"), reply(GOOD));
     const s = await startServer([f]);
     close = s.close;
-    const r = await (await post(s.base, "/v1/support/answer", "k-pro", { message: "write a poem about the ocean", stream: false })).json();
+    const r = await (
+      await post(s.base, "/v1/support/answer", "k-pro", { message: "write a poem about the ocean", stream: false })
+    ).json();
     expect(r.outcome).toBe("refused_out_of_scope");
     expect(r.refused).toBe(true);
     expect(f.calls).toBe(0);
@@ -115,22 +129,32 @@ describe("support endpoint", () => {
   });
 
   it("refuses when the model disagrees with retrieval and confidence is low", async () => {
-    const s = await startServer([new FakeBackend(cfg("f", "fast"), reply('{"intent":"get_refund","confidence":0.1}\n###\nRefund stuff'))]);
+    const s = await startServer([
+      new FakeBackend(cfg("f", "fast"), reply('{"intent":"get_refund","confidence":0.1}\n###\nRefund stuff')),
+    ]);
     close = s.close;
-    const r = await (await post(s.base, "/v1/support/answer", "k-pro", { message: "how do I cancel my order", stream: false })).json();
+    const r = await (
+      await post(s.base, "/v1/support/answer", "k-pro", { message: "how do I cancel my order", stream: false })
+    ).json();
     expect(r.outcome).toBe("refused_low_confidence");
     expect(r.answer).toMatch(/human agent/);
   });
 
   it("refuses when the model labels the message unknown", async () => {
-    const s = await startServer([new FakeBackend(cfg("f", "fast"), reply('{"intent":"unknown","confidence":0.9}\n###\nI only do support'))]);
+    const s = await startServer([
+      new FakeBackend(cfg("f", "fast"), reply('{"intent":"unknown","confidence":0.9}\n###\nI only do support')),
+    ]);
     close = s.close;
-    const r = await (await post(s.base, "/v1/support/answer", "k-pro", { message: "cancel order poem", stream: false })).json();
+    const r = await (
+      await post(s.base, "/v1/support/answer", "k-pro", { message: "cancel order poem", stream: false })
+    ).json();
     expect(r.outcome).toBe("refused_out_of_scope");
   });
 
   it("enforces quota: fails closed with 429 and a clear error", async () => {
-    const s = await startServer([new FakeBackend(cfg("f", "fast"), reply(GOOD, { promptTokens: 300, completionTokens: 20 }))]);
+    const s = await startServer([
+      new FakeBackend(cfg("f", "fast"), reply(GOOD, { promptTokens: 300, completionTokens: 20 })),
+    ]);
     close = s.close;
     const first = await post(s.base, "/v1/support/answer", "k-tiny", { message: "cancel my order", stream: false });
     expect(first.status).toBe(200);
@@ -146,7 +170,10 @@ describe("support endpoint", () => {
   });
 
   it("returns 403 when a tenant asks for a tier outside its plan", async () => {
-    const s = await startServer([new FakeBackend(cfg("f", "fast"), reply(GOOD)), new FakeBackend(cfg("s", "strong"), reply(GOOD))]);
+    const s = await startServer([
+      new FakeBackend(cfg("f", "fast"), reply(GOOD)),
+      new FakeBackend(cfg("s", "strong"), reply(GOOD)),
+    ]);
     close = s.close;
     const res = await post(s.base, "/v1/support/answer", "k-free", { message: "cancel my order", model: "strong" });
     expect(res.status).toBe(403);
@@ -156,15 +183,27 @@ describe("support endpoint", () => {
 
 describe("placeholders", () => {
   it("fills slots from the message and the tenant profile before streaming; raw mode keeps them", async () => {
-    const out = '{"intent":"cancel_order","confidence":0.9}\n###\nCancel order {{Order Number}} at {{Website URL}} or call {{Customer Support Phone Number}}.';
+    const out =
+      '{"intent":"cancel_order","confidence":0.9}\n###\nCancel order {{Order Number}} at {{Website URL}} or call {{Customer Support Phone Number}}.';
     const s = await startServer([new FakeBackend(cfg("f", "fast"), reply(out))]);
     close = s.close;
-    const ev = await sse(await post(s.base, "/v1/support/answer", "k-pro", { message: "how do I cancel my order 98765" }));
-    const answer = ev.filter((e) => e.event === "token").map((e) => e.data.text).join("");
+    const ev = await sse(
+      await post(s.base, "/v1/support/answer", "k-pro", { message: "how do I cancel my order 98765" }),
+    );
+    const answer = ev
+      .filter((e) => e.event === "token")
+      .map((e) => e.data.text)
+      .join("");
     expect(answer).toBe("Cancel order 98765 at pro.example or call +62 21 555 0100.");
     const step = ev.find((e) => e.event === "step" && e.data.name === "placeholders_rendered")!;
     expect(step.data.slots.map((x: any) => x.source)).toEqual(["message", "profile", "profile"]);
-    const raw = await (await post(s.base, "/v1/support/answer", "k-pro", { message: "how do I cancel my order 98765", placeholders: "raw", stream: false })).json();
+    const raw = await (
+      await post(s.base, "/v1/support/answer", "k-pro", {
+        message: "how do I cancel my order 98765",
+        placeholders: "raw",
+        stream: false,
+      })
+    ).json();
     expect(raw.answer).toContain("{{Order Number}}");
   });
 });
@@ -173,10 +212,20 @@ describe("reasoning and backend status", () => {
   it("streams reasoning as separate events, never as part of the answer, only when asked", async () => {
     const s = await startServer([new FakeBackend(cfg("f", "fast"), think("check the KB first", GOOD))]);
     close = s.close;
-    const on = await sse(await post(s.base, "/v1/support/answer", "k-pro", { message: "cancel my order", include_reasoning: true }));
-    const thought = on.filter((e) => e.event === "reasoning").map((e) => e.data.text).join("");
+    const on = await sse(
+      await post(s.base, "/v1/support/answer", "k-pro", { message: "cancel my order", include_reasoning: true }),
+    );
+    const thought = on
+      .filter((e) => e.event === "reasoning")
+      .map((e) => e.data.text)
+      .join("");
     expect(thought.trim()).toBe("check the KB first");
-    expect(on.filter((e) => e.event === "token").map((e) => e.data.text).join("")).toBe("Go to Orders and press Cancel.");
+    expect(
+      on
+        .filter((e) => e.event === "token")
+        .map((e) => e.data.text)
+        .join(""),
+    ).toBe("Go to Orders and press Cancel.");
     const off = await sse(await post(s.base, "/v1/support/answer", "k-pro", { message: "cancel my order" }));
     expect(off.some((e) => e.event === "reasoning")).toBe(false);
   });
@@ -214,9 +263,15 @@ describe("chat completions endpoint", () => {
   it("streams OpenAI-compatible chunks with x_router metadata", async () => {
     const s = await startServer([new FakeBackend(cfg("f", "fast"), reply("Hello there"))]);
     close = s.close;
-    const res = await post(s.base, "/v1/chat/completions", "k-pro", { messages: [{ role: "user", content: "hi" }], stream: true });
+    const res = await post(s.base, "/v1/chat/completions", "k-pro", {
+      messages: [{ role: "user", content: "hi" }],
+      stream: true,
+    });
     const text = await res.text();
-    const datas = text.split("\n\n").filter((l) => l.startsWith("data: ") && !l.includes("[DONE]")).map((l) => JSON.parse(l.slice(6)));
+    const datas = text
+      .split("\n\n")
+      .filter((l) => l.startsWith("data: ") && !l.includes("[DONE]"))
+      .map((l) => JSON.parse(l.slice(6)));
     expect(datas.map((d) => d.choices[0].delta.content ?? "").join("")).toBe("Hello there");
     const last = datas.at(-1);
     expect(last.usage.total_tokens).toBe(120);
@@ -228,10 +283,19 @@ describe("chat completions endpoint", () => {
     close = s.close;
     const res = await post(s.base, "/v1/chat/completions", "k-pro", { messages: [{ role: "robot", content: "hi" }] });
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatchObject({ code: "invalid_request", type: "invalid_request_error", param: null });
-    const img = await post(s.base, "/v1/chat/completions", "k-pro", { messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "x" } }] }] });
+    expect((await res.json()).error).toMatchObject({
+      code: "invalid_request",
+      type: "invalid_request_error",
+      param: null,
+    });
+    const img = await post(s.base, "/v1/chat/completions", "k-pro", {
+      messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "x" } }] }],
+    });
     expect((await img.json()).error.message).toContain("only text content parts are supported");
-    const n2 = await post(s.base, "/v1/chat/completions", "k-pro", { messages: [{ role: "user", content: "hi" }], n: 2 });
+    const n2 = await post(s.base, "/v1/chat/completions", "k-pro", {
+      messages: [{ role: "user", content: "hi" }],
+      n: 2,
+    });
     expect((await n2.json()).error.message).toContain("only n=1 is supported");
   });
 
@@ -243,30 +307,65 @@ describe("chat completions endpoint", () => {
       model: "auto",
       messages: [
         { role: "developer", content: "Be brief." },
-        { role: "user", content: [{ type: "text", text: "hi" }, { type: "text", text: "there" }], name: "ana" },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "hi" },
+            { type: "text", text: "there" },
+          ],
+          name: "ana",
+        },
       ],
-      max_completion_tokens: 64, top_p: 0.9, stop: ["\n\n"], seed: 7, n: 1, user: "end-user-1", stream_options: null,
+      max_completion_tokens: 64,
+      top_p: 0.9,
+      stop: ["\n\n"],
+      seed: 7,
+      n: 1,
+      user: "end-user-1",
+      stream_options: null,
     });
     expect(res.headers.get("content-type")).toContain("application/json");
     const j = await res.json();
-    expect(j).toMatchObject({ object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: "Hello there" }, finish_reason: "stop" }] });
+    expect(j).toMatchObject({
+      object: "chat.completion",
+      choices: [{ index: 0, message: { role: "assistant", content: "Hello there" }, finish_reason: "stop" }],
+    });
     expect(j.usage.total_tokens).toBe(120);
     const seen = fake.seen[0];
-    expect(seen.messages).toEqual([{ role: "system", content: "Be brief." }, { role: "user", content: "hi\nthere" }]);
+    expect(seen.messages).toEqual([
+      { role: "system", content: "Be brief." },
+      { role: "user", content: "hi\nthere" },
+    ]);
     expect(seen.maxTokens).toBeLessThanOrEqual(64);
-    expect(seen.sampling).toEqual({ top_p: 0.9, stop: ["\n\n"], seed: 7, presence_penalty: undefined, frequency_penalty: undefined });
+    expect(seen.sampling).toEqual({
+      top_p: 0.9,
+      stop: ["\n\n"],
+      seed: 7,
+      presence_penalty: undefined,
+      frequency_penalty: undefined,
+    });
   });
 
   it("sends a usage-only chunk when stream_options.include_usage is set", async () => {
     const s = await startServer([new FakeBackend(cfg("f", "fast"), reply("Hello there"))]);
     close = s.close;
-    const res = await post(s.base, "/v1/chat/completions", "k-pro", { messages: [{ role: "user", content: "hi" }], stream: true, stream_options: { include_usage: true } });
-    const datas = (await res.text()).split("\n\n").filter((l) => l.startsWith("data: ") && !l.includes("[DONE]")).map((l) => JSON.parse(l.slice(6)));
+    const res = await post(s.base, "/v1/chat/completions", "k-pro", {
+      messages: [{ role: "user", content: "hi" }],
+      stream: true,
+      stream_options: { include_usage: true },
+    });
+    const datas = (await res.text())
+      .split("\n\n")
+      .filter((l) => l.startsWith("data: ") && !l.includes("[DONE]"))
+      .map((l) => JSON.parse(l.slice(6)));
     expect(datas.at(-1)).toMatchObject({ choices: [], usage: { total_tokens: 120 } });
   });
 
   it("lists models the key's plan may use, in OpenAI's format", async () => {
-    const s = await startServer([new FakeBackend(cfg("f", "fast"), reply("x")), new FakeBackend(cfg("s", "strong"), reply("x"))]);
+    const s = await startServer([
+      new FakeBackend(cfg("f", "fast"), reply("x")),
+      new FakeBackend(cfg("s", "strong"), reply("x")),
+    ]);
     close = s.close;
     const free = await (await fetch(`${s.base}/v1/models`, { headers: { authorization: "Bearer k-free" } })).json();
     expect(free.object).toBe("list");

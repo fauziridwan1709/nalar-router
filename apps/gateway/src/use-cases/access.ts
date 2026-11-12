@@ -24,12 +24,18 @@ export const isOperator = (user: User) => can(user.role, "tenants:all");
  * Unknown, revoked and expired keys all get the same 401, so a caller can't probe which keys
  * once existed. A key without the route's scope gets 403: the caller already proved possession.
  */
-export function authenticateApiKey(deps: Pick<GatewayDeps, "apiKeys" | "tenants">, secret: string | null, scope: KeyScope): { tenant: Tenant; key: ApiKey } {
-  if (!secret) throw new GatewayError(401, "missing_api_key", "Provide your tenant API key as 'Authorization: Bearer <key>'.");
+export function authenticateApiKey(
+  deps: Pick<GatewayDeps, "apiKeys" | "tenants">,
+  secret: string | null,
+  scope: KeyScope,
+): { tenant: Tenant; key: ApiKey } {
+  if (!secret)
+    throw new GatewayError(401, "missing_api_key", "Provide your tenant API key as 'Authorization: Bearer <key>'.");
   const key = deps.apiKeys.authenticate(secret);
   const tenant = key && deps.tenants.get(key.tenantId);
   if (!key || !tenant) throw new GatewayError(401, "invalid_api_key", "API key is not recognised.");
-  if (!key.scopes.includes(scope)) throw new GatewayError(403, "insufficient_scope", "This API key is not allowed to call this endpoint.");
+  if (!key.scopes.includes(scope))
+    throw new GatewayError(403, "insufficient_scope", "This API key is not allowed to call this endpoint.");
   return { tenant, key };
 }
 
@@ -44,9 +50,19 @@ export function findTenant(deps: Pick<GatewayDeps, "tenants">, id: string): Tena
  * Which tenant a request is about. Operators may pick any tenant (or all, when `allowAll`);
  * everyone else always gets their own, whatever they asked for.
  */
-export function scopeTenant(deps: Pick<GatewayDeps, "tenants">, user: User, asked: string, allowAll: true): string | null;
+export function scopeTenant(
+  deps: Pick<GatewayDeps, "tenants">,
+  user: User,
+  asked: string,
+  allowAll: true,
+): string | null;
 export function scopeTenant(deps: Pick<GatewayDeps, "tenants">, user: User, asked: string, allowAll: false): string;
-export function scopeTenant(deps: Pick<GatewayDeps, "tenants">, user: User, asked: string, allowAll: boolean): string | null {
+export function scopeTenant(
+  deps: Pick<GatewayDeps, "tenants">,
+  user: User,
+  asked: string,
+  allowAll: boolean,
+): string | null {
   if (!isOperator(user)) return user.tenantId;
   if (!asked) return allowAll ? null : user.tenantId;
   return findTenant(deps, asked).id;
@@ -68,6 +84,8 @@ export function redactRequest<T extends Record<string, any>>(user: User, r: T): 
   return {
     ...r,
     error_message: clientFacing ? r.error_message : null,
-    attempts: Array.isArray(r.attempts) ? r.attempts.map((a: any) => ({ ...a, error: a.error ? publicAttemptError(a.outcome) : null })) : r.attempts,
+    attempts: Array.isArray(r.attempts)
+      ? r.attempts.map((a: any) => ({ ...a, error: a.error ? publicAttemptError(a.outcome) : null }))
+      : r.attempts,
   };
 }

@@ -46,7 +46,7 @@ The `requests` table is the single source of truth for both metering and quota. 
 | `local-qwen3.5-4b` | local | Qwen3.5-4B, 4-bit, on Apple MLX (`mlx_lm.server`) | $0 marginal | Private and offline. Only available when running locally. Called `local-qwen` in the eval runs before 2026-11-12. |
 | `mock` | degraded | extractive: streams the top KB answer verbatim | $0 | Always available and grounded. Configurable latency and failure. |
 
-All prices are in `config.ts` and are list prices at build time. The local model's cost is recorded as $0 marginal; electricity and hardware are not modelled.
+All prices are in `apps/gateway/src/main/config.ts` and are list prices at build time. The local model's cost is recorded as $0 marginal; electricity and hardware are not modelled.
 
 **Rules,** in priority order. Each decision is stored as `{rule, reason, chain, signals}` and shown in the console.
 
@@ -86,7 +86,7 @@ All prices are in `config.ts` and are list prices at build time. The local model
    - **auto-smart** (`entities/routing/classifier.ts`, `use-cases/router.ts`). The classifier is a model call, so it runs after quota admission. It is metered as attempt 0 with outcome `classified`, and the tenant pays for its tokens. The message goes in fenced as data. Ambiguous retrieval still escalates on its own, because the classifier can't see it. If the call fails, times out (2.5 s), returns something unparseable or is less than 0.6 confident, the heuristic decides and the reason says so. A classifier timeout doesn't count against the breaker, so it can't take the fast tier out of the answer chain. It is skipped when the plan has no strong tier, and for messages the scope gate refuses.
    - **auto-cascade** (`entities/routing/cascade.ts`, support only). Start on fast. The support header is validated before any answer text is sent, so the cascade can drop the fast attempt at that point without breaking the one-commit-point rule. It escalates only on doubt a stronger model can remove: the fast model said `unknown`, rated itself below 0.7, or disagreed with retrieval and would be refused. It never escalates when even a perfect answer (retrieval's top intent, self-confidence 1) would still fall below the refuse threshold. An escalation is not a failure: it doesn't trip the breaker or count as fallback. Chat has no header, so `auto-cascade` on chat is routed by the heuristic and the reason says so.
 
-   **Measured live** (EVALUATION runs 7 and 8; 17 support messages per mode, no judge). After fixing a flaw the first run exposed in each mode:
+   **Measured live** (EVALUATION run 7: two runs of 17 support messages per mode, no judge; run 8 compares the classifier prompts). After fixing a flaw the first run exposed in each mode:
 
    | mode | success / refused | served by strong | cost / 1k req | latency p50 |
    |---|---|---|---|---|
@@ -113,7 +113,7 @@ Fallback can also be demonstrated on demand. On the Backends page, set a backend
 
 No eval question exactly duplicates a KB question. Bitext is template-generated, though, so close paraphrases of eval questions do exist in the KB. This makes the in-domain numbers optimistic, and it is why the hard-case probe below exists.
 
-**Retrieval: BM25, not embeddings.** Bitext questions are short and lexically regular, so a lexical ranker is strong here. It is deterministic, adds no second model or provider to the request path, and is fast: the index builds in 3 ms and a query takes 0.12 ms.
+**Retrieval: BM25, not embeddings.** Bitext questions are short and lexically regular, so a lexical ranker is strong here. It is deterministic, adds no second model or provider to the request path, and is fast: the index builds in 3 ms and a query takes 0.14 ms.
 
 | on 1,350 held-out rows, no LLM | result |
 |---|---|
@@ -142,7 +142,7 @@ The model's self-reported confidence gets the smallest weight on purpose: it is 
 
 **Template placeholders.** Bitext answers are templates: 76 distinct slots such as `{{Order Number}}`, `{{Customer Support Phone Number}}` and `{{Online Order Interaction}}`. Streaming them to a customer as raw text is unacceptable. Asking the model to "fill them in" would invite it to invent phone numbers and URLs. So the work is split:
 - **The model:** keeps placeholders. Prompt v3 lists exactly which ones have real values for this request; anything else it writes in plain words.
-- **The gateway:** fills them deterministically while streaming (`support/placeholders.ts`), from four sources in priority order:
+- **The gateway:** fills them deterministically while streaming (`entities/support/placeholders.ts`), from four sources in priority order:
   1. the customer's message (order, invoice and tracking ids, amounts, plan names)
   2. the tenant's **company profile**, a new `tenants.profile` column with phone, hours, email, URLs and shipping times
   3. default UI labels (`{{Online Order Interaction}}` → "Orders")
@@ -212,7 +212,7 @@ Multi-intent ("charged twice … payment methods … refund?"), vague ("it doesn
 
 **Token accounting.** Each row records `usage_source`: `provider` (from the provider's usage report), `estimated` (mock backend, aborted streams), or `none` (the provider rejected the call). I checked the chars/4 estimator against provider counts on the 119 eval calls. It reads **6–17% high** (mean 1.06–1.17×). For quota pre-authorisation that is the safe direction. It means estimated rows overstate cost a little, and they are labelled as estimates.
 
-**Tests.** There are 152 vitest tests, all without network: 131 in the gateway, on scripted fake backends and in-memory SQLite, and 21 in the console. They cover:
+**Tests.** There are 160 vitest tests, all without network: 135 in the gateway, on scripted fake backends and in-memory SQLite, and 25 in the console. They cover:
 - the support header parser, retrieval, the routing rules and query complexity
 - fallback on error, first-token timeout and unusable output, and no fallback after commit
 - the circuit breaker
@@ -254,3 +254,4 @@ Multi-intent ("charged twice … payment methods … refund?"), vague ("it doesn
 - A judged quality eval across the three router modes (`npm run eval -- --configs auto:v3,auto-smart:v3,auto-cascade:v3 --judge groq-strong`). The live run in §3 measured routing, cost and outcome, not answer quality.
 - Language detection, with a translated query for retrieval (so Indonesian messages are answered, not refused).
 - A harder, paraphrased eval set, so prompt and model differences show up in accuracy and not only in cost.
+- Retrieval upgrades for the measured gaps (Indonesian, paraphrases, multi-intent): hybrid BM25 + multilingual dense retrieval with a reranker, uncertainty-aware fusion, and multi-intent decomposition. The recent papers behind each are in the README, "Next development: improving retrieval".

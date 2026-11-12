@@ -8,7 +8,13 @@
  */
 import { randomBytes, randomUUID } from "node:crypto";
 import type { DatabaseSync as DB } from "node:sqlite";
-import { displayPrefix, KEY_PREFIX, MAX_ACTIVE_KEYS_PER_TENANT, type ApiKey, type KeyScope } from "../../../entities/auth/apiKey.js";
+import {
+  displayPrefix,
+  KEY_PREFIX,
+  MAX_ACTIVE_KEYS_PER_TENANT,
+  type ApiKey,
+  type KeyScope,
+} from "../../../entities/auth/apiKey.js";
 import type { ApiKeyRepository } from "../../../use-cases/ports/apiKeys.js";
 import { hashKey } from "../crypto/hash.js";
 
@@ -16,9 +22,18 @@ export type ApiKeyRow = ApiKey;
 
 function toRow(r: any, now = Date.now()): ApiKeyRow {
   return {
-    id: r.id, tenantId: r.tenant_id, name: r.name, prefix: r.prefix, last4: r.last4,
-    scopes: JSON.parse(r.scopes), createdBy: r.created_by, createdByEmail: r.created_by_email ?? null,
-    createdAt: r.created_at, expiresAt: r.expires_at, revokedAt: r.revoked_at, lastUsedAt: r.last_used_at,
+    id: r.id,
+    tenantId: r.tenant_id,
+    name: r.name,
+    prefix: r.prefix,
+    last4: r.last4,
+    scopes: JSON.parse(r.scopes),
+    createdBy: r.created_by,
+    createdByEmail: r.created_by_email ?? null,
+    createdAt: r.created_at,
+    expiresAt: r.expires_at,
+    revokedAt: r.revoked_at,
+    lastUsedAt: r.last_used_at,
     status: r.revoked_at ? "revoked" : r.expires_at && r.expires_at <= now ? "expired" : "active",
   };
 }
@@ -27,7 +42,16 @@ export const newSecret = () => KEY_PREFIX + randomBytes(24).toString("base64url"
 
 export function insertKey(
   db: DB,
-  k: { id?: string; tenantId: string; name: string; secret: string; scopes: readonly KeyScope[]; createdBy: string | null; expiresAt: number | null; now?: number },
+  k: {
+    id?: string;
+    tenantId: string;
+    name: string;
+    secret: string;
+    scopes: readonly KeyScope[];
+    createdBy: string | null;
+    expiresAt: number | null;
+    now?: number;
+  },
 ) {
   const id = k.id ?? `key_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
   db.prepare(
@@ -35,34 +59,61 @@ export function insertKey(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET key_hash=excluded.key_hash, prefix=excluded.prefix, last4=excluded.last4,
        scopes=excluded.scopes, revoked_at=NULL`,
-  ).run(id, k.tenantId, k.name, displayPrefix(k.secret), k.secret.slice(-4), hashKey(k.secret), JSON.stringify(k.scopes),
-    k.createdBy, k.now ?? Date.now(), k.expiresAt);
+  ).run(
+    id,
+    k.tenantId,
+    k.name,
+    displayPrefix(k.secret),
+    k.secret.slice(-4),
+    hashKey(k.secret),
+    JSON.stringify(k.scopes),
+    k.createdBy,
+    k.now ?? Date.now(),
+    k.expiresAt,
+  );
   return id;
 }
 
 export function createKey(
   db: DB,
-  input: { tenantId: string; name: string; scopes: readonly KeyScope[]; expiresInDays: number | null; createdBy: string },
+  input: {
+    tenantId: string;
+    name: string;
+    scopes: readonly KeyScope[];
+    expiresInDays: number | null;
+    createdBy: string;
+  },
   now = Date.now(),
 ) {
   const secret = newSecret();
   db.exec("BEGIN IMMEDIATE");
   try {
     const { n } = db
-      .prepare("SELECT COUNT(*) AS n FROM api_keys WHERE tenant_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)")
+      .prepare(
+        "SELECT COUNT(*) AS n FROM api_keys WHERE tenant_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)",
+      )
       .get(input.tenantId, now) as { n: number };
     if (n >= MAX_ACTIVE_KEYS_PER_TENANT) {
       db.exec("ROLLBACK");
       return { error: "limit" as const };
     }
     const id = insertKey(db, {
-      tenantId: input.tenantId, name: input.name, secret, scopes: input.scopes, createdBy: input.createdBy,
-      expiresAt: input.expiresInDays ? now + input.expiresInDays * 86_400_000 : null, now,
+      tenantId: input.tenantId,
+      name: input.name,
+      secret,
+      scopes: input.scopes,
+      createdBy: input.createdBy,
+      expiresAt: input.expiresInDays ? now + input.expiresInDays * 86_400_000 : null,
+      now,
     });
     db.exec("COMMIT");
     return { key: getKey(db, id, now)!, secret };
   } catch (e) {
-    try { db.exec("ROLLBACK"); } catch { /* already closed */ }
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      /* already closed */
+    }
     throw e;
   }
 }
@@ -75,7 +126,10 @@ export function getKey(db: DB, id: string, now = Date.now()) {
 }
 
 export function listKeys(db: DB, tenantId: string, now = Date.now()) {
-  return db.prepare(`${SELECT} WHERE k.tenant_id = ? ORDER BY k.revoked_at IS NOT NULL, k.created_at DESC`).all(tenantId).map((r) => toRow(r, now));
+  return db
+    .prepare(`${SELECT} WHERE k.tenant_id = ? ORDER BY k.revoked_at IS NOT NULL, k.created_at DESC`)
+    .all(tenantId)
+    .map((r) => toRow(r, now));
 }
 
 export function revokeKey(db: DB, id: string, now = Date.now()) {

@@ -110,7 +110,10 @@ export interface ChatOpts {
   include_reasoning?: boolean;
   stream?: boolean;
 }
-const DEFAULT_CHAT: ChatOpts = { messages: [{ role: "user", content: "Summarise our refund policy in one line." }], stream: false };
+const DEFAULT_CHAT: ChatOpts = {
+  messages: [{ role: "user", content: "Summarise our refund policy in one line." }],
+  stream: false,
+};
 
 export function chatSnippet(lang: Lang, base: string, o: ChatOpts = DEFAULT_CHAT) {
   const stream = o.stream ?? true;
@@ -119,7 +122,7 @@ export function chatSnippet(lang: Lang, base: string, o: ChatOpts = DEFAULT_CHAT
   if (o.include_reasoning) b.include_reasoning = true;
   b.stream = stream;
   const msgs = JSON.stringify(o.messages, null, 2);
-  const modelComment = "# the router decides; or pin \"fast\" / \"strong\" / a backend id";
+  const modelComment = '# the router decides; or pin "fast" / "strong" / a backend id';
   if (lang === "curl") {
     return `# OpenAI-compatible: works with any OpenAI client by changing the base URL${stream ? "\n# Streams chat.completion.chunk events; routing and attempts arrive as SSE comments" : ""}
 curl ${stream ? "-N " : ""}${base}/v1/chat/completions \\
@@ -127,7 +130,12 @@ curl ${stream ? "-N " : ""}${base}/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -d ${shq(JSON.stringify(b))}`;
   }
-  const extra = (py: boolean) => (o.include_reasoning ? (py ? `\n    extra_body={"include_reasoning": True},` : `\n  include_reasoning: true, // gateway extension`) : "");
+  const extra = (py: boolean) =>
+    o.include_reasoning
+      ? py
+        ? `\n    extra_body={"include_reasoning": True},`
+        : `\n  include_reasoning: true, // gateway extension`
+      : "";
   if (lang === "python") {
     const call = `import os
 from openai import OpenAI  # pip install openai

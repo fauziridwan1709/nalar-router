@@ -37,7 +37,15 @@ export interface MeteringStore {
   /** final row + attempts + release of the reservation, in one transaction */
   finish(requestId: string, record: FinalRecord, attempts: AttemptRecord[]): MeterSummary;
   /** a request refused before admission (validation, PII block): metered, not counted against quota */
-  rejected(requestId: string, tenantId: string, endpoint: string, status: number, code: string, message: string, credential: string): void;
+  rejected(
+    requestId: string,
+    tenantId: string,
+    endpoint: string,
+    status: number,
+    code: string,
+    message: string,
+    credential: string,
+  ): void;
   /** PII types and counts for a request (never values) */
   pii(requestId: string, summary: string): void;
 }

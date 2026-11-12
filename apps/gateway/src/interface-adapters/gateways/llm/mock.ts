@@ -39,6 +39,10 @@ export class MockBackend implements Backend {
       produced += p;
       yield { type: "text", text: p };
     }
-    yield { type: "usage", promptTokens: estimateMessagesTokens(req.messages), completionTokens: estimateTokens(produced) };
+    yield {
+      type: "usage",
+      promptTokens: estimateMessagesTokens(req.messages),
+      completionTokens: estimateTokens(produced),
+    };
   }
 }
