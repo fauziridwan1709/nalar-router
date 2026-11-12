@@ -24,6 +24,12 @@
   <img alt="Dataset" src="https://img.shields.io/badge/dataset-Bitext%2027%20intents-FFD21E?logo=huggingface&logoColor=black">
 </p>
 
+<p align="center">
+  <a href="docs/assets/demo.mp4"><img src="docs/assets/demo.png" alt="Demo: a support question with an email and a card number; the gateway masks both before the model, streams the answer with them restored, and the trace shows time to first token and total response time" width="100%"></a>
+  <br>
+  <sub><b>Demo (19 s, click to play):</b> a customer message with an email and a card number. The gateway masks both before the model, streams the answer with them restored, and the trace shows every step, including time to first token.</sub>
+</p>
+
 ---
 
 **nalar-router** is a small, multi-tenant LLM gateway with one packaged capability on top: a **customer-support assistant**. It answers from a knowledge base, reports the intent it detected, and **refuses rather than guesses** when it isn't sure.
