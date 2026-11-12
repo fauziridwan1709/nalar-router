@@ -78,7 +78,7 @@ export const think = (thought: string, text: string): Script =>
 
 /** a fast backend that also serves auto-smart's classifier call: `verdict` for that, `then` for the rest */
 export const withClassifier = (verdict: Script, then: Script): Script => (req) =>
-  (req.messages[0]?.content.includes("router of an LLM gateway") ? verdict : then)(req);
+  (req.messages[1]?.content.startsWith("Message to classify:") ? verdict : then)(req);
 
 export const fail = (msg = "boom"): Script =>
   async function* () {
