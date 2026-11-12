@@ -1,6 +1,6 @@
 # Errors
 
-Every error the gateway returns is listed here. The source of truth is `ERROR_CATALOG` in [`apps/gateway/src/domain/errors.ts`](../apps/gateway/src/domain/errors.ts). `GatewayError` only accepts a code from the catalog, and `tests/errors.test.ts` fails if a code is missing from this page or is thrown with a status that doesn't match.
+Every error the gateway returns is listed here. The source of truth is `ERROR_CATALOG` in [`apps/gateway/src/entities/errors.ts`](../apps/gateway/src/entities/errors.ts). `GatewayError` only accepts a code from the catalog, and `tests/errors.test.ts` fails if a code is missing from this page or is thrown with a status that doesn't match.
 
 ## Shape
 
@@ -23,6 +23,7 @@ These are returned as the HTTP status, before any model is called. Requests refu
 | `invalid_json` | 400 | no | The body is not valid JSON. |
 | `invalid_request` | 400 | no | The body fails validation; the message names each field. |
 | `unknown_model` | 400 | no | `model` is not a router mode (`auto`, `auto-smart`, `auto-cascade`), a tier or a backend id; `details.available` lists them. |
+| `context_length_exceeded` | 400 | no | The messages plus the answer budget don't fit the pinned model's context window (or, for `auto`, any model the plan allows). `details` has `model`, `contextWindow`, `promptTokens` and `completionTokens`. Shorten the messages, lower `max_tokens`, or pick a larger model. |
 | `missing_api_key` | 401 | no | No `Authorization: Bearer` key (or `x-api-key`) on a /v1 route. |
 | `invalid_api_key` | 401 | no | The key is unknown, revoked or expired (deliberately indistinguishable). |
 | `invalid_admin_token` | 401 | no | An /admin route without the right `x-admin-token`. |

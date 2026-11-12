@@ -1,17 +1,19 @@
 /**
- * The dependency rule of the clean architecture, checked on every test run:
+ * The Dependency Rule of Robert C. Martin's Clean Architecture ("The Clean Architecture", 2012;
+ * "Clean Architecture", 2017), checked on every test run. Source code dependencies point inward:
  *
- *   domain  ←  application  ←  infrastructure / interfaces  ←  composition root
+ *   entities  ←  use-cases  ←  interface-adapters  ←  frameworks  ←  main
  *
- * - domain/          business rules; imports only domain/ (no node:, no express, no sqlite, no zod)
- * - application/     use cases and the ports they need; imports domain/ and application/ only
- * - infrastructure/  adapters for the ports (SQLite, model providers, health probes)
- * - interfaces/      delivery (HTTP); turns requests into use-case calls
- * - config.ts, gateway.ts, index.ts: the composition root, which wires everything
+ * - entities/            Enterprise Business Rules: routing policy, quota rule, metering math, PII
+ *                        detection, retrieval, RBAC, errors. Imports only entities/.
+ * - use-cases/           Application Business Rules: the capability path, support, chat, fallback,
+ *                        console and key management, and the ports (interfaces) they need.
+ * - interface-adapters/  Controllers (HTTP routes), Presenters (SSE, OpenAI wire format, errors) and
+ *                        Gateways (SQLite repositories, LLM providers, health probes, eval files).
+ * - frameworks/          Frameworks & Drivers: the Express app and the SQLite driver (schema, seed).
+ * - main/                The Main component: config loading, the composition root, the process.
  *
- * Infrastructure and interfaces never import each other, except that the HTTP layer may read
- * infrastructure's query helpers for read-only reporting screens (metrics, logs, keys), which
- * have no business rules to put in a use case.
+ * Express and node:sqlite are started only in frameworks/; interface-adapters may use their types.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -19,15 +21,11 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "../src");
-const ROOT_FILES = new Set(["config.ts", "gateway.ts", "index.ts"]);
 
 const walk = (d: string): string[] =>
   readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : f.endsWith(".ts") ? [join(d, f)] : []));
 
-const layerOf = (file: string) => {
-  const rel = relative(SRC, file);
-  return ROOT_FILES.has(rel) ? "root" : rel.split("/")[0];
-};
+const layerOf = (file: string) => relative(SRC, file).split("/")[0];
 
 /** every import of a file: [specifier, resolved layer or "external", type-only?] */
 function importsOf(file: string) {
@@ -42,11 +40,11 @@ function importsOf(file: string) {
 }
 
 const ALLOWED: Record<string, string[]> = {
-  domain: ["domain"],
-  application: ["domain", "application"],
-  infrastructure: ["domain", "application", "infrastructure"],
-  interfaces: ["domain", "application", "interfaces", "infrastructure"],
-  root: ["domain", "application", "infrastructure", "interfaces", "root"],
+  entities: ["entities"],
+  "use-cases": ["entities", "use-cases"],
+  "interface-adapters": ["entities", "use-cases", "interface-adapters"],
+  frameworks: ["entities", "use-cases", "interface-adapters", "frameworks"],
+  main: ["entities", "use-cases", "interface-adapters", "frameworks", "main"],
 };
 
 describe("architecture: dependencies point inward", () => {
@@ -62,18 +60,23 @@ describe("architecture: dependencies point inward", () => {
       const layer = layerOf(f);
       return importsOf(f)
         .filter((i) => i.layer !== "external" && !ALLOWED[layer].includes(i.layer))
-        // a type-only import of the composed Gateway/Config is how adapters receive their dependencies
-        .filter((i) => !(i.typeOnly && i.layer === "root" && layer !== "domain" && layer !== "application"))
         .map((i) => `${relative(SRC, f)} → ${i.spec}`);
     });
     expect(violations).toEqual([]);
   });
 
-  it("domain and application have no framework or I/O dependencies", () => {
+  it("entities and use cases have no framework or I/O dependencies", () => {
     const banned = /^(node:(fs|sqlite|http|net|child_process)|express|zod)$/;
     const violations = files
-      .filter((f) => ["domain", "application"].includes(layerOf(f)))
+      .filter((f) => ["entities", "use-cases"].includes(layerOf(f)))
       .flatMap((f) => importsOf(f).filter((i) => i.layer === "external" && banned.test(i.spec)).map((i) => `${relative(SRC, f)} → ${i.spec}`));
+    expect(violations).toEqual([]);
+  });
+
+  it("interface adapters use Express and SQLite types only; frameworks/ runs them", () => {
+    const violations = files
+      .filter((f) => layerOf(f) === "interface-adapters")
+      .flatMap((f) => importsOf(f).filter((i) => /^(express|node:sqlite)$/.test(i.spec) && !i.typeOnly).map((i) => `${relative(SRC, f)} → ${i.spec}`));
     expect(violations).toEqual([]);
   });
 });

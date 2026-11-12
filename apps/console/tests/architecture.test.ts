@@ -1,14 +1,21 @@
 /**
- * The console's dependency rule, checked on every test run:
+ * The console's dependency rule, checked on every test run. The folders are the four circles of
+ * Robert C. Martin's Clean Architecture (2012); source code dependencies point only inward:
  *
- *   domain  ←  application  ←  infrastructure / ui  ←  main.tsx (composition root)
+ *   entities  ←  use-cases  ←  interface-adapters  ←  frameworks  ←  main.tsx
  *
- * - domain/          types and pure rules (formatting, access, quota standing, outcome groups,
- *                    the playground event reducer, code snippets); imports only domain/
- * - application/     the ConsoleApi port, its React provider, and data hooks; imports domain/
- * - infrastructure/  the HTTP adapter for the port (fetch, CSRF, SSE parsing); no React
- * - ui/              pages and components; talks to the gateway only through useApi()
- * - main.tsx         builds the adapter and renders the app with it
+ * - entities/            Entities: the console's vocabulary (models.ts) and pure rules (formatting,
+ *                        access, quota standing, outcome groups, the playground event reducer,
+ *                        code snippets). Imports only entities/; no React, no I/O.
+ * - use-cases/           Use Cases: the ConsoleApi port (ports.ts), the boundary every screen talks
+ *                        through. Imports entities/ only; no React.
+ * - interface-adapters/  Interface Adapters: gateways/http implements the port over the gateway's
+ *                        console API (fetch, CSRF, SSE parsing). The only place that calls fetch
+ *                        or builds a console API URL; no React.
+ * - frameworks/          Frameworks & Drivers: ui/ is React (app shell, pages, components, styles,
+ *                        and the hooks that hand the port to pages). Pages reach the gateway only
+ *                        through useApi(), never through the HTTP adapter.
+ * - main.tsx             Main: the composition root. Builds the HTTP adapter and renders the app with it.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -40,13 +47,17 @@ function importsOf(file: string) {
   }));
 }
 
+const isHttpGateway = (f: string) => relative(SRC, f).startsWith("interface-adapters/gateways/http/");
+
 const ALLOWED: Record<string, string[]> = {
-  domain: ["domain"],
-  application: ["domain", "application"],
-  infrastructure: ["domain", "application", "infrastructure"],
-  ui: ["domain", "application", "ui"],
-  root: ["domain", "application", "infrastructure", "ui", "root"],
+  entities: ["entities"],
+  "use-cases": ["entities", "use-cases"],
+  "interface-adapters": ["entities", "use-cases", "interface-adapters"],
+  // frameworks may import interface-adapters by the rule, but the UI is held to the port: see below
+  frameworks: ["entities", "use-cases", "frameworks"],
+  root: ["entities", "use-cases", "interface-adapters", "frameworks", "root"],
 };
+const REACT = /^react|^@astryxdesign|^lucide|^@fontsource/;
 
 describe("console architecture: dependencies point inward", () => {
   const files = walk(SRC);
@@ -62,17 +73,20 @@ describe("console architecture: dependencies point inward", () => {
     expect(bad).toEqual([]);
   });
 
-  it("domain has no React, and only infrastructure calls fetch", () => {
-    const reactInDomain = files
-      .filter((f) => layerOf(f) === "domain")
-      .flatMap((f) => importsOf(f).filter((i) => /^react|^@astryxdesign|^lucide/.test(i.spec)).map((i) => `${relative(SRC, f)} → ${i.spec}`));
-    expect(reactInDomain).toEqual([]);
-    const fetchOutside = files.filter((f) => layerOf(f) !== "infrastructure" && /(?<![.\w])fetch\(/.test(readFileSync(f, "utf8").replace(/`[^`]*`/g, "")));
+  it("React lives only in frameworks/ and main.tsx", () => {
+    const inner = files.filter((f) => !["frameworks", "root"].includes(layerOf(f)));
+    const reactImports = inner.flatMap((f) => importsOf(f).filter((i) => REACT.test(i.spec)).map((i) => `${relative(SRC, f)} → ${i.spec}`));
+    expect(reactImports).toEqual([]);
+    expect(inner.filter((f) => f.endsWith(".tsx")).map((f) => relative(SRC, f))).toEqual([]);
+  });
+
+  it("only the HTTP gateway calls fetch", () => {
+    const fetchOutside = files.filter((f) => !isHttpGateway(f) && /(?<![.\w])fetch\(/.test(readFileSync(f, "utf8").replace(/`[^`]*`/g, "")));
     expect(fetchOutside.map((f) => relative(SRC, f))).toEqual([]);
   });
 
   it("no page builds a console API URL itself", () => {
-    const urls = files.filter((f) => layerOf(f) !== "infrastructure" && /["'`]\/api\/(console|auth)\//.test(readFileSync(f, "utf8")));
+    const urls = files.filter((f) => !isHttpGateway(f) && /["'`]\/api\/(console|auth)\//.test(readFileSync(f, "utf8")));
     expect(urls.map((f) => relative(SRC, f))).toEqual([]);
   });
 });

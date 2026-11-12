@@ -52,7 +52,7 @@ All prices are in `config.ts` and are list prices at build time. The local model
 
 1. **Plan entitlement.** Only backends whose tier is in the tenant's plan are candidates.
 2. **Explicit hint.** The caller can pin a tier or backend. The rest of the default order stays as fallback.
-3. **Auto.** Default to the fast tier. Escalate to the strong tier when the query is complex: `assessComplexity` (`domain/routing/complexity.ts`) adds up weighted signals, and the router escalates at a score of 0.5 (`ROUTE_COMPLEXITY_THRESHOLD`).
+3. **Auto.** Default to the fast tier. Escalate to the strong tier when the query is complex: `assessComplexity` (`entities/routing/complexity.ts`) adds up weighted signals, and the router escalates at a score of 0.5 (`ROUTE_COMPLEXITY_THRESHOLD`).
 
    | signal | fires when | weight |
    |---|---|---|
@@ -83,8 +83,8 @@ All prices are in `config.ts` and are list prices at build time. The local model
    | `auto-smart` | after admission, before the answer | a classification call on the fast model: `{"label":"simple"\|"complex","confidence","why"}` | one call, ~250 tokens, ~0.5–1 s | `smart_default_fast`, `smart_escalate_strong`, `smart_fallback_heuristic`… |
    | `auto-cascade` | at the fast model's header, before commit | what the fast model itself reported | the fast attempt, on escalated requests only | `cascade_start_fast`, attempt outcome `escalated` |
 
-   - **auto-smart** (`domain/routing/classifier.ts`, `application/router.ts`). The classifier is a model call, so it runs after quota admission. It is metered as attempt 0 with outcome `classified`, and the tenant pays for its tokens. The message goes in fenced as data. Ambiguous retrieval still escalates on its own, because the classifier can't see it. If the call fails, times out (2.5 s), returns something unparseable or is less than 0.6 confident, the heuristic decides and the reason says so. A classifier timeout doesn't count against the breaker, so it can't take the fast tier out of the answer chain. It is skipped when the plan has no strong tier, and for messages the scope gate refuses.
-   - **auto-cascade** (`domain/routing/cascade.ts`, support only). Start on fast. The support header is validated before any answer text is sent, so the cascade can drop the fast attempt at that point without breaking the one-commit-point rule. It escalates only on doubt a stronger model can remove: the fast model said `unknown`, rated itself below 0.7, or disagreed with retrieval and would be refused. It never escalates when even a perfect answer (retrieval's top intent, self-confidence 1) would still fall below the refuse threshold. An escalation is not a failure: it doesn't trip the breaker or count as fallback. Chat has no header, so `auto-cascade` on chat is routed by the heuristic and the reason says so.
+   - **auto-smart** (`entities/routing/classifier.ts`, `use-cases/router.ts`). The classifier is a model call, so it runs after quota admission. It is metered as attempt 0 with outcome `classified`, and the tenant pays for its tokens. The message goes in fenced as data. Ambiguous retrieval still escalates on its own, because the classifier can't see it. If the call fails, times out (2.5 s), returns something unparseable or is less than 0.6 confident, the heuristic decides and the reason says so. A classifier timeout doesn't count against the breaker, so it can't take the fast tier out of the answer chain. It is skipped when the plan has no strong tier, and for messages the scope gate refuses.
+   - **auto-cascade** (`entities/routing/cascade.ts`, support only). Start on fast. The support header is validated before any answer text is sent, so the cascade can drop the fast attempt at that point without breaking the one-commit-point rule. It escalates only on doubt a stronger model can remove: the fast model said `unknown`, rated itself below 0.7, or disagreed with retrieval and would be refused. It never escalates when even a perfect answer (retrieval's top intent, self-confidence 1) would still fall below the refuse threshold. An escalation is not a failure: it doesn't trip the breaker or count as fallback. Chat has no header, so `auto-cascade` on chat is routed by the heuristic and the reason says so.
 
    **Measured live** (EVALUATION runs 7 and 8; 17 support messages per mode, no judge). After fixing a flaw the first run exposed in each mode:
 
@@ -212,20 +212,22 @@ Multi-intent ("charged twice … payment methods … refund?"), vague ("it doesn
 
 **Token accounting.** Each row records `usage_source`: `provider` (from the provider's usage report), `estimated` (mock backend, aborted streams), or `none` (the provider rejected the call). I checked the chars/4 estimator against provider counts on the 119 eval calls. It reads **6–17% high** (mean 1.06–1.17×). For quota pre-authorisation that is the safe direction. It means estimated rows overstate cost a little, and they are labelled as estimates.
 
-**Tests.** There are 43 vitest tests on scripted fake backends, with no network. They cover:
-- the parser
-- retrieval
-- the routing rules
-- fallback on error, first-token timeout and unusable output
-- no fallback after commit
+**Tests.** There are 152 vitest tests, all without network: 131 in the gateway, on scripted fake backends and in-memory SQLite, and 21 in the console. They cover:
+- the support header parser, retrieval, the routing rules and query complexity
+- fallback on error, first-token timeout and unusable output, and no fallback after commit
 - the circuit breaker
 - quota reservation, 429, and the fail-closed 503 when the database is gone
-- auth, validation, the 403 plan check
-- refusals
-- the OpenAI-compatible stream format
+- API key auth, validation, the 403 plan check, and refusals
+- the auto-smart and auto-cascade router modes, as pure rules and over HTTP
+- context windows: auto skips a model too small for the request, a pinned one returns `context_length_exceeded` before admission, and `max_tokens` counts
+- the OpenAI-compatible endpoints, through the real `openai` SDK
 - reasoning streamed separately and only when asked for, and offline backends labelled
 - placeholder extraction, rendering across chunk boundaries, and raw mode
+- console sign-in, sessions, CSRF, role permissions, tenant isolation, API key management and error hygiene
+- the PII detectors, the guardrail on the request path, and the governance API
+- the error catalog against docs/ERRORS.md
 - dashboard metrics bucketing and percentiles, the attempt trail, and the eval-run listing
+- the dependency rule of the clean architecture, in both apps
 
 ## 6. Trade-offs I accepted
 
@@ -233,7 +235,7 @@ Multi-intent ("charged twice … payment methods … refund?"), vague ("it doesn
 - **Fallback only before the commit point.** A model that dies halfway through an answer produces a `partial` outcome, not a seamless retry. Splicing two models' text mid-sentence is worse than an honest error.
 - **Refusals abort the stream.** That saves money, but their token counts are estimated.
 - **A failed attempt's prompt tokens are counted against quota.** Real spend is real spend. So a request admitted near the quota limit can overshoot by the prompt tokens of its failed attempts. Admission is still strict for the next request.
-- **The demo keys and admin token are visible** to the console via `/api/demo-config` when `DEMO_MODE=true`. It's convenient for reviewers and must be off in production.
+- **Demo mode prints the demo passwords on the sign-in page.** With `DEMO_MODE=true`, the four seeded console accounts and their passwords are listed so reviewers can try every role, and the seeded tenant keys are public demo values. Keys and the admin token never reach the browser either way. Demo mode must be off in production, where one operator account is created from `BOOTSTRAP_OPERATOR_*` env vars.
 - **The LLM judge is a model from the same family** as two of the candidates. It's useful for relative comparison, not as ground truth. ROUGE-L is reported next to it as a judge-free number.
 
 ## 7. What I cut, and what I'd do next
@@ -241,10 +243,10 @@ Multi-intent ("charged twice … payment methods … refund?"), vague ("it doesn
 **Cut on purpose:**
 - Multi-turn conversation memory. The support endpoint is single-turn.
 - Embeddings and hybrid retrieval: BM25 measured 99.6% recall@8.
-- Rate limiting per second. Quota is monthly; burst limits belong in the edge proxy.
-- Key rotation and a tenant admin UI. Tenants are seeded.
+- Rate limiting per second on the API. Quota is monthly; burst limits belong in the edge proxy. (Console sign-in does have a failed-attempt limit.)
+- Tenant and user management. Tenants and console users are seeded. The console can list members and manage API keys (create, scope, expire, revoke), but it can't create tenants, invite users or reset passwords.
+- SSO and MFA for the console. It has email and password sign-in with sessions, CSRF and four roles.
 - Persistent production database. Kept to SQLite for the timebox; see §6.
-- Auth on the console beyond demo mode.
 
 **Next:**
 - A *provider-level* circuit breaker, so that one Groq outage costs one timeout instead of two.

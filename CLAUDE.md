@@ -8,36 +8,48 @@ This file is for coding agents working in **nalar-router**. It is an npm-workspa
 
 ```
 apps/gateway/     Node ≥22.13 + Express 5 API (TypeScript → dist/). Serves the console build too.
-                  Clean architecture; dependencies point inward (tests/architecture.test.ts enforces it):
-  src/domain/          pure rules, no I/O: types.ts, errors.ts (ERROR_CATALOG), tokens.ts, quota.ts (decideAdmission),
-                       metering.ts (attempt/request records, summarize), routing/ (policy.ts planRoute,
-                       complexity.ts assessComplexity, classifier.ts auto-smart prompt/parser,
-                       cascade.ts auto-cascade rule, breaker.ts), guardrails/pii.ts, auth/rbac.ts,
+                  Clean Architecture (Robert C. Martin), folders named after its circles; dependencies point
+                  inward only (tests/architecture.test.ts enforces it). See docs/ARCHITECTURE.md §5.
+  src/entities/        Enterprise Business Rules, pure, no I/O: types.ts, errors.ts (ERROR_CATALOG), tokens.ts,
+                       quota.ts (decideAdmission), metering.ts (attempt/request records, summarize), reporting.ts (RANGES),
+                       limits.ts (request size limits, shared with the console),
+                       routing/ (policy.ts planRoute, complexity.ts assessComplexity, classifier.ts auto-smart prompt/parser,
+                       cascade.ts auto-cascade rule, context.ts context windows, breaker.ts), guardrails/pii.ts,
+                       auth/ (rbac.ts, apiKey.ts scopes/limits, user.ts session lifetimes, failureLimiter.ts),
                        support/ (retrieval.ts BM25, prompt.ts v1–v3, parser.ts header validation, placeholders.ts)
-  src/application/     use cases + ports: capability.ts (prepare → admit → run → meter → respond), support.ts,
-                       chat.ts, executor.ts (fallback/timeouts/attempts), router.ts (auto-smart classify + re-plan), deps.ts (AppDeps),
-                       ports/ (backend.ts Backend, sink.ts EventSink/CollectSink, stores.ts QuotaStore/MeteringStore)
-  src/infrastructure/  adapters: db/ (db.ts schema+seed, quota.ts, metering.ts, metrics.ts, tenants.ts),
-                       backends/ (openaiCompat.ts, mock.ts, chaos.ts), auth/ (apiKeys, sessions, passwords, rateLimit), health.ts
-  src/interfaces/http/ app.ts (routes, auth, error handler), console.ts (session API), specs.ts (zod schemas,
-                       spec builders, Express transport), sink.ts (SSE), chatFormat.ts (OpenAI wire), security.ts
-  src/config.ts, gateway.ts, index.ts   composition root: env → settings, wiring, server + shutdown
+  src/use-cases/       Application Business Rules: capability.ts (prepare → admit → run → meter → respond), support.ts,
+                       chat.ts, executor.ts (fallback/timeouts/attempts), router.ts (auto-smart classify + re-plan),
+                       access.ts (API key auth, tenant scoping, redaction), identity.ts (sign-in/out, sessions),
+                       apiKeys.ts, tenants.ts (quota, PII policy, members), observability.ts (metrics, logs, audit),
+                       operations.ts (backend status, models, fault injection, evals), deps.ts (AppDeps, GatewayDeps),
+                       ports/ (backend, sink, stores, tenants, identity, apiKeys, reporting, operations)
+  src/interface-adapters/
+    controllers/http/  api.ts (/healthz, /v1), console.ts (session API), admin.ts (admin token), specs.ts (zod schemas,
+                       spec builders, Express transport), security.ts, request.ts, settings.ts (HttpSettings), shared.ts
+    presenters/        sse.ts (support SSE), openaiChat.ts (OpenAI wire), httpError.ts (error presenter)
+    gateways/          sqlite/ (quota, metering, metrics, reporting, tenants, apiKeys, sessions: port adapters),
+                       llm/ (openaiCompat.ts, mock.ts, chaos.ts, health.ts), crypto/ (hash, passwords), files/ (evalResults)
+  src/frameworks/      web/app.ts (Express app: hardening, mounting, static console, error presenter),
+                       sqlite/db.ts (driver: schema, migrations, seed)
+  src/main/            config.ts (env → settings), container.ts (composition root: createGateway), index.ts (server + shutdown)
   tests/               vitest; scripted FakeBackend, no network; architecture, errors and OpenAI SDK contract tests
 apps/console/     React 19 + Vite console (layout below)
 tools/eval/       prepare-data.ts, retrieval-eval.ts, eval.ts, probe.ts; results/ holds committed eval outputs
 data/             kb.json (2,160 KB entries), eval.json (30 held-out), eval-ood.json, eval-hard.json, retrieval-holdout.json
 docs/             REPORT.md (design + results), EVALUATION.md (all eval runs), ARCHITECTURE.md (Mermaid diagrams),
                   API.md, assets/ (banner, screenshots)
-apps/console/src  Clean architecture too; tests/architecture.test.ts enforces it:
+apps/console/src  Same circles; tests/architecture.test.ts enforces them (React only in frameworks/ and main.tsx):
   main.tsx             composition root: styles, createHttpConsoleApi(), <ApiProvider><App/>
-  domain/              types (models.ts) and pure rules: format, access (grants, PAGES), quota (levelOf),
-                       backends (backendState), outcomes (groupOf), playground (Turn, applyEvent, TRACE_LABEL), snippets
-  application/         ports.ts (ConsoleApi), api.tsx (ApiProvider/useApi), appContext.tsx (session/scope context),
-                       useMetrics.ts, useBackendStatus.ts
-  infrastructure/http/ client.ts (fetch, CSRF, ApiError mapping), consoleApi.ts (every endpoint), playgroundStream.ts (SSE/JSON → events)
-  ui/                  app/App.tsx (sign-in gate, top bar, ⌘K, sidebar), pages/ (Dashboard, Playground, ApiKeys, Usage, Cost,
+  entities/            types (models.ts) and pure rules: format, access (grants, PAGES), quota (levelOf),
+                       backends (backendState), outcomes (groupOf), playground (Turn, applyEvent, TRACE_LABEL), snippets,
+                       limits (checkPlayground: field limits and the selected model's context window)
+  use-cases/           ports.ts (ConsoleApi)
+  interface-adapters/gateways/http/  client.ts (fetch, CSRF, ApiError mapping), consoleApi.ts (every endpoint),
+                       playgroundStream.ts (SSE/JSON → events)
+  frameworks/ui/       app/App.tsx (sign-in gate, top bar, ⌘K, sidebar), pages/ (Dashboard, Playground, ApiKeys, Usage, Cost,
                        Reliability, Logs, Quotas, Guardrails, Access, AuditLog, Backends, Evaluations, SignIn),
-                       components/ (kit, charts, ui, StatusBadge, Tour, SparkTrail, palette), styles/ (styles.css, layers.css)
+                       components/ (kit, charts, ui, StatusBadge, Tour, SparkTrail, palette), styles/ (styles.css, layers.css),
+                       hooks/ (api.tsx ApiProvider/useApi, appContext.tsx, useMetrics.ts, useBackendStatus.ts)
 ```
 
 ## Commands (run from the repo root)
@@ -67,9 +79,9 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 - **Refusals are `StopRequest`, not errors.** They don't trip the circuit breaker and they don't fall back.
 - **Every attempt is metered,** including failed ones. `usage_source` is `provider` only when the provider actually reported usage. Otherwise it is `estimated`, or `none` when the provider rejected the call outright.
 - **Router modes are `auto` (heuristic), `auto-smart` (classifier) and `auto-cascade` (fast first, escalate on an unsure header).** The classifier runs after admission and is metered as attempt 0 (`classified`); if it fails, times out or is unsure, the heuristic decides, and it never fails a request. A cascade escalation happens only before commit, is outcome `escalated`, and neither trips the breaker nor counts as fallback.
-- **Routing reasons are data.** If you add a rule, give it a `rule` id and a human-readable `reason` in `planRoute`, and add a test. Complexity signals live in `domain/routing/complexity.ts` with their weights; after changing one, run `npm run routing-eval` and report the route changes.
-- Prices and thresholds belong in `config.ts`, not inline.
-- **The server enforces access.** Every console route checks a permission from `auth/rbac.ts`; the console hiding a control is not the control. Non-operators are pinned to their own tenant, and another tenant's object returns the same 404 as a missing one.
+- **Routing reasons are data.** If you add a rule, give it a `rule` id and a human-readable `reason` in `planRoute`, and add a test. Complexity signals live in `entities/routing/complexity.ts` with their weights; after changing one, run `npm run routing-eval` and report the route changes.
+- Prices and thresholds belong in `main/config.ts`, not inline.
+- **The server enforces access.** Every console route checks a permission from `entities/auth/rbac.ts`; the console hiding a control is not the control. Non-operators are pinned to their own tenant, and another tenant's object returns the same 404 as a missing one.
 - **The browser never gets a tenant API key or the admin token.** The console uses the session cookie + CSRF token; the playground goes through `/api/console/playground/support` and `/chat` (the same specs as the `/v1` routes, in `capability.ts`).
 - **Errors carry the least detail that still helps the caller.** Same 401 for unknown/revoked/expired keys and for wrong password/unknown account; 403 doesn't name the permission; upstream error text stays in the DB (operators only); 404 doesn't echo the path.
 - **PII never leaves the gateway unmasked under `mask`, and its values are never stored.** Scan before retrieval, routing and the prompt; restore only in the answer stream; trace events, logs and the `requests.pii` column carry types and counts, never values. Detectors must not mask order/invoice/tracking ids (tests cover this).
@@ -87,9 +99,9 @@ Local model: `~/.venvs/mlx/bin/mlx_lm.server --model mlx-community/Qwen3.5-4B-ML
 
 - Commits use Conventional Commits with the part touched as the scope: `feat(gateway): …`, `fix(console): …`, `docs(readme): …`, `test(gateway): …`, `chore(eval): …`, `ci: …`. Split commits by part.
 - ESM everywhere. The gateway uses `.js` suffixes in relative imports (NodeNext).
-- Errors use `GatewayError(status, code, message, details)` and come out as `{error:{code,message,details}}`. `code` must be in `ERROR_CATALOG` (domain/errors.ts, typed) with the same status, and documented in docs/ERRORS.md; tests/errors.test.ts checks both.
-- New code goes in the right layer: rules in `domain/`, orchestration in `application/` (talking to the outside only through ports), adapters in `infrastructure/` or `interfaces/`. Wire new adapters in `gateway.ts`.
-- Console: pages get data only through `useApi()` (the `ConsoleApi` port). A new endpoint is a method on the port plus its HTTP implementation in `infrastructure/http/consoleApi.ts`; logic worth testing goes in `domain/` as a pure function.
+- Errors use `GatewayError(status, code, message, details)` and come out as `{error:{code,message,details}}`. `code` must be in `ERROR_CATALOG` (entities/errors.ts, typed) with the same status, and documented in docs/ERRORS.md; tests/errors.test.ts checks both.
+- New code goes in the right circle: rules in `entities/`, orchestration in `use-cases/` (talking to the outside only through a port in `use-cases/ports/`), routes in `interface-adapters/controllers/http/` (parse, check permission, call one use case), output formats in `presenters/`, port implementations in `gateways/`. Express and SQLite are started only in `frameworks/`. Wire new adapters in `main/container.ts`.
+- Console: pages get data only through `useApi()` (the `ConsoleApi` port). A new endpoint is a method on the port plus its HTTP implementation in `interface-adapters/gateways/http/consoleApi.ts`; logic worth testing goes in `entities/` as a pure function.
 - New backends implement `Backend.stream()` and yield `{type:"text"}` and `{type:"usage"}` chunks. They must honour `req.signal`.
 - When you change routing, prompts or retrieval, re-run `npm run retrieval-eval` and a short `npm run eval -- --limit 10`, and update `docs/REPORT.md` if the numbers move.
 - Secrets live only in `.env` or the Render dashboard. The `DEMO_MODE` keys and demo account passwords are public demo values.

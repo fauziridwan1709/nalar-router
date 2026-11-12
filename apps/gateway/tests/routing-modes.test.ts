@@ -1,10 +1,10 @@
 /** The three auto modes: auto (heuristic), auto-smart (classifier) and auto-cascade (fast first, escalate on doubt). */
 import { afterEach, describe, expect, it } from "vitest";
-import { planRoute } from "../src/domain/routing/policy.js";
-import { buildClassifierMessages, parseVerdict, type ClassifierResult } from "../src/domain/routing/classifier.js";
-import { cascadeEscalation } from "../src/domain/routing/cascade.js";
-import { summarize, type AttemptRecord } from "../src/domain/metering.js";
-import type { Tenant } from "../src/domain/types.js";
+import { planRoute } from "../src/entities/routing/policy.js";
+import { buildClassifierMessages, parseVerdict, type ClassifierResult } from "../src/entities/routing/classifier.js";
+import { cascadeEscalation } from "../src/entities/routing/cascade.js";
+import { summarize, type AttemptRecord } from "../src/entities/metering.js";
+import type { Tenant } from "../src/entities/types.js";
 import { FakeBackend, cfg, hang, reply, sse, startServer, withClassifier } from "./helpers.js";
 
 const opts = { longQueryTokens: 60, ambiguousVoteShare: 0.6, complexityThreshold: 0.5, classifierMinConfidence: 0.6, cascadeModelConfidenceBelow: 0.7 };

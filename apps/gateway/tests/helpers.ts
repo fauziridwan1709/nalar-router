@@ -1,12 +1,12 @@
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
-import { config as baseConfig, type BackendConfig } from "../src/config.js";
-import { openDb, type SeedTenant, type SeedUser } from "../src/infrastructure/db/db.js";
-import { createGateway, type Gateway } from "../src/gateway.js";
-import { createApp } from "../src/interfaces/http/app.js";
-import type { Backend, BackendRequest, StreamChunk } from "../src/application/ports/backend.js";
-import { abortableSleep } from "../src/infrastructure/backends/chaos.js";
-import type { KbEntry } from "../src/domain/support/retrieval.js";
+import { config as baseConfig, type BackendConfig } from "../src/main/config.js";
+import { openDb, type SeedTenant, type SeedUser } from "../src/frameworks/sqlite/db.js";
+import { createGateway, type Gateway } from "../src/main/container.js";
+import { createApp } from "../src/frameworks/web/app.js";
+import type { Backend, BackendRequest, StreamChunk } from "../src/use-cases/ports/backend.js";
+import { abortableSleep } from "../src/interface-adapters/gateways/llm/chaos.js";
+import type { KbEntry } from "../src/entities/support/retrieval.js";
 
 export const KB: KbEntry[] = [
   { id: "c1", question: "how do I cancel my order", intent: "cancel_order", category: "ORDER", answer: "To cancel order {{Order Number}}, go to Orders and press Cancel." },
@@ -103,7 +103,7 @@ export async function startServer(
     routing: { ...baseConfig.routing, ...over.routing }, classifier: { ...baseConfig.classifier, ...over.classifier },
   };
   const gw: Gateway = createGateway(config, { db: openDb(":memory:", TENANTS, USERS), backends, kbEntries: KB });
-  const app = createApp(gw);
+  const app = createApp(gw, gw.config);
   const server: Server = await new Promise((r) => {
     const s = app.listen(0, () => r(s));
   });

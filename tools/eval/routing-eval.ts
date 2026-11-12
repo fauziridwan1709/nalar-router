@@ -9,9 +9,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Bm25Index, type KbEntry } from "../../apps/gateway/src/domain/support/retrieval.js";
-import { assessComplexity } from "../../apps/gateway/src/domain/routing/complexity.js";
-import { estimateTokens } from "../../apps/gateway/src/domain/tokens.js";
+import { Bm25Index, type KbEntry } from "../../apps/gateway/src/entities/support/retrieval.js";
+import { assessComplexity } from "../../apps/gateway/src/entities/routing/complexity.js";
+import { estimateTokens } from "../../apps/gateway/src/entities/tokens.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DATA = resolve(HERE, "../../data");

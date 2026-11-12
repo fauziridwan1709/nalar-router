@@ -7,7 +7,7 @@
  *   npm run retrieval-eval
  */
 import { readFileSync } from "node:fs";
-import { Bm25Index, type KbEntry } from "../../apps/gateway/src/domain/support/retrieval.js";
+import { Bm25Index, type KbEntry } from "../../apps/gateway/src/entities/support/retrieval.js";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
