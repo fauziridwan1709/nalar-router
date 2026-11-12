@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS attempts (
   backend TEXT NOT NULL,
   model TEXT,
   started_at INTEGER NOT NULL,
-  outcome TEXT NOT NULL,                -- ok|error|timeout_first_token|timeout_total|unusable_output|skipped_circuit_open|aborted
+  outcome TEXT NOT NULL,                -- ok|error|timeout_first_token|timeout_total|unusable_output|skipped_circuit_open|aborted|refused|escalated|classified
   error TEXT,
   latency_ms INTEGER,
   ttft_ms INTEGER,

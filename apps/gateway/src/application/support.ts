@@ -16,7 +16,9 @@ import type { AppDeps } from "./deps.js";
 import type { Backend } from "./ports/backend.js";
 import type { Tenant } from "../domain/types.js";
 import { executeWithFallback, StopRequest, type AttemptRecord } from "./executor.js";
-import { planRoute, type RoutePlan } from "../domain/routing/policy.js";
+import { planRoute, type RoutePlan, type RouteSignals } from "../domain/routing/policy.js";
+import { cascadeEscalation } from "../domain/routing/cascade.js";
+import { resolveRoute } from "./router.js";
 import { estimateTokens } from "../domain/tokens.js";
 import { buildSupportMessages, type PromptVersion } from "../domain/support/prompt.js";
 import { SupportOutputParser } from "../domain/support/parser.js";
@@ -45,6 +47,9 @@ export interface Prepared {
   slots: Map<string, SlotValue> | null;
   retrieval: RetrievalResult;
   plan: RoutePlan<Backend>;
+  /** kept so auto-smart can re-plan once the classifier has run */
+  tenant: Tenant;
+  routeSignals: RouteSignals;
   messages: ReturnType<typeof buildSupportMessages>;
   estimatedPromptTokens: number;
   /** what the PII guardrail did; values are never kept here */
@@ -68,12 +73,10 @@ export function prepareSupport(deps: AppDeps, tenant: Tenant, input: SupportInpu
   const modelText = scan ? scan.masked : input.message;
   // the retriever gets the text without masked values or their lead-ins (see retrievalText)
   const retrieval = deps.kb.search(scan ? retrievalText(modelText) : modelText, deps.config.support.topK);
-  const plan = planRoute(
-    deps.backends,
-    tenant,
-    { queryTokens: estimateTokens(modelText), text: modelText, retrievalTopShare: retrieval.topShare, hint: input.model },
-    deps.config.routing,
-  );
+  const routeSignals: RouteSignals = {
+    queryTokens: estimateTokens(modelText), text: modelText, retrievalTopShare: retrieval.topShare, hint: input.model, cascadeCapable: true,
+  };
+  const plan = planRoute(deps.backends, tenant, routeSignals, deps.config.routing);
   const contextHits = retrieval.hits.slice(0, input.promptVersion === "v1" ? 2 : deps.config.support.contextK);
   // values the customer typed are extracted locally (order ids, amounts); masked values come back
   // through the same renderer, so the provider never sees them but the customer still does
@@ -83,7 +86,7 @@ export function prepareSupport(deps: AppDeps, tenant: Tenant, input: SupportInpu
   const messages = buildSupportMessages(input.promptVersion, modelText, contextHits, deps.intents, fillable);
   const estimatedPromptTokens = messages.reduce((n, m) => n + estimateTokens(m.content) + 4, 2);
   return {
-    retrieval, plan, messages, estimatedPromptTokens,
+    retrieval, plan, tenant, routeSignals, messages, estimatedPromptTokens,
     includeReasoning: !!input.includeReasoning,
     slots: input.placeholders === "raw" ? null : slots,
     pii: { mode: policy.mode, findings: scan?.findings ?? [], summary: scan?.findings.length ? summarizeCounts(scan.counts) : null },
@@ -106,9 +109,11 @@ export async function runSupport(
   p: Prepared,
   ctx: RunContext,
 ): Promise<RunResult> {
-  const { retrieval, plan } = p;
+  const { retrieval } = p;
+  let plan = p.plan;
   const { sink } = ctx;
-  const routeReason = { rule: plan.rule, reason: plan.reason, chain: plan.chain.map((b) => b.config.id), signals: plan.signals };
+  const reasonOf = (r: RoutePlan<Backend>) => ({ rule: r.rule, reason: r.reason, mode: r.mode, chain: r.chain.map((b) => b.config.id), signals: r.signals });
+  let routeReason = reasonOf(plan);
   // types and placeholder names only: the values never leave the gateway
   sink.emit("step", {
     name: "pii_guard",
@@ -121,7 +126,8 @@ export async function runSupport(
           ? `masked ${p.pii.findings.length} value${p.pii.findings.length === 1 ? "" : "s"} before retrieval and the model`
           : "no personal data found",
   });
-  sink.emit("route", routeReason);
+  // auto-smart's route is known only after the classifier runs, past the scope gate
+  if (!plan.needsClassifier) sink.emit("route", routeReason);
   sink.emit("retrieval", {
     coverage: round(retrieval.coverage),
     topIntent: retrieval.topIntent,
@@ -131,7 +137,7 @@ export async function runSupport(
     })),
   });
 
-  const base = { routeReason, latencyMs: 0 };
+  const base: { routeReason: typeof routeReason; latencyMs: number } = { routeReason, latencyMs: 0 };
   const gated =
     retrieval.coverage < deps.config.support.minCoverage && retrieval.queryTerms.length <= deps.config.support.gateMaxTerms;
   sink.emit("step", {
@@ -150,6 +156,20 @@ export async function runSupport(
       confidence: round(retrieval.coverage), latencyMs: Date.now() - ctx.startedAt,
     };
   }
+
+  // auto-smart: classify (metered as attempt 0), then route on the verdict
+  let routeAttempts: AttemptRecord[] = [];
+  if (plan.needsClassifier) {
+    const r = await resolveRoute(deps, p.tenant, p.routeSignals, plan, ctx);
+    plan = r.plan;
+    routeAttempts = r.attempts;
+    for (const a of r.attempts) sink.emit("attempt", { ...a, status: a.outcome, error: a.error ? publicAttemptError(a.outcome) : a.error });
+    base.routeReason = routeReason = reasonOf(plan);
+    sink.emit("route", routeReason);
+  }
+  /** auto-cascade escalates only if a strong backend is still ahead in the chain and reachable */
+  const strongAhead = (b: Backend) =>
+    plan.chain.slice(plan.chain.indexOf(b) + 1).some((x) => x.config.tier === "strong" && !deps.breaker.isOpen(x.config.id));
 
   const validIntents = new Set([...deps.intents, "unknown"]);
   const topEntry = retrieval.hits.find((h) => h.entry.intent === retrieval.topIntent)?.entry;
@@ -188,8 +208,17 @@ export async function runSupport(
           backend: actx.backend.config.id,
           detail: `model said intent=${h.intent}, self-confidence ${h.modelConfidence}`,
         });
-        if (h.intent === "unknown") throw new StopRequest("model classified the message as out of scope");
         const conf = confidenceOf(retrieval, h.intent, h.modelConfidence);
+        if (plan.mode === "cascade" && actx.backend.config.tier === "fast" && strongAhead(actx.backend)) {
+          const why = cascadeEscalation({
+            intent: h.intent, confidence: conf.value, topIntent: retrieval.topIntent, escalateBelow: plan.cascadeEscalateBelow ?? deps.config.routing.cascadeEscalateBelow,
+          });
+          if (why) {
+            sink.emit("step", { name: "cascade_escalated", backend: actx.backend.config.id, detail: `${why}: dropping this attempt before anything was sent, moving up to strong` });
+            throw new BackendError("escalated", why);
+          }
+        }
+        if (h.intent === "unknown") throw new StopRequest("model classified the message as out of scope");
         if (conf.value < deps.config.support.refuseBelow) {
           finalIntent = h.intent;
           finalConfidence = conf.value;
@@ -257,7 +286,7 @@ export async function runSupport(
 
   if (result.status === "ok") {
     return {
-      ...base, outcome: "success", httpStatus: 200, attempts: result.attempts, backend: final!.config.id,
+      ...base, outcome: "success", httpStatus: 200, attempts: [...routeAttempts, ...result.attempts], backend: final!.config.id,
       model: final!.config.model, latencyMs, ttftMs, intent: finalIntent, confidence: finalConfidence,
     };
   }
@@ -272,7 +301,7 @@ export async function runSupport(
     });
     return {
       ...base, outcome: lowConf ? "refused_low_confidence" : "refused_out_of_scope", httpStatus: 200,
-      attempts: result.attempts, backend: final!.config.id, model: final!.config.model, latencyMs,
+      attempts: [...routeAttempts, ...result.attempts], backend: final!.config.id, model: final!.config.model, latencyMs,
       intent: finalIntent, confidence: finalConfidence,
     };
   }
@@ -289,7 +318,7 @@ export async function runSupport(
   });
   return {
     ...base, outcome: aborted ? "client_aborted" : result.committed ? "partial" : "failed_all_backends",
-    httpStatus: aborted ? 499 : 502, attempts: result.attempts,
+    httpStatus: aborted ? 499 : 502, attempts: [...routeAttempts, ...result.attempts],
     backend: result.backend?.config.id ?? null, model: result.backend?.config.model ?? null,
     latencyMs, ttftMs, intent: finalIntent, confidence: finalConfidence, errorCode: code,
     errorMessage: result.error.message + (answerChars ? ` (after ${answerChars} chars streamed)` : ""),

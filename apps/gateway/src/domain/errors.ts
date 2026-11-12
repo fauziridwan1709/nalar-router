@@ -77,10 +77,11 @@ export class GatewayError extends Error {
  * - timeout_total          the whole call ran past the backend's total timeout
  * - unusable_output        the output failed validation (bad support header, empty answer)
  * - aborted                the client went away; not retryable
+ * - escalated              auto-cascade: the fast model's header was unsure, so move up to the strong tier
  */
 export class BackendError extends Error {
   constructor(
-    public kind: "error" | "timeout_first_token" | "timeout_total" | "unusable_output" | "aborted" | "http",
+    public kind: "error" | "timeout_first_token" | "timeout_total" | "unusable_output" | "aborted" | "http" | "escalated",
     message: string,
     public retryable = true,
     public httpStatus?: number,
@@ -102,5 +103,7 @@ const PUBLIC_ATTEMPT_ERROR: Record<string, string> = {
   unusable_output: "model output failed validation",
   aborted: "cancelled",
   skipped_circuit_open: "circuit breaker open",
+  escalated: "escalated to the strong tier",
+  classified: "routing classification",
 };
 export const publicAttemptError = (outcome: string) => PUBLIC_ATTEMPT_ERROR[outcome] ?? "attempt failed";

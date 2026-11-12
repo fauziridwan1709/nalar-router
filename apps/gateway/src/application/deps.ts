@@ -25,8 +25,15 @@ export interface SupportSettings {
   defaultPromptVersion: PromptVersion;
 }
 
+export interface ClassifierSettings {
+  /** the backend that classifies for auto-smart; falls back to the first enabled fast-tier backend */
+  backendId: string;
+  maxTokens: number;
+  timeoutMs: number;
+}
+
 export interface AppDeps {
-  config: { routing: RouteOptions; support: SupportSettings };
+  config: { routing: RouteOptions; support: SupportSettings; classifier: ClassifierSettings };
   backends: Backend[];
   breaker: CircuitBreaker;
   kb: Bm25Index;

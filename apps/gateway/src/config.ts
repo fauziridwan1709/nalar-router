@@ -52,6 +52,20 @@ export const config = {
     ambiguousVoteShare: num(env.ROUTE_AMBIGUOUS_VOTE_SHARE, 0.6),
     /** complexity score (domain/routing/complexity.ts) at or above which auto routing starts at the strong tier */
     complexityThreshold: num(env.ROUTE_COMPLEXITY_THRESHOLD, 0.5),
+    /** auto-smart: a classifier verdict below this confidence is ignored and the heuristic decides */
+    classifierMinConfidence: num(env.ROUTE_CLASSIFIER_MIN_CONFIDENCE, 0.6),
+    /** auto-cascade: escalate to strong when the fast model's combined confidence is below this ("high" starts at 0.75) */
+    cascadeEscalateBelow: num(env.ROUTE_CASCADE_ESCALATE_BELOW, 0.75),
+  },
+
+  /** auto-smart's classification call (domain/routing/classifier.ts) */
+  classifier: {
+    /** the backend that classifies; if it is missing or disabled, the first enabled fast-tier backend does */
+    backendId: env.ROUTE_CLASSIFIER_BACKEND ?? "groq-fast",
+    /** gpt-oss reasons before it answers and those tokens count here; measured ~40 completion tokens */
+    maxTokens: num(env.ROUTE_CLASSIFIER_MAX_TOKENS, 300),
+    /** past this the heuristic decides; measured ~0.2–0.6 s on Groq, with outliers near 2 s */
+    timeoutMs: num(env.ROUTE_CLASSIFIER_TIMEOUT_MS, 2_500),
   },
 
   health: {
